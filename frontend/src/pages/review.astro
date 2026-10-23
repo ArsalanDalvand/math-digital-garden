@@ -1,0 +1,84 @@
+---
+import Reader from '../layouts/Reader.astro';
+---
+<Reader title="بازبینی پیشنهادهای اصلاح">
+  <p>دسترسی این صفحه نیازمند نقش مؤلف یا مدیر است.</p><p><a href="/account">حساب کاربری</a></p>
+  <div class="garden-row"><p role="status" aria-live="polite" data-review-status>در حال دریافت…</p><button type="button" data-review-retry hidden>تلاش دوباره</button></div><ul class="garden-review-list" data-review-list></ul>
+  <section class="garden-panel garden-stack" data-review-panel hidden aria-busy="false">
+    <h2 data-review-title></h2><p data-student-comment></p><p class="garden-field-help">نسخهٔ مبدأ و متن پیشنهادی برای مقایسه؛ این پیش‌نمایش قابل ویرایش نیست.</p><div data-review-diff></div>
+    <label>نظر مؤلف <textarea data-review-comment maxlength="4000"></textarea></label>
+    <div class="garden-row"><button type="button" class="garden-button-primary" data-decision="approve">تأیید و ادغام</button>
+    <button type="button" data-decision="changes_requested">درخواست اصلاح</button>
+    <button type="button" data-decision="reject">رد</button>
+    </div><details><summary>همگام‌سازی و دستیار</summary><div class="garden-row">
+    <button type="button" data-sync>تلاش مجدد خروجی گیت</button>
+    <button type="button" data-index>ایندکس رسمی برای دستیار</button>
+    </div></details>
+  </section>
+</Reader>
+<script>
+  import {api,message} from '../scripts/api';
+  import {MergeView} from '@codemirror/merge';
+  import {EditorState} from '@codemirror/state';
+  import {EditorView} from '@codemirror/view';
+  import {markdown} from '@codemirror/lang-markdown';
+  const status=document.querySelector<HTMLElement>('[data-review-status]')!;
+  const panel=document.querySelector<HTMLElement>('[data-review-panel]')!;
+  const list=document.querySelector<HTMLElement>('[data-review-list]')!;
+  const retry=document.querySelector<HTMLButtonElement>('[data-review-retry]')!;
+  const comment=document.querySelector<HTMLTextAreaElement>('[data-review-comment]')!;
+  const labels:Record<string,string>={pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده',changes_requested:'نیازمند بازنگری',synced:'همگام شده',failed:'ناموفق'};
+  let selected:any,merge:MergeView|undefined,busy=false;
+  function setBusy(value:boolean){
+    busy=value;panel.setAttribute('aria-busy',String(value));
+    document.querySelectorAll<HTMLButtonElement>('[data-review-list] button,[data-review-panel] button').forEach(button=>button.disabled=value);
+    comment.disabled=value;
+  }
+  function feedback(text:string,error=false){status.setAttribute('role',error?'alert':'status');status.textContent=text;}
+  function showStatus(item:any){feedback(`${labels[item.status] ?? 'وضعیت نامشخص'} — خروجی گیت: ${labels[item.sync_status] ?? item.sync_status}`);}
+  async function load(){
+    if(busy)return;
+    setBusy(true);retry.disabled=true;retry.hidden=true;feedback('در حال دریافت پیشنهادها…');
+    try {
+      const proposals=await api('/review');list.replaceChildren();
+      panel.hidden=true;selected=undefined;merge?.destroy();merge=undefined;
+      for(const item of proposals){
+        const li=document.createElement('li'),button=document.createElement('button');
+        button.type='button';button.textContent=`${item.slug} — ${labels[item.status] ?? 'وضعیت نامشخص'}`;
+        button.addEventListener('click',async()=>{
+          if(busy)return;setBusy(true);feedback('در حال دریافت متن پیشنهاد…');
+          try {
+            const proposal=await api('/review/'+item.id);
+            selected=proposal;panel.hidden=false;comment.value='';
+            document.querySelector('[data-review-title]')!.textContent=selected.slug;
+            document.querySelector('[data-student-comment]')!.textContent=selected.student_comment;
+            const target=document.querySelector<HTMLElement>('[data-review-diff]')!;merge?.destroy();target.replaceChildren();
+            const extensions=[markdown(),EditorState.readOnly.of(true),EditorView.editable.of(false),EditorView.lineWrapping,EditorView.perLineTextDirection.of(true)];
+            merge=new MergeView({parent:target,a:{doc:selected.base_content,extensions},b:{doc:selected.proposed_content,extensions}});
+            showStatus(selected);document.querySelector<HTMLElement>('[data-review-title]')!.setAttribute('tabindex','-1');document.querySelector<HTMLElement>('[data-review-title]')!.focus();
+          }catch(error){feedback(message(error),true);}finally{setBusy(false);}
+        });
+        li.append(button);list.append(li);
+      }
+      feedback(proposals.length?'یک پیشنهاد را برای مقایسه انتخاب کنید.':'پیشنهادی برای بازبینی وجود ندارد؛ پیشنهادهای تازه پس از ارسال دانشجو اینجا نمایش داده می‌شوند.');
+    }catch(error){feedback(message(error),true);retry.hidden=false;}
+    finally{setBusy(false);retry.disabled=false;}
+  }
+  async function mutate(path:string,body?:unknown,method?:string){
+    if(!selected || busy)return;
+    setBusy(true);feedback('در حال ثبت درخواست…');
+    try{
+      const result=await api(path,body,method);
+      if(path.endsWith('/canonical'))feedback(`${result.chunks} قطعه ایندکس شد.`);
+      else{selected=result;showStatus(selected);}
+    }catch(error){feedback(message(error),true);}finally{setBusy(false);}
+  }
+  for(const button of document.querySelectorAll<HTMLElement>('[data-decision]'))button.addEventListener('click',()=>{
+    if(selected)void mutate('/review/'+selected.id,{decision:button.dataset.decision,comment:comment.value});
+  });
+  document.querySelector('[data-sync]')!.addEventListener('click',()=>{if(selected)void mutate('/review/'+selected.id+'/sync',undefined,'POST');});
+  document.querySelector('[data-index]')!.addEventListener('click',()=>{if(selected)void mutate('/ai/index/canonical',{slug:selected.slug});});
+  retry.addEventListener('click',()=>void load());
+  window.addEventListener('pagehide',()=>merge?.destroy());
+  void load();
+</script>

@@ -1,0 +1,57 @@
+{
+  "obsidian-excalidraw-plugin": {
+    "autoexportSVG": false,
+    "autoexportPNG": false,
+    "autoExportLightAndDark": false,
+    "displayExportedImageIfAvailable": false,
+    "compress": true,
+    "previewImageType": "SVGIMG"
+  },
+  "obsidian-linter": {
+    "lintOnSave": false,
+    "lintOnFileChange": false
+  },
+  "obsidian-minimal-settings": {
+    "editorFont": "",
+    "lineHeight": 1.5,
+    "lineWidth": 40,
+    "readableLineLength": true,
+    "imgGrid": false,
+    "fullWidthMedia": true
+  },
+  "better-export-pdf": {
+    "showTitle": true,
+    "maxLevel": "6",
+    "displayHeader": true,
+    "displayFooter": true,
+    "printBackground": false,
+    "generateTaggedPDF": false
+  },
+  "obsidian-export-image": {
+    "width": 640,
+    "format": "png0",
+    "recursive": false,
+    "split": {
+      "height": 1000,
+      "overlap": 80,
+      "mode": "fixed"
+    }
+  },
+  "geogebra-lab": {
+    "renderMode": "localServer",
+    "enableCaption": true,
+    "enableExplain": true,
+    "defaultAppName": "graphing",
+    "defaultWidth": 800,
+    "defaultHeight": 500,
+    "defaultDisableJavaScript": false,
+    "defaultEnableFileFeatures": false
+  },
+  "obsidian-latex-suite": {
+    "snippetsEnabled": false,
+    "snippetsTrigger": "Tab",
+    "autofractionEnabled": true,
+    "matrixShortcutsEnabled": true,
+    "taboutEnabled": true
+  }
+}

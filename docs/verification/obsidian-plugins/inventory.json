@@ -1,0 +1,178 @@
+[
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "better-export-pdf",
+    "name": "Better Export PDF",
+    "version": "1.11.0",
+    "enabled": true,
+    "description": "Export your notes to PDF, support export preview, add bookmarks outline and header/footer."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "calctex",
+    "name": "Calctex",
+    "version": "2.0.0",
+    "enabled": true,
+    "description": "Calculate LaTeX formulas inside Obsidian."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "geogebra-lab",
+    "name": "GeoGebra Lab",
+    "version": "0.1.1",
+    "enabled": true,
+    "description": "Embed safe, editable, Agent-friendly GeoGebra diagrams in Markdown code blocks."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "latex-panel-helper",
+    "name": "LaTeX Panel Helper",
+    "version": "1.0.0",
+    "enabled": true,
+    "description": "Provides a convenient panel with categorized LaTeX symbols, real-time search, and a pop-out window to enhance your mathematical note-taking efficiency!"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-enhancing-export",
+    "name": "Enhancing Export",
+    "version": "1.10.11",
+    "enabled": true,
+    "description": "This is a enhancing export plugin for Obsidian. It allows to export to formats like Html, DOCX, ePub and PDF or Markdown(Hugo) etc."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-excalidraw-plugin",
+    "name": "Excalidraw",
+    "version": "2.18.0",
+    "enabled": true,
+    "description": "An Obsidian plugin to edit and view Excalidraw drawings"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-export-image",
+    "name": "Export Image plugin",
+    "version": "2.4.4",
+    "enabled": true,
+    "description": "Easily convert your article to image."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-export-to-tex",
+    "name": "Export To TeX",
+    "version": "0.4.2",
+    "enabled": true,
+    "description": "Export vault files in a format amenable to pasting into a tex document"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-latex-suite",
+    "name": "Latex Suite",
+    "version": "1.9.8",
+    "enabled": true,
+    "description": "Make typesetting LaTeX math as fast as handwriting through snippets, text expansion, and editor enhancements"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-linter",
+    "name": "Linter",
+    "version": "1.30.0",
+    "enabled": true,
+    "description": "Formats and styles your notes. It can be used to format YAML tags, aliases, arrays, and metadata; footnotes; headings; spacing; math blocks; regular markdown contents like list, italics, and bold styles; and more with the use of custom rule options as well."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "obsidian-minimal-settings",
+    "name": "Minimal Theme Settings",
+    "version": "8.1.1",
+    "enabled": true,
+    "description": "Change the colors, fonts and features of Minimal Theme."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian",
+    "id": "webpage-html-export",
+    "name": "Webpage HTML Export",
+    "version": "1.9.2",
+    "enabled": true,
+    "description": "Export html from single files, canvas pages, or whole vaults. Direct access to the exported HTML files allows you to publish your digital garden anywhere. Focuses on flexibility, features, and style parity."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "better-export-pdf",
+    "name": "Better Export PDF",
+    "version": "1.11.0",
+    "enabled": true,
+    "description": "Export your notes to PDF, support export preview, add bookmarks outline and header/footer."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "cmdr",
+    "name": "Commander",
+    "version": "0.5.4",
+    "enabled": false,
+    "description": "Customize your workspace by adding commands everywhere, create Macros and supercharge your mobile toolbar."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "note-refactor-obsidian",
+    "name": "Note Refactor",
+    "version": "1.8.2",
+    "enabled": false,
+    "description": "Extract note content into new notes and split notes"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-export-image",
+    "name": "Export Image plugin",
+    "version": "2.4.4",
+    "enabled": true,
+    "description": "Easily convert your article to image."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-latex-suite",
+    "name": "Latex Suite",
+    "version": "1.9.8",
+    "enabled": true,
+    "description": "Make typesetting LaTeX math as fast as handwriting through snippets, text expansion, and editor enhancements"
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-minimal-settings",
+    "name": "Minimal Theme Settings",
+    "version": "8.1.1",
+    "enabled": true,
+    "description": "Change the colors, fonts and features of Minimal Theme."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-pandoc",
+    "name": "Pandoc Plugin",
+    "version": "0.4.1",
+    "enabled": false,
+    "description": "This is a Pandoc export plugin for Obsidian. It provides commands to export to formats like DOCX, ePub and PDF."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-plotly",
+    "name": "Plotly",
+    "version": "0.0.6",
+    "enabled": true,
+    "description": "Obsidian plugin, which allow user to embed Plotly charts into markdown notes."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "obsidian-rtl",
+    "name": "RTL Support",
+    "version": "2.0.1",
+    "enabled": true,
+    "description": "Extended Right to Left (RTL) support for languages like Arabic, Hebrew and Persian (Farsi)."
+  },
+  {
+    "vault": "/home/a7vat4r/Documents/Obsidian/system-docs",
+    "id": "templater-obsidian",
+    "name": "Templater",
+    "version": "2.16.2",
+    "enabled": false,
+    "description": "Create and use templates"
+  }
+]

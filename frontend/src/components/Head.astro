@@ -1,0 +1,5 @@
+---
+const { head } = Astro.locals.starlightRoute;
+---
+{/* Starlight treats title content as HTML; database titles must remain text. */}
+{head.map(({tag: Tag, attrs, content}) => Tag === 'title' ? <title {...attrs}>{content}</title> : <Tag {...attrs} set:html={content} />)}

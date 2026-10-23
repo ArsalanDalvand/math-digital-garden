@@ -1,0 +1,8 @@
+{
+  "calculation": "5",
+  "lintNonmutating": true,
+  "passed": true,
+  "plotly": "ready",
+  "privateRawPrefix": true,
+  "rawLatexPreserved": true
+}

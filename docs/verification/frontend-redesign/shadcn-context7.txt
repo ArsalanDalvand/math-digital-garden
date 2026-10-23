@@ -1,0 +1,90 @@
+### Apply semantic background and foreground theme tokens
+
+Source: https://github.com/shadcn-ui/ui/blob/main/apps/v4/content/docs/(root)/theming.mdx
+
+Use semantic theme tokens directly in Tailwind classes to style components with theme-aware defaults.
+
+```tsx
+<div className="bg-background text-foreground" />
+```
+
+--------------------------------
+
+### Define and apply paired primary surface and foreground tokens
+
+Source: https://github.com/shadcn-ui/ui/blob/main/apps/v4/content/docs/(root)/theming.mdx
+
+Define primary and primary-foreground CSS variables for the surface and text/icon colors, then apply them using Tailwind utility classes.
+
+```css
+--primary: oklch(0.205 0 0);
+--primary-foreground: oklch(0.985 0 0);
+```
+
+```tsx
+<div className="bg-primary text-primary-foreground">Hello</div>
+```
+
+--------------------------------
+
+### Use semantic color tokens for elements
+
+Source: https://github.com/shadcn-ui/ui/blob/main/skills/shadcn/rules/styling.md
+
+Applies theme tokens like bg-primary, text-primary-foreground, and text-muted-foreground to maintain theme compatibility.
+
+```tsx
+<div className="bg-primary text-primary-foreground">
+  <p className="text-muted-foreground">Secondary text</p>
+</div>
+```
+
+--------------------------------
+
+### Display errors with Controller, Field, and FieldError
+
+Source: https://github.com/shadcn-ui/ui/blob/main/apps/v4/content/docs/forms/react-hook-form.mdx
+
+Pass data-invalid to Field and aria-invalid to the form control for styling and accessibility, then conditionally render FieldError.
+
+```tsx
+<Controller
+  name="email"
+  control={form.control}
+  render={({ field, fieldState }) => (
+    <Field data-invalid={fieldState.invalid}>
+      <FieldLabel htmlFor={field.name}>Email</FieldLabel>
+      <Input
+        {...field}
+        id={field.name}
+        type="email"
+        aria-invalid={fieldState.invalid}
+      />
+      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+    </Field>
+  )}
+/>
+```
+
+--------------------------------
+
+### Apply validation and disabled states to fields and controls
+
+Source: https://github.com/shadcn-ui/ui/blob/main/skills/shadcn/rules/forms.md
+
+Combines data-invalid/data-disabled on Field with aria-invalid/disabled on the input control to style both the container and control.
+
+```tsx
+// Invalid.
+<Field data-invalid>
+  <FieldLabel htmlFor="email">Email</FieldLabel>
+  <Input id="email" aria-invalid />
+  <FieldDescription>Invalid email address.</FieldDescription>
+</Field>
+
+// Disabled.
+<Field data-disabled>
+  <FieldLabel htmlFor="email">Email</FieldLabel>
+  <Input id="email" disabled />
+</Field>
+```

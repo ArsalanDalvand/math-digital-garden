@@ -1,0 +1,133 @@
+---
+import Reader from '../layouts/Reader.astro';
+---
+<Reader title="جزوه‌های من">
+  <p><a href="/account">حساب کاربری</a> · <a href="/search">همهٔ یادداشت‌ها</a></p>
+  <p role="status" data-workspace-status>فضای خصوصی شما؛ نسخه‌های شخصی فقط برای حساب شما هستند.</p>
+  <p data-workspace-auth-prompt hidden>برای دیدن فضای شخصی <a href="/account">وارد حساب شوید</a>.</p>
+  <div class="garden-row"><p role="status" aria-live="polite" data-workspace-feedback>در حال دریافت نسخه‌ها و نشانه‌ها…</p><button type="button" data-workspace-retry disabled hidden>تلاش دوباره برای نسخه‌ها و نشانه‌ها</button></div>
+  <div class="garden-row"><p role="status" aria-live="polite" data-proposals-feedback>در حال دریافت پیشنهادها…</p><button type="button" data-proposals-retry disabled hidden>تلاش دوباره برای پیشنهادها</button></div>
+  <section class="garden-panel" data-private-section aria-labelledby="forks-heading"><h2 id="forks-heading">نسخه‌های شخصی</h2><ul data-forks></ul><p data-forks-empty hidden>هنوز یادداشتی ویرایش نکرده‌اید. <a href="/search">یک یادداشت برای مطالعه و ویرایش پیدا کنید.</a></p></section>
+  <section class="garden-panel" data-private-section aria-labelledby="bookmarks-heading"><h2 id="bookmarks-heading">نشانه‌گذاری‌ها</h2><ul data-bookmarks></ul><p data-bookmarks-empty hidden>هنوز نشانه‌ای ندارید. از ابزارهای صفحهٔ مطالعه، یادداشت را نشانه‌گذاری کنید.</p></section>
+  <section class="garden-panel" data-private-section aria-labelledby="proposals-heading"><h2 id="proposals-heading">پیشنهادهای اصلاح من</h2><ul data-proposals></ul><p data-proposals-empty hidden>هنوز پیشنهاد اصلاحی نفرستاده‌اید. پس از ذخیرهٔ نسخهٔ شخصی می‌توانید پیشنهاد خود را برای مؤلف ارسال کنید.</p></section>
+  <section id="workspace-history" class="garden-panel" data-private-section data-history hidden aria-labelledby="history-heading" aria-busy="false">
+    <h2 id="history-heading" data-history-heading>تاریخچهٔ متن خام</h2>
+    <p role="status" aria-live="polite" data-history-status></p>
+    <div class="garden-row"><button type="button" data-history-retry hidden>تلاش دوباره برای تاریخچه</button><button type="button" data-history-close>بستن تاریخچه</button></div>
+    <div data-revisions></div>
+  </section>
+</Reader>
+<script>
+  import {api,message,ApiError} from '../scripts/api';
+  const status=document.querySelector<HTMLElement>('[data-workspace-status]')!;
+  let unauthenticated=false;
+  function showSignIn(){
+    unauthenticated=true;++historyRequest;
+    document.querySelector<HTMLElement>('[data-workspace-auth-prompt]')!.hidden=false;
+    document.querySelectorAll<HTMLElement>('[data-private-section]').forEach(section=>section.hidden=true);
+    document.querySelector('[data-forks]')!.replaceChildren();
+    document.querySelector('[data-bookmarks]')!.replaceChildren();
+    document.querySelector('[data-proposals]')!.replaceChildren();
+    for(const section of ['workspace','proposals']){
+      document.querySelector<HTMLButtonElement>('[data-'+section+'-retry]')!.hidden=true;
+      const fb=document.querySelector<HTMLElement>('[data-'+section+'-feedback]');
+      if(fb){fb.textContent='برای دیدن فضای شخصی وارد حساب شوید.';fb.hidden=true;}
+    }
+  }
+  function link(item:any, personal=false){const a=document.createElement('a');a.href='/notes/'+encodeURIComponent(item.slug)+(personal?'?personal=1':'');a.textContent=(item.title ?? item.slug).replace(/-/g, ' ');return a;}
+  const history=document.querySelector<HTMLElement>('[data-history]')!;
+  const historyStatus=document.querySelector<HTMLElement>('[data-history-status]')!;
+  const historyRetry=document.querySelector<HTMLButtonElement>('[data-history-retry]')!;
+  let activeHistory:{item:any,button:HTMLButtonElement}|undefined;
+  let historyRequest=0;
+  async function showHistory(item:any,button:HTMLButtonElement) {
+    const request=++historyRequest;
+    activeHistory?.button.setAttribute('aria-expanded','false');
+    activeHistory={item,button};button.setAttribute('aria-expanded','true');
+    history.hidden=false;history.setAttribute('aria-busy','true');
+    document.querySelector('[data-history-heading]')!.textContent='تاریخچهٔ '+(item.title ?? item.slug);
+    const target=document.querySelector('[data-revisions]')!;target.replaceChildren();
+    historyStatus.setAttribute('role','status');historyStatus.textContent='در حال دریافت تاریخچه…';
+    historyRetry.hidden=true;historyRetry.disabled=true;
+    try {
+      const revisions=await api('/workspace/forks/'+encodeURIComponent(item.id)+'/history');
+      if(request!==historyRequest || unauthenticated)return;
+      for(const revision of revisions) {
+        const detail=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
+        summary.textContent=new Date(revision.created_at).toLocaleString('fa');
+        pre.textContent=revision.content;pre.tabIndex=0;pre.dir='auto';
+        detail.append(summary,pre);target.append(detail);
+      }
+      historyStatus.textContent=revisions.length?'تاریخچه دریافت شد؛ برای خواندن متن هر نسخه، تاریخ آن را باز کنید.':'هنوز نسخه‌ای در تاریخچه ثبت نشده است.';
+    } catch(error) {
+      if(request!==historyRequest || unauthenticated)return;
+      if(error instanceof ApiError && error.status===401){showSignIn();return;}
+      historyStatus.textContent=message(error);historyStatus.setAttribute('role','alert');historyRetry.hidden=false;
+    } finally {if(request===historyRequest){history.setAttribute('aria-busy','false');historyRetry.disabled=false;}}
+  }
+  historyRetry.addEventListener('click',()=>{if(activeHistory)void showHistory(activeHistory.item,activeHistory.button);});
+  document.querySelector('[data-history-close]')!.addEventListener('click',()=>{
+    ++historyRequest;history.hidden=true;history.setAttribute('aria-busy','false');
+    activeHistory?.button.setAttribute('aria-expanded','false');activeHistory?.button.focus();
+  });
+  async function loadSection(section:'workspace'|'proposals') {
+    const feedback=document.querySelector<HTMLElement>('[data-'+section+'-feedback]')!;
+    const retry=document.querySelector<HTMLButtonElement>('[data-'+section+'-retry]')!;
+    retry.disabled=true; retry.setAttribute('aria-busy','true');
+    feedback.textContent=section==='workspace'?'در حال دریافت نسخه‌ها و نشانه‌ها…':'در حال دریافت پیشنهادها…';
+    feedback.setAttribute('role','status');
+    try {
+      const data=await api('/'+section);
+      if(unauthenticated)return;
+      if(section==='workspace') {
+        const workspace=data;
+        document.querySelector('[data-forks]')!.replaceChildren();
+        document.querySelector('[data-bookmarks]')!.replaceChildren();
+        for(const item of workspace.forks) {
+          const li=document.createElement('li');li.className='garden-row workspace-item-card';
+          li.append(link(item,true));
+          const button=document.createElement('button');button.textContent='تاریخچه';button.type='button';
+          button.className='workspace-action-btn';
+          button.setAttribute('aria-label','تاریخچهٔ '+(item.title ?? item.slug));
+          button.setAttribute('aria-controls','workspace-history');button.setAttribute('aria-expanded','false');
+          button.addEventListener('click',()=>showHistory(item,button));
+          li.append(button);document.querySelector('[data-forks]')!.append(li);
+        }
+        for(const item of workspace.bookmarks) {
+          const li=document.createElement('li');li.className='garden-row workspace-item-card';
+          li.append(link(item));
+          const remove=document.createElement('button');remove.type='button';remove.textContent='حذف نشانه';
+          remove.className='workspace-action-btn is-danger';
+          remove.addEventListener('click',async()=>{
+            remove.disabled=true;remove.setAttribute('aria-busy','true');
+            status.textContent='در حال حذف نشانه…';
+            try {
+              await api('/workspace/bookmarks/'+encodeURIComponent(item.slug),undefined,'DELETE');
+              li.remove();status.textContent='نشانه حذف شد.';
+              document.querySelector<HTMLElement>('[data-bookmarks-empty]')!.hidden=document.querySelector('[data-bookmarks]')!.childElementCount>0;
+            } catch(error) {if(error instanceof ApiError && error.status===401)showSignIn();else status.textContent=message(error);}
+            finally {remove.disabled=false;remove.setAttribute('aria-busy','false');}
+          });
+          li.append(remove);document.querySelector('[data-bookmarks]')!.append(li);
+        }
+        document.querySelector<HTMLElement>('[data-forks-empty]')!.hidden=workspace.forks.length>0;
+        document.querySelector<HTMLElement>('[data-bookmarks-empty]')!.hidden=workspace.bookmarks.length>0;
+      } else {
+        const proposals=data;
+        document.querySelector('[data-proposals]')!.replaceChildren();
+    for(const item of proposals){const li=document.createElement('li');li.textContent=`${item.slug} — ${({pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده',changes_requested:'نیازمند بازنگری'} as Record<string,string>)[item.status] ?? 'وضعیت نامشخص'}${item.author_review_comment ? ' — '+item.author_review_comment : ''}`;document.querySelector('[data-proposals]')!.append(li);}
+        document.querySelector<HTMLElement>('[data-proposals-empty]')!.hidden=proposals.length>0;
+      }
+      feedback.textContent=section==='workspace'?'نسخه‌ها و نشانه‌ها دریافت شدند.':'پیشنهادها دریافت شدند.';
+      retry.hidden=true;
+    } catch(error) {
+      if(error instanceof ApiError && error.status===401){showSignIn();return;}
+      if(unauthenticated)return;
+      feedback.textContent=message(error); feedback.setAttribute('role','alert'); retry.hidden=false;
+    } finally {retry.disabled=false;retry.setAttribute('aria-busy','false');}
+  }
+  for(const section of ['workspace','proposals'] as const) {
+    document.querySelector('[data-'+section+'-retry]')!.addEventListener('click',()=>loadSection(section));
+    void loadSection(section);
+  }
+</script>

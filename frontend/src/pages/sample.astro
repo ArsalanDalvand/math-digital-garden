@@ -1,0 +1,11 @@
+---
+import Reader from '../layouts/Reader.astro';
+import { buildKnowledge } from '../lib/markdown.mjs';
+import raw from '../../../tests/fixtures/cantor.md?raw';
+export const prerender = true;
+const [note] = await buildKnowledge([{slug:'cantor',title:'قضیهٔ کانتور',current_content:raw}]);
+---
+<Reader title="قضیهٔ کانتور" headings={note.headings}>
+  <p class="note-status">نمونهٔ مطالعه · مستقل از اتصال دیتابیس</p>
+  <article class="note" set:html={note.html} />
+</Reader>

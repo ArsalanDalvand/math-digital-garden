@@ -1,0 +1,7 @@
+{
+  "latex": true,
+  "notesUnchanged": true,
+  "passed": true,
+  "provider": "explicit mocked Dify transport",
+  "sse": true
+}

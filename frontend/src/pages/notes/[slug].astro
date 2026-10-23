@@ -1,0 +1,65 @@
+---
+import {folderTree} from '../../lib/folder-tree.mjs';
+import Reader from '../../layouts/Reader.astro';
+import WorkspaceNote from '../../components/WorkspaceNote.astro';
+import CanonicalActions from '../../components/CanonicalActions.astro';
+import Tutor from '../../components/Tutor.astro';
+import GeoGebra from '../../components/GeoGebra.astro';
+import { buildKnowledge } from '../../lib/markdown.mjs';
+import { fetchCatalogue } from '../../lib/catalogue.mjs';
+import Connections from '../../components/Connections.astro';
+import NoteGraph from '../../components/NoteGraph.astro';
+import InlinePreviews from '../../components/InlinePreviews.astro';
+let garden: Awaited<ReturnType<typeof buildKnowledge>> = [];
+let current: (typeof garden)[number] | undefined;
+const slug = Astro.params.slug ?? '';
+let title = 'یادداشت در دسترس نیست';
+let html = '';
+let aiHash = ''; 
+let message = '';
+if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
+  Astro.response.status = 404;
+  message = 'یادداشت پیدا نشد.';
+} else {
+  try {
+    const origin = process.env.API_BASE_URL || import.meta.env.API_BASE_URL || 'http://127.0.0.1:8000';
+    const response = await fetch(`${origin}/api/notes/${encodeURIComponent(slug)}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (response.status === 404 || response.status === 422) {
+      Astro.response.status = 404;
+      message = 'یادداشت پیدا نشد.';
+    } else if (!response.ok) {
+      Astro.response.status = 503;
+      message = 'دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';
+    } else {
+      const note = await response.json();
+      if (typeof note.title !== 'string' || typeof note.current_content !== 'string') {
+        throw new Error('Invalid note response');
+      }
+      title = note.title;
+      aiHash = note.current_hash;
+      const catalogue = await fetchCatalogue();
+      const notes = catalogue.map(item => item.slug === slug ? {...note, slug} : item);
+      if (!notes.some(item => item.slug === slug)) notes.push({...note, slug});
+      garden = await buildKnowledge(notes);
+      current = garden.find((item)=>item.slug===slug);
+      html = current?.html ?? '';
+    }
+  } catch {
+    Astro.response.status = 503;
+    message = 'دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';
+  }
+}
+---
+<Reader title={title} headings={current?.headings} sidebar={folderTree(garden)}>
+  {message ? <p role="status">{message}</p> : <><div class="note-meta">{current?.tags.map((tag)=><a class="tag" href={`/search?tag=${encodeURIComponent(tag)}`}>#{tag}</a>)}<span class="note-status">نسخهٔ رسمی</span></div>
+    <WorkspaceNote slug={slug} /><script type="application/json" data-note-link-index set:html={JSON.stringify(garden.map(n=>({slug:n.slug,title:n.title,aliases:n.aliases}))).replace(/</g,"\u003c")} /><article class="note" data-ai-scope="canonical" data-ai-hash={aiHash} set:html={html} /><GeoGebra />
+
+    <CanonicalActions slug={slug} title={title}/>
+    {current && <><InlinePreviews slugs={current.outgoing} garden={garden} /><div class="note-connections"><Connections title="پیوندهای این یادداشت" direction="outgoing" currentSlug={current.slug} slugs={current.outgoing} garden={garden} /><Connections title="ارجاعات به این یادداشت" direction="incoming" currentSlug={current.slug} slugs={current.backlinks} garden={garden} /></div></>}</>}
+  <div slot="tools">{!message && <>{current && <NoteGraph slug={slug} garden={garden} />}<Tutor slug={slug} /></>}</div>
+</Reader>
+<style>
+  .note-connections{border-block-start:1px solid var(--workspace-border);margin-block-start:2rem;padding-block-start:1.5rem}
+</style>

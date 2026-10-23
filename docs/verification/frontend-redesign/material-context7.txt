@@ -1,0 +1,93 @@
+### Soft-disabled icon button in toolbar
+
+Source: https://github.com/material-components/material-web/blob/main/docs/components/icon-button.md
+
+Use this to keep a disabled icon button focusable in a toolbar. The soft-disabled attribute allows keyboard focus while still being disabled, improving discoverability.
+
+```html
+<div role="toolbar">
+  <md-icon-button aria-label="Copy">
+    <md-icon>copy</md-icon>
+  </md-icon-button>
+  <md-icon-button aria-label="Cut">
+    <md-icon>cut</md-icon>
+  </md-icon-button>
+  <!--
+    This icon button is disabled but kept focusable to improve its
+    discoverability in the toolbar.
+  -->
+  <md-icon-button aria-label="Paste" soft-disabled>
+    <md-icon>paste</md-icon>
+  </md-icon-button>
+</div>
+```
+
+--------------------------------
+
+### Soft-disabled button in a toolbar
+
+Source: https://github.com/material-components/material-web/blob/main/docs/components/button.md
+
+Shows a toolbar with Copy, Cut, and Paste buttons. The Paste button uses the soft-disabled attribute to remain focusable while disabled, improving discoverability for keyboard users.
+
+```html
+<div role="toolbar">
+  <md-text-button>Copy</md-text-button>
+  <md-text-button>Cut</md-text-button>
+  <!--
+    This button is disabled but kept focusable to improve its discoverability
+    in the toolbar.
+  -->
+  <md-text-button soft-disabled>Paste</md-text-button>
+</div>
+```
+
+--------------------------------
+
+### Disable focus ring animation with --md-focus-ring-duration
+
+Source: https://github.com/material-components/material-web/blob/main/docs/components/focus-ring.md
+
+Disables the focus ring animation by setting --md-focus-ring-duration to 0s. The animation can be customized with CSS custom properties.
+
+```html
+<style>
+  md-focus-ring {
+    --md-focus-ring-duration: 0s; /* disabled animation */
+  }
+</style>
+```
+
+--------------------------------
+
+### Soft-disabled chips for focusability
+
+Source: https://github.com/material-components/material-web/blob/main/docs/components/chip.md
+
+Use soft-disabled chips to keep them focusable by keyboard and screen readers, making disabled actions discoverable.
+
+```html
+<md-chip-set aria-label="Actions">
+  <!--
+    Disabled until text is selected. Since both are disabled by default, keep
+    them focusable so that screen readers can discover the actions available.
+  -->
+  <md-assist-chip label="Copy" soft-disabled></md-assist-chip>
+  <md-assist-chip label="Paste" soft-disabled></md-assist-chip>
+</md-chip-set>
+<md-outlined-text-field type="textarea"></md-outlined-text-field>
+```
+
+### Accessibility > Focusable and disabled
+
+Source: https://github.com/material-components/material-web/blob/main/docs/components/icon-button.md
+
+### Focusable and disabled
+
+By default, disabled icon buttons are not focusable with the keyboard, while
+"soft-disabled" icon buttons are. Some use cases encourage focusability of
+disabled toolbar items to increase their discoverability.
+
+See the
+[ARIA guidelines on focusability of disabled controls](https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_disabled_controls)<!-- {.external} -->
+for guidance on when this is recommended.

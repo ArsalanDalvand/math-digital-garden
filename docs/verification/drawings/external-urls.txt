@@ -1,0 +1,15 @@
+https://www.geogebra.org/apps/5.4.920.0/css/bundles/bundle.css
+https://www.geogebra.org/apps/5.4.920.0/css/bundles/simple-bundle.css
+https://www.geogebra.org/apps/5.4.920.0/css/fonts.css
+https://www.geogebra.org/apps/5.4.920.0/css/greek-font.css
+https://www.geogebra.org/apps/5.4.920.0/css/keyboard-styles.css
+https://www.geogebra.org/apps/5.4.920.0/web3d/0C7057AD68C986E5B1859BFB332A1012.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/10.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/14.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/3.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/5.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/6.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/7.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/8.cache.js
+https://www.geogebra.org/apps/5.4.920.0/web3d/deferredjs/0C7057AD68C986E5B1859BFB332A1012/9.cache.js
+https://www.geogebra.org/apps/deployggb.js

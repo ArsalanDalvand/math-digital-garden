@@ -1,0 +1,65 @@
+<script>
+  import {viewerOrigin} from '../lib/geogebra.mjs';
+  const bound=new Map<HTMLElement,()=>void>();
+  const observer=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(!entry.isIntersecting)continue;
+      observer.unobserve(entry.target);
+      (entry.target as HTMLElement).querySelector<HTMLButtonElement>('button')?.click();
+    }
+  },{rootMargin:'200px'});
+  function bind(){
+    for(const [figure,dispose] of bound)if(!figure.isConnected){dispose();observer.unobserve(figure);bound.delete(figure);}
+    for(const figure of document.querySelectorAll<HTMLElement>('[data-geogebra]')){
+      const button=figure.querySelector<HTMLButtonElement>('button');
+      if(!button || bound.has(figure))continue;
+      let cleanup=()=>{};
+      let controller:AbortController | undefined;
+      bound.set(figure,()=>{controller?.abort();cleanup();});
+      button.addEventListener('click',async()=>{
+        controller?.abort();cleanup();
+        controller=new AbortController();const signal=controller.signal;
+        button.disabled=true;
+        try{
+          const config=JSON.parse(figure.dataset.geogebra!);
+          if(config.filename){
+            const response=await fetch(config.filename,{credentials:'omit',signal});if(!response.ok)throw new Error('File unavailable');
+            const blob=await response.blob();if(blob.size>5_000_000)throw new Error('File too large');
+            const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(blob);});
+            config.ggbBase64=data.split(',')[1];delete config.filename;
+          }
+          if(signal.aborted || !figure.isConnected)return;
+          const frame=document.createElement('iframe');frame.title=config.caption || 'رسم تعاملی GeoGebra';
+          frame.sandbox.add('allow-scripts','allow-same-origin');frame.style.width='100%';frame.style.height=config.height+'px';frame.style.border='0';
+          const token=crypto.randomUUID();
+          let status=figure.querySelector<HTMLElement>('[data-geogebra-status]');
+          if(!status){status=document.createElement('p');status.dataset.geogebraStatus='';status.setAttribute('role','status');figure.append(status);}
+          status.textContent='در حال بارگذاری رسم…';figure.dataset.geogebraLoaded='loading';figure.setAttribute('aria-busy','true');
+          const receive=(event:MessageEvent)=>{
+            if(event.source!==frame.contentWindow || event.origin!==new URL(frame.src).origin || event.data?.token!==token || event.data?.type!=='garden:geogebra')return;
+            if(!['ready','failed'].includes(event.data.status))return;
+            if(signal.aborted || !figure.isConnected)return;
+            figure.dataset.geogebraLoaded=event.data.status;figure.setAttribute('aria-busy','false');
+            button.hidden=event.data.status==='ready';button.disabled=false;
+            status!.textContent=event.data.status==='ready'?'':'بارگذاری رسم ناموفق بود؛ کد اصلی و متن جزوه در دسترس است.';
+          };
+          window.addEventListener('message',receive);cleanup=()=>window.removeEventListener('message',receive);
+          // A different hostname isolates private DOM/cookies while allowing GeoGebra's nested frames.
+          const origin=viewerOrigin(location.origin,import.meta.env.PUBLIC_GEOGEBRA_VIEWER_ORIGIN);
+          frame.src=origin+'/drawings/geogebra';
+          frame.addEventListener('load',()=>frame.contentWindow?.postMessage({type:'garden:geogebra:init',config,token},origin),{once:true});
+          figure.querySelector('[data-geogebra-host]')!.replaceChildren(frame);button.textContent='بارگذاری دوباره';
+        }catch{
+          if(signal.aborted)return;
+          figure.dataset.geogebraLoaded='failed';figure.setAttribute('aria-busy','false');
+          button.disabled=false;button.hidden=false;button.textContent='تلاش دوباره';
+          let status=figure.querySelector<HTMLElement>('[data-geogebra-status]');
+          if(!status){status=document.createElement('p');status.dataset.geogebraStatus='';status.setAttribute('role','status');figure.append(status);}
+          status.textContent='بارگذاری رسم ناموفق بود؛ متن و کد اصلی در دسترس است.';
+        }
+      });
+      observer.observe(figure);
+    }
+  }
+  bind();new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
+</script>

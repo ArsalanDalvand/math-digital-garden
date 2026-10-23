@@ -1,0 +1,7 @@
+{
+  "abortOnContextChange": true,
+  "passed": true,
+  "staleOutputCleared": true,
+  "staleVersionRejected": true,
+  "transport": "explicit browser mock for lifecycle only"
+}

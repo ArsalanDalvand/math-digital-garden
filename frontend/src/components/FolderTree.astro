@@ -1,0 +1,11 @@
+---
+import {Folder,FileText} from 'lucide-react';
+interface Item{label:string;link?:string;items?:Item[]}
+interface Props{items:Item[]}
+const {items}=Astro.props;
+const contains=(item:Item):boolean=>item.link===Astro.url.pathname||(item.items??[]).some(contains);
+---
+<div class="folder-tree">{items.map(item=>item.link?<a href={item.link} aria-current={Astro.url.pathname===item.link?'page':undefined}><FileText size={14}/><span>{item.label}</span></a>:<details open={contains(item)} data-folder={item.label}><summary><Folder size={15}/><span>{item.label}</span></summary><Astro.self items={item.items??[]}/></details>)}</div>
+<script>
+ document.querySelectorAll<HTMLDetailsElement>('[data-folder]').forEach(folder=>{const key='garden-folder:'+Array.from(folder.parentElement?.closest('[data-folder]')?[folder.parentElement.closest('[data-folder]')!.getAttribute('data-folder'),folder.dataset.folder]:[folder.dataset.folder]).join('/');try{if(localStorage.getItem(key)==='open')folder.open=true;}catch{}folder.addEventListener('toggle',()=>{try{localStorage.setItem(key,folder.open?'open':'closed')}catch{}})});
+</script>

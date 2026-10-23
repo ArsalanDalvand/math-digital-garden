@@ -1,0 +1,42 @@
+# Secrets and local environments
+.env
+.env.*
+!.env.example
+.venv/
+
+# Python caches and reports
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Frontend dependencies, generated output and reports
+node_modules/
+frontend/.astro/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+
+# Local tooling and editor files
+.claude/worktrees/
+.DS_Store
+.idea/
+*.log
+
+# Python packaging and local session files
+*.egg-info/
+frontend/.sessions/
+
+# Private local runtime, logs, and vendor reference clones
+.local/
+references/
+logs/
+
+
+frontend/public/excalidraw/

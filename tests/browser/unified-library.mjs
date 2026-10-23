@@ -1,0 +1,73 @@
+// Real backend, generated users and an existing synthetic note; never run against live.
+import {execFileSync} from 'node:child_process';
+import {randomBytes} from 'node:crypto';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:4322',session='unified-library-'+process.pid;
+const evidence=fileURLToPath(new URL('../../../logs/unified-library-2026-10-16/browser/',import.meta.url));mkdirSync(evidence,{recursive:true});
+const env={...process.env,TMPDIR:process.env.TMPDIR||'/tmp'};delete env.LD_PRELOAD;
+const checks=[],slug='docmost-browser-fixture',marker='PRIVATE_'+randomBytes(6).toString('hex');
+function browser(...args){
+ const result=JSON.parse(execFileSync('agent-browser',['--session',session,...args,'--json'],{env,encoding:'utf8',timeout:35000}));
+ assert.equal(result.success,true,result.error);return result.data;
+}
+const evaluate=code=>browser('eval',code).result;
+const wait=code=>browser('wait','--fn',code);
+const check=(name,code)=>{assert.equal(evaluate(code),true,name);checks.push(name);};
+const api=(path,data,method)=>evaluate(`(async()=>{const r=await fetch('/api'+${JSON.stringify(path)},{method:${JSON.stringify(method||(data===undefined?'GET':'POST'))},headers:{'Content-Type':'application/json','X-Requested-With':'MathGarden'},body:${data===undefined?'undefined':JSON.stringify(JSON.stringify(data))}});if(!r.ok)throw Error('API '+r.status);return r.status===204?null:r.json()})()`);
+const register=()=>{const email='Browser'+randomBytes(5).toString('hex')+'@example.com';api('/auth/register',{email,password:randomBytes(20).toString('hex'),full_name:'آزمون کتابخانه'});return email;};
+const open=path=>browser('open',base+path);
+const ready=()=>wait('document.querySelector("[data-library-tree]")?.children.length>0&&[...document.querySelectorAll("astro-island")].every(x=>!x.hasAttribute("ssr"))');
+const allFolders=()=>{for(let i=0;i<8;i++){evaluate('[...document.querySelectorAll("[data-library-tree] details")].forEach(x=>x.open=true)');browser('wait','--fn','true');}};
+try{
+ open('/library');ready();
+ check('One library without personal section','document.querySelectorAll("[data-library-navigation]").length===1&&!document.querySelector("[data-personal-library]")&&!document.querySelector(".workspace-nav").textContent.includes("کتابخانهٔ من")');
+ wait('document.querySelector("[data-browser-list]").children.length>0');
+ allFolders();check('Anonymous sees default canonical note in tree',`!!document.querySelector('[data-library-tree] a[href="/notes/${slug}"]')`);
+ const publicTree=api('/library-tree');
+ assert.ok(!JSON.stringify(publicTree).includes('current_content'));checks.push('Public tree transports only hierarchy metadata');
+ register();open('/library');ready();
+ browser('click','[data-library-add]');browser('wait','[data-library-create][open]');
+ check('Create dialog focuses name','document.activeElement===document.querySelector("[data-library-create] [name=title]")');
+ browser('fill','[data-library-create] [name=title]','پوشهٔ واحد');browser('select','[data-library-create] [name=kind]','folder');browser('click','[data-library-create] [type=submit]');
+ wait('!document.querySelector("[data-library-create]").open&&document.querySelector("[data-library-tree]").textContent.includes("پوشهٔ واحد")');
+ const folder=api('/library/items').find(x=>x.title==='پوشهٔ واحد');assert.ok(folder);checks.push('Sidebar creates folder in same tree');
+ browser('click','button[aria-label="ساختن در پوشهٔ واحد"]');browser('fill','[data-library-create] [name=title]','یادداشت واحد');browser('click','[data-library-create] [type=submit]');
+ wait('location.pathname.startsWith("/library/")&&location.search==="?edit=1"');browser('wait','[data-editor] .cm-content');
+ browser('click','.cm-content');browser('keyboard','inserttext','متن خصوصی کتابخانه');
+ wait('document.querySelector("[data-save-status]").textContent.includes("ذخیره شد")');
+ const noteId=evaluate('location.pathname.split("/").at(-1)'),note=api('/library/items/'+noteId);
+ assert.equal(note.parent_id,folder.id);assert.ok(note.content.includes('متن خصوصی کتابخانه'));checks.push('Child note opens editing and saves inside selected folder');
+ ready();allFolders();check('Default notes remain visible on a new private note',`!!document.querySelector('[data-library-tree] a[href="/notes/${slug}"]')`);
+ open('/notes/'+slug);ready();const original=api('/notes/'+slug);
+ assert.equal(api('/workspace/notes/'+slug).fork,null);checks.push('Reading defaults creates no fork');
+ browser('click','[data-edit]');browser('wait','.cm-content');browser('click','.cm-content');browser('press','Control+End');browser('keyboard','inserttext','\n\n'+marker);
+ wait('document.querySelector("[data-save-status]").textContent.includes("ذخیره شد")');
+ browser('click','[data-view]');wait('document.querySelector("[data-editor-panel]").hidden');browser('reload');ready();
+ wait(`document.querySelector('article.note:not([data-live-preview])').textContent.includes(${JSON.stringify(marker)})`);
+ assert.equal(evaluate('location.pathname'),'/notes/'+slug);allFolders();
+ check('Personal edit keeps exactly the same tree entry',`document.querySelectorAll('[data-library-tree] a[href="/notes/${slug}"]').length===1`);
+ assert.equal(api('/notes/'+slug).current_content,original.current_content);checks.push('Original Markdown unchanged after real editor save');
+ api('/auth/logout',undefined,'POST');open('/account');register();open('/notes/'+slug);ready();
+ assert.equal(api('/workspace/notes/'+slug).fork,null);assert.deepEqual(api('/library/items'),[]);
+ check('Second student cannot read first private library item',`(async()=>{const r=await fetch('/api/library/items/${noteId}');return r.status===404})()`);
+ check('Second student reads original without first fork',`!document.querySelector('article.note:not([data-live-preview])').textContent.includes(${JSON.stringify(marker)})`);
+ api('/notes/'+slug+'/fork',{content:'',expected_hash:original.current_hash});browser('reload');ready();
+ wait('document.querySelector(".note-status").textContent.includes("شخصی")');check('Empty owner fork stays empty at original URL','document.querySelector("article.note:not([data-live-preview])").textContent.trim()===""');
+ api('/auth/logout',undefined,'POST');open('/account');const author=register();
+ execFileSync(fileURLToPath(new URL('../../.venv/bin/python',import.meta.url)),[fileURLToPath(new URL('./library-role.py',import.meta.url)),author,'author'],{env,timeout:15000});
+ open('/notes/'+slug);ready();assert.equal(api('/auth/me').role,'author');assert.equal(api('/workspace/notes/'+slug).fork,null);checks.push('Author retains original and no student forks');
+ api('/auth/logout',undefined,'POST');open('/notes/'+slug);ready();
+ check('Anonymous original remains unchanged',`!document.querySelector('article.note:not([data-live-preview])').textContent.includes(${JSON.stringify(marker)})`);
+ check('Anonymous tree contains no previous private metadata','!document.querySelector("[data-library-tree]").textContent.includes("پوشهٔ واحد")');
+ browser('set','viewport','390','844');browser('click','[data-nav-toggle]');browser('click','[data-library-add]');
+ check('Mobile modal fits viewport','document.documentElement.scrollWidth<=innerWidth&&document.querySelector("[data-library-create]").getBoundingClientRect().width<=innerWidth');
+ browser('screenshot',evidence+'/mobile-create.png');browser('press','Escape');
+ check('Escape returns focus to sidebar create button','!document.querySelector("[data-library-create]").open&&document.activeElement===document.querySelector("[data-library-add]")');
+ browser('set','viewport','1440','1000');open('/library');ready();allFolders();browser('screenshot',evidence+'/desktop-library.png');
+ const errors=browser('errors');assert.deepEqual(errors.errors??[],[]);
+ writeFileSync(evidence+'/report.json',JSON.stringify({base,realBackend:true,syntheticData:true,checks,passed:checks.length,errors},null,2));
+ console.log(JSON.stringify({passed:checks.length,evidence}));
+}catch(error){writeFileSync(evidence+'/failure.json',JSON.stringify({checks,error:String(error)},null,2));try{browser('screenshot',evidence+'/failure.png');}catch{}throw error;}
+finally{browser('close');}

@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';const read=p=>readFileSync(new URL('../../frontend/src/'+p,import.meta.url),'utf8');
+test('folder hierarchy uses one library navigation',()=>{assert.match(read('layouts/Reader.astro'),/<LibraryNavigation\//);assert.match(read('scripts/library-navigation.ts'),/createElement\('details'\)/);assert.doesNotMatch(read('layouts/Reader.astro'),/PersonalLibrary/);});
+test('previews require hover intent and no inserted eye button',()=>{const s=read('components/InlinePreviews.astro');assert.match(s,/650/);assert.doesNotMatch(s,/link.after\(button\)/);assert.doesNotMatch(read('components/Connections.astro'),/pointerenter/)});
+test('editing enables prepared live markdown and metadata',()=>{assert.match(read('scripts/workspace-note.ts'),/inlinePreview/);assert.match(read('components/WorkspaceNote.astro'),/data-properties/)});

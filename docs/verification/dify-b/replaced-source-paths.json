@@ -1,0 +1,15 @@
+[
+  "backend/app/rag.py",
+  "backend/app/main.py",
+  "backend/app/config.py",
+  "backend/app/models.py",
+  "frontend/src/components/Tutor.astro",
+  "frontend/src/scripts/workspace-note.ts",
+  "frontend/src/pages/notes/[slug].astro",
+  "frontend/src/pages/api/[...path].ts",
+  "tests/test_workspace.py",
+  "tests/browser/workspace_server.py",
+  "tests/browser/tutor-check.js",
+  "README.md",
+  ".env.example"
+]

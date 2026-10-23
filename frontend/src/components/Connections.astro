@@ -1,0 +1,45 @@
+---
+import { noteHref } from '../lib/markdown.mjs';
+type Note = Awaited<ReturnType<typeof import('../lib/markdown.mjs').buildKnowledge>>[number];
+interface Props { garden: Note[]; slugs: string[]; title: string; direction: 'outgoing' | 'incoming'; currentSlug: string }
+const { garden, slugs, title, direction, currentSlug } = Astro.props;
+const notes = slugs.map((slug)=>garden.find((note)=>note.slug===slug)).filter((note): note is Note => !!note);
+const incoming = direction === 'incoming';
+const groups = [notes.slice(0,5), notes.slice(5)];
+---
+<section class="connection-section" aria-label={title}>
+  <h2>{title} <span class="connection-count">{notes.length.toLocaleString('fa-IR')}</span></h2>
+  <p class="connection-hint">{incoming ? 'یادداشت‌هایی که به این صفحه پیوند داده‌اند.' : 'یادداشت‌هایی که از این صفحه به آن‌ها پیوند داده شده است.'}</p>
+  {notes.length ? groups.map((group,index)=> {
+    const Tag = index ? 'details' : 'div';
+    return group.length > 0 && <Tag class={index ? 'connections-more' : undefined}>
+      {index > 0 && <summary><span class="more-closed">نمایش {group.length.toLocaleString('fa-IR')} مورد دیگر</span><span class="more-open">نمایش کمتر</span></summary>}
+      <ul class="connection-list">{group.map((note)=><li>
+        <a class="connection-link" href={noteHref(note.slug)}>{note.title}</a>
+        <details class="connection-preview"><summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
+          <article class="connection-excerpt" set:html={incoming ? note.referencePreviews[currentSlug] || note.previewHtml : note.previewHtml} />
+        </details>
+      </li>)}</ul>
+    </Tag>;
+  }) : <p class="connection-empty">{incoming ? 'هنوز یادداشت دیگری به این صفحه پیوند نداده است.' : 'در متن این یادداشت هنوز پیوندی به یادداشت دیگری وجود ندارد.'}</p>}
+</section>
+<style>
+  .connection-section{font-size:.875rem;line-height:1.7;min-width:0}
+  .connection-section + .connection-section{margin-block-start:var(--space-6)}
+  .connection-section h2{display:flex;align-items:center;gap:var(--space-2);font-size:1rem;line-height:1.7;font-weight:600;margin:0}
+  .connection-count{font-size:.875rem;font-weight:400;color:var(--sl-color-gray-2);font-variant-numeric:tabular-nums}
+  .connection-hint,.connection-empty{font-size:.875rem;color:var(--sl-color-gray-2);margin:var(--space-2) 0}
+  .connection-list{list-style:none;padding:0!important;margin:var(--space-2) 0 0}
+  .connection-list>li{position:relative;border-block-end:1px solid var(--workspace-border);margin:0;padding:0}
+  .connection-link{display:flex;align-items:center;min-height:44px;padding-inline-end:7rem;overflow-wrap:anywhere}
+  .connection-preview{margin:0}
+  .connection-preview>summary{position:absolute;inset-block-start:0;inset-inline-end:0;min-height:44px;display:list-item;align-content:center;cursor:pointer;color:var(--sl-color-gray-2);padding-inline:var(--space-2);margin-inline-start:var(--space-4)}
+  .connection-excerpt{font-size:.875rem;line-height:1.8;padding:var(--space-3);margin-block:0 var(--space-3);border-inline-start:2px solid var(--workspace-border);max-height:18rem;overflow:auto;overflow-wrap:anywhere}
+  .connection-excerpt :global(p){margin-block:0 var(--space-2)}
+  .connection-excerpt :global(h1),.connection-excerpt :global(h2),.connection-excerpt :global(h3){font-size:1rem;margin-block:var(--space-2)}
+  .connection-excerpt :global(.katex-display){overflow-x:auto;overflow-y:hidden}
+  .connections-more>summary{min-height:44px;align-content:center;cursor:pointer;color:var(--sl-color-gray-2)}
+  .more-open,.connections-more[open]>summary .more-closed{display:none}
+  .connections-more[open]>summary .more-open{display:inline}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--sl-color-text-accent);outline-offset:2px;border-radius:var(--radius-control)}
+</style>

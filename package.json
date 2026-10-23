@@ -1,0 +1,12 @@
+{
+  "name": "math-digital-garden-root",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "check": "pnpm --filter frontend check",
+    "tsc": "pnpm --filter frontend tsc",
+    "test": "pnpm --filter frontend test",
+    "test:reader": "pnpm --filter frontend test:reader"
+  }
+}

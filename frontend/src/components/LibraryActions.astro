@@ -1,0 +1,71 @@
+---
+interface Props {id?:string; canonicalSlug?:string; publicView?:boolean; token?:string}
+const {id='',canonicalSlug='',publicView=false,token=''}=Astro.props;
+---
+<div data-library-actions={id} data-canonical-slug={canonicalSlug} data-public={String(publicView)} data-token={token}>
+  <div data-library-top class="garden-row"><button type="button" data-library-command="share">اشتراک‌گذاری</button><button type="button" data-library-command="comments">دیدگاه‌ها</button></div>
+  <div data-library-menu class="library-menu">
+    <button type="button" data-library-command="link">کپی پیوند</button>
+    <button type="button" data-library-command="markdown">کپی Markdown</button>
+    <button type="button" data-library-command="favorite">افزودن به علاقه‌مندی‌ها</button>
+    <button type="button" data-library-command="watch">پیگیری یادداشت</button>
+    <button type="button" data-library-command="width">عرض کامل</button>
+    <button type="button" data-library-command="history">تاریخچه</button>
+    <button type="button" data-library-command="attachments">پیوست‌ها</button>
+    <button type="button" data-library-command="rename">تغییر نام</button>
+    <button type="button" data-library-command="move">انتقال</button>
+    <button type="button" data-library-command="verify" hidden>تأیید نسخهٔ منتشرشده</button>
+    <button type="button" data-library-command="trash">انتقال به زباله‌دان</button>
+    <small data-library-info></small>
+  </div>
+  <p role="status" aria-live="polite" data-library-status></p>
+  <dialog data-library-dialog aria-labelledby={`library-dialog-title-${id}`}><button type="button" data-library-close aria-label="بستن" title="بستن"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><h2 id={`library-dialog-title-${id}`} data-library-title></h2><p role="status" aria-live="polite" data-library-dialog-status></p><div data-library-body></div></dialog>
+</div>
+<script>import '../scripts/library-actions';</script>
+<style is:global>
+.library-menu{display:grid;gap:2px;padding:4px}
+.library-menu button{display:flex;align-items:center;gap:8px;min-height:32px;height:32px;padding:0 8px;background:transparent;border:0;border-radius:5px;color:var(--sl-color-text,#f4f4f5);font-size:13px;font-weight:500;text-align:start;cursor:pointer;transition:all .12s ease;white-space:nowrap}
+.library-menu button:hover{background:var(--sl-color-gray-6,rgba(255,255,255,.08));color:#fff}
+.library-menu [data-library-command="trash"]{border-top:1px solid var(--workspace-border,rgba(255,255,255,.08));border-radius:0;margin-top:4px;padding-top:4px}
+.library-menu [data-library-command="trash"]:hover{color:var(--danger,#f87171)!important;background:rgba(239,68,68,.1)!important}
+.library-menu small{display:block;padding:8px 8px 4px;font-size:11px;color:var(--sl-color-gray-3,#71717a);border-top:1px solid var(--workspace-border,rgba(255,255,255,.08));margin-top:4px;line-height:1.4;max-width:22rem}
+
+dialog[data-library-dialog]{width:min(42rem,92vw);max-height:85vh;overflow-y:auto;background:var(--sl-color-bg,#18181b);color:var(--sl-color-text,#f4f4f5);border:1px solid var(--workspace-border,rgba(255,255,255,.14));border-radius:14px;padding:22px 24px;box-shadow:0 24px 60px -8px rgba(0,0,0,.65);font-family:Vazirmatn,sans-serif;line-height:1.7}
+dialog[data-library-dialog]::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+[data-library-close]{position:absolute;top:16px;left:16px;width:30px;height:30px;padding:0;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;color:var(--sl-color-gray-2,#a1a1aa);cursor:pointer;transition:all .15s ease}
+[data-library-close]:hover{background:var(--sl-color-gray-6,rgba(255,255,255,.08));color:#fff}
+[data-library-title]{font-size:1.15rem;font-weight:700;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--workspace-border,rgba(255,255,255,.08));color:var(--sl-color-text,#fff)}
+
+[data-library-body]{display:flex;flex-direction:column;gap:10px}
+[data-library-body]>p{font-size:12.5px;color:var(--sl-color-gray-2,#a1a1aa);line-height:1.6;margin:0;background:rgba(255,255,255,.03);border:1px solid var(--workspace-border,rgba(255,255,255,.08));border-radius:8px;padding:8px 12px}
+
+[data-library-body]>button{min-height:36px;height:36px;padding:0 14px;border-radius:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--sl-color-gray-6,rgba(255,255,255,.05));border:1px solid var(--workspace-border,rgba(255,255,255,.12));color:var(--sl-color-text,#f4f4f5)}
+[data-library-body]>button:hover{background:var(--sl-color-gray-5,rgba(255,255,255,.1));border-color:var(--workspace-border,rgba(255,255,255,.25));color:#fff}
+
+[data-library-body]>a{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--sl-color-accent,#a78bfa);text-decoration:none;padding:8px 12px;border-radius:6px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);transition:all .15s ease;align-self:flex-start}
+[data-library-body]>a:hover{background:rgba(167,139,250,.15);text-decoration:underline}
+
+.library-list{list-style:none;padding:0;display:grid;gap:10px;margin:8px 0}
+.library-list li{background:var(--sl-color-gray-6,rgba(255,255,255,.03));border:1px solid var(--workspace-border,rgba(255,255,255,.08));border-radius:8px;padding:12px 14px;transition:background .15s ease}
+.library-list li:hover{background:rgba(255,255,255,.05)}
+.library-list strong{display:inline-block;font-size:12.5px;font-weight:600;color:var(--sl-color-accent,#c4b5fd)}
+.library-list p{margin:4px 0 6px;font-size:13.5px;line-height:1.7;color:var(--sl-color-text,#f4f4f5)}
+.library-list small{display:inline-block;font-size:11px;color:var(--sl-color-gray-3,#71717a);margin-inline-start:8px}
+.library-list pre{direction:ltr;unicode-bidi:isolate;white-space:pre-wrap;overflow-wrap:anywhere;max-height:30rem;overflow:auto;background:rgba(0,0,0,.3);border:1px solid var(--workspace-border);border-radius:8px;padding:12px;font-size:13px}
+
+.library-reply{margin-inline-start:1.5rem;border-inline-start:2px solid rgba(167,139,250,.35);padding-inline-start:12px;margin-top:8px}
+.library-actions-inline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.library-actions-inline button{font-size:11.5px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid var(--workspace-border,rgba(255,255,255,.1));color:var(--sl-color-gray-2,#a1a1aa);cursor:pointer;transition:all .15s;font-family:inherit}
+.library-actions-inline button:hover{background:rgba(255,255,255,.12);color:#fff}
+
+.library-form{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding:12px;background:rgba(255,255,255,.02);border:1px solid var(--workspace-border,rgba(255,255,255,.1));border-radius:10px;transition:border-color .15s}
+.library-form:focus-within{border-color:var(--sl-color-accent,#a78bfa);box-shadow:0 0 0 2px rgba(167,139,250,.2)}
+.library-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--sl-color-gray-3,#71717a)}
+.library-form textarea,.library-form input{border-radius:6px;background:transparent;border:none;outline:none;padding:4px 0;color:inherit;font:inherit;font-size:13.5px;line-height:1.6;resize:vertical}
+.library-form textarea{min-height:5rem}
+.library-form button[type=submit],dialog[data-library-dialog] button:not([data-library-close]):not(.library-actions-inline button):not([data-library-body]>button){align-self:flex-start;padding:6px 16px;border-radius:6px;background:var(--sl-color-accent,#a78bfa);color:#09090b;border:none;font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer;transition:all .15s ease}
+.library-form button[type=submit]:hover,dialog[data-library-dialog] button:not([data-library-close]):not(.library-actions-inline button):not([data-library-body]>button):hover{background:#c4b5fd;box-shadow:0 2px 8px rgba(167,139,250,.3)}
+
+.library-compare{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:600px){.library-compare{grid-template-columns:1fr}}
+</style>

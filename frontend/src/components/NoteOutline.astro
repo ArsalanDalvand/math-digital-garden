@@ -1,0 +1,47 @@
+---
+import {List} from 'lucide-react';
+---
+<details class="note-outline">
+  <summary aria-label="فهرست سرفصل‌ها" title="فهرست سرفصل‌ها"><List size={18} aria-hidden="true"/></summary>
+  <nav class="note-outline-panel" aria-label="سرفصل‌های یادداشت"></nav>
+</details>
+<script>
+const outline=document.querySelector<HTMLDetailsElement>('.note-outline');
+if(outline){
+ const panel=outline.querySelector<HTMLElement>('.note-outline-panel')!;
+ const summary=outline.querySelector('summary')!;
+ function visible(element:Element){
+  for(let node:Element|null=element;node;node=node.parentElement){
+   const style=getComputedStyle(node);
+   if(node.hasAttribute('hidden')||style.display==='none'||style.visibility==='hidden')return false;
+  }
+  return true;
+ }
+ outline.addEventListener('toggle',()=>{
+  if(!outline.open)return;
+  panel.replaceChildren();
+  const article=Array.from(document.querySelectorAll<HTMLElement>('#main article.note')).find(node=>!node.closest('[data-editor-panel]')&&visible(node));
+  const list=document.createElement('ul');
+  article?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6').forEach(heading=>{
+   if(!heading.id||!heading.textContent?.trim()||!visible(heading))return;
+   const item=document.createElement('li');const link=document.createElement('a');
+   link.href='#'+encodeURIComponent(heading.id);link.textContent=heading.textContent.trim();
+   link.addEventListener('click',()=>{
+    outline.open=false;
+    if(!heading.hasAttribute('tabindex')){
+     heading.setAttribute('tabindex','-1');
+     heading.addEventListener('blur',()=>heading.removeAttribute('tabindex'),{once:true});
+    }
+    heading.focus({preventScroll:true});
+   });
+   item.append(link);list.append(item);
+  });
+  if(list.children.length)panel.append(list);
+  else {const empty=document.createElement('p');empty.textContent='سرفصلی برای نمایش وجود ندارد؛ در حالت خواندن دوباره بررسی کنید.';panel.append(empty);}
+ });
+ document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&outline.open){event.preventDefault();outline.open=false;summary.focus();}
+ });
+ document.addEventListener('pointerdown',event=>{if(outline.open&&!outline.contains(event.target as Node))outline.open=false;});
+}
+</script>

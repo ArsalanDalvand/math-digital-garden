@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+const require=createRequire(new URL('../../frontend/package.json',import.meta.url));
+const {JSDOM}=require('jsdom'),{transpile}=require('typescript');
+const source=readFileSync(new URL('../../frontend/src/components/InlinePreviews.astro',import.meta.url),'utf8');
+test('inline preview has no eye button and keyboard intent gives cloned regions distinct names',()=>{
+ const dom=new JSDOM('<article class="note"><a data-note-preview="cantor" href="/notes/cantor">کانتور</a><pre aria-label="بلوک کد"></pre></article><template data-preview-slug="cantor" data-preview-title="کانتور"><button data-close-preview>بستن</button><pre tabindex="0" role="region" aria-label="بلوک کد">code</pre></template><div id="inline-note-preview"></div>',{runScripts:'outside-only'});
+ const d=dom.window.document,popup=d.querySelector('#inline-note-preview');
+ popup.showPopover=()=>{};popup.hidePopover=()=>{};
+ const script=source.match(/<script>([\s\S]*?)<\/script>/)[1];
+ dom.window.eval(transpile(script,{target:7,module:0}));
+ const trigger=d.querySelector('a[data-note-preview]');
+ assert.equal(d.querySelector('.note-preview-trigger'),null);
+ trigger.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowDown',altKey:true,bubbles:true}));
+ assert.equal(trigger.getAttribute('aria-expanded'),'true');
+ const names=[...d.querySelectorAll('pre')].map(node=>node.getAttribute('aria-label'));
+ assert.equal(new Set(names).size,names.length);
+ d.querySelector('[data-close-preview]').click();
+ assert.equal(d.activeElement,trigger);assert.equal(trigger.getAttribute('aria-expanded'),'false');dom.window.close();
+});

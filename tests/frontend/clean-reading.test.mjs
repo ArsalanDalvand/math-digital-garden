@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';const read=p=>readFileSync(new URL('../../frontend/src/'+p,import.meta.url),'utf8');
+test('reading toolbar has no version switcher and shows the current version in the document',()=>{assert.doesNotMatch(read('components/WorkspaceNote.astro'),/data-mode=/);assert.match(read('pages/notes/[slug].astro'),/class="note-status"/)});
+test('reading offers persistent display controls and graph fit',()=>{assert.match(read('layouts/Reader.astro'),/ReadingSettings/);assert.match(read('components/NoteGraph.astro'),/fitGraph/)});

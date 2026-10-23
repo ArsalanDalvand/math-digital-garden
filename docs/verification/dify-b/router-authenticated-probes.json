@@ -1,0 +1,15 @@
+[
+  {
+    "endpoint": "/v1/chat/completions",
+    "stream": false,
+    "status": 200,
+    "message_present": true
+  },
+  {
+    "endpoint": "/v1/chat/completions",
+    "stream": true,
+    "status": 200,
+    "content_chunks": 1,
+    "done": false
+  }
+]

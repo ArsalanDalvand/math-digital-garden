@@ -1,0 +1,17 @@
+---
+import Reader from '../../layouts/Reader.astro';
+import WorkspaceNote from '../../components/WorkspaceNote.astro';
+import LibraryActions from '../../components/LibraryActions.astro';
+import {renderMarkdown} from '../../lib/markdown.mjs';
+export const prerender=false;
+const id=Astro.params.id!;
+const origin=process.env.API_BASE_URL||import.meta.env.API_BASE_URL||'http://127.0.0.1:8000';
+let item:any=null;
+try{const response=await fetch(`${origin}/api/library/items/${encodeURIComponent(id)}`,{headers:{Cookie:Astro.request.headers.get('cookie')||''},signal:AbortSignal.timeout(5000)});if(response.ok)item=await response.json();else Astro.response.status=response.status;}catch{Astro.response.status=503;}
+Astro.response.headers.set('Cache-Control','private, no-store');
+if(item?.canonical_slug)return Astro.redirect('/notes/'+encodeURIComponent(item.canonical_slug)+Astro.url.search);
+const html=item?.kind==='note'?await renderMarkdown(item.content):'';
+---
+<Reader documentPage title={item?.title||'یادداشت شخصی'}>
+{item?.kind==='note'?<><WorkspaceNote slug={id} libraryId={id}/><LibraryActions id={id}/><article class="note" set:html={html}/></>:<p>یادداشت در دسترس نیست. <a href="/account">ورود</a> · <a href="/library">کتابخانه</a></p>}
+</Reader>

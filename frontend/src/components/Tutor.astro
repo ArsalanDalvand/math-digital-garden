@@ -1,0 +1,6 @@
+---
+import StudyAssistant from './StudyAssistant';
+interface Props {slug:string}
+const {slug}=Astro.props;
+---
+<StudyAssistant slug={slug} client:load />

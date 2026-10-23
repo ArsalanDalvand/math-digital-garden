@@ -1,0 +1,139 @@
+{
+  "version": "2.21",
+  "children": [
+    {
+      "type": "frame",
+      "id": "PCmBG",
+      "x": 0,
+      "y": 0,
+      "name": "Math Garden reading and tools",
+      "width": 1100,
+      "height": 660,
+      "fill": "#F8FAFC",
+      "layout": "none",
+      "children": [
+        {
+          "type": "text",
+          "id": "k8iXs",
+          "x": 50,
+          "y": 40,
+          "name": "Product title",
+          "fill": "#132238",
+          "content": "باغ ریاضی",
+          "fontFamily": "Vazirmatn",
+          "fontSize": 32,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "APIF1",
+          "x": 350,
+          "y": 110,
+          "name": "Reading surface",
+          "width": 700,
+          "height": 480,
+          "fill": "#FFFFFF",
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "kBY1J",
+              "x": 35,
+              "y": 30,
+              "name": "Canonical note title",
+              "fill": "#132238",
+              "content": "قضیهٔ کانتور · نسخهٔ رسمی",
+              "fontFamily": "Vazirmatn",
+              "fontSize": 24,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "RCsAu",
+              "x": 35,
+              "y": 100,
+              "name": "Reading contract",
+              "fill": "#42566D",
+              "content": "متن فارسی · ۱۸ پیکسل · فاصلهٔ سطر ۲",
+              "fontFamily": "Vazirmatn",
+              "fontSize": 18,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "NWvtd",
+              "x": 35,
+              "y": 170,
+              "name": "Reading priority",
+              "fill": "#132238",
+              "content": "مطالعه در اولویت؛ ابزارها اختیاری",
+              "fontFamily": "Vazirmatn",
+              "fontSize": 18,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "XsIBW",
+          "x": 50,
+          "y": 110,
+          "name": "Optional assistant surface",
+          "width": 270,
+          "height": 480,
+          "fill": "#EDF2F7",
+          "layout": "none",
+          "children": [
+            {
+              "type": "text",
+              "id": "N62HZ3",
+              "x": 20,
+              "y": 30,
+              "name": "Assistant title",
+              "fill": "#132238",
+              "content": "از دستیار بپرسید",
+              "fontFamily": "Vazirmatn",
+              "fontSize": 20,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "swErm",
+              "x": 20,
+              "y": 85,
+              "name": "Assistant context",
+              "fill": "#42566D",
+              "content": "متن انتخابی از نسخهٔ ذخیره‌شده",
+              "fontFamily": "Vazirmatn",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "K28kq",
+              "x": 20,
+              "y": 155,
+              "name": "Primary action",
+              "width": 230,
+              "height": 48,
+              "fill": "#0055AA",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "N57Asz",
+                  "name": "Ask label",
+                  "fill": "#FFFFFF",
+                  "content": "پرسیدن",
+                  "fontFamily": "Vazirmatn",
+                  "fontSize": 16,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "fileToken": "ae34f40c-6110-4f72-a55d-e551538f1f09"
+}

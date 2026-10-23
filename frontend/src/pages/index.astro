@@ -1,0 +1,26 @@
+---
+import Reader from '../layouts/Reader.astro';
+export const prerender = true;
+const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
+---
+<Reader title={brandName}>
+  <section class="garden-intro" data-od-id="reading-intro" aria-label="شروع مطالعه">
+    <p class="garden-lead">از یک تعریف تا یک برهان؛ یادداشت‌های به‌هم‌پیوسته را با سرعت خودتان بخوانید. برای شروع مطالعه نیازی به حساب کاربری نیست.</p>
+    <div class="garden-entry-actions">
+      <a class="garden-primary" href="/sample" data-od-id="start-reading">شروع با نمونهٔ مطالعه</a>
+      <a href="/search" data-od-id="browse-notes">مرور همهٔ یادداشت‌ها ←</a>
+    </div>
+  </section>
+  <section class="garden-discovery" data-od-id="discover-notes" aria-labelledby="discover-title">
+    <h2 id="discover-title" data-od-id="discover-heading">دنبال چه مفهومی هستید؟</h2>
+    <form action="/search" role="search" class="garden-home-search" data-od-id="home-search">
+      <label for="home-query">عنوان یا عبارت موردنظر</label>
+      <div><input id="home-query" name="q" type="search" maxlength="200" placeholder="مثلاً کانتور یا مجموعه‌ها" data-od-id="search-query" /><button type="submit" data-od-id="search-submit">جست‌وجو</button></div>
+    </form>
+  </section>
+  <section class="garden-guide" data-od-id="reading-guide" aria-label="راهنمای استفاده">
+    <article data-od-id="guide-reading"><h3>از متن شروع کنید</h3><p>تعریف‌ها و قضایا را بخوانید؛ برهان را وقتی آماده‌اید باز کنید.</p></article>
+    <article data-od-id="guide-connections"><h3>به پیش‌نیازها برگردید</h3><p>پیوندهای درون یادداشت، راهی برای فهم مفهوم‌های مرتبط هستند.</p></article>
+    <article data-od-id="guide-personal"><h3>توضیح خودتان را اضافه کنید</h3><p>با ورود به حساب، نسخهٔ شخصی بسازید؛ متن اصلی دست‌نخورده می‌ماند.</p><a href="/library">رفتن به کتابخانه ←</a></article>
+  </section>
+</Reader>

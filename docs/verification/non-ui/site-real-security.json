@@ -1,0 +1,9 @@
+{
+  "stale_revision": 409,
+  "invalid_selection": 422,
+  "no_private_context": 404,
+  "real_stream_done": true,
+  "foreign_conversation": 404,
+  "foreign_private_context": 404,
+  "canonical_unchanged": true
+}

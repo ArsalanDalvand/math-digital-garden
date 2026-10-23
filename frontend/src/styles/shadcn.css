@@ -1,0 +1,6 @@
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "../components";
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+@theme inline{--color-background:var(--sl-color-bg);--color-foreground:var(--sl-color-text);--color-muted:var(--sl-color-gray-6);--color-muted-foreground:var(--sl-color-gray-2);--color-primary:var(--sl-color-text);--color-primary-foreground:var(--sl-color-bg);--color-secondary:var(--sl-color-gray-6);--color-secondary-foreground:var(--sl-color-text);--color-accent:var(--sl-color-gray-6);--color-accent-foreground:var(--sl-color-text);--color-border:var(--workspace-border);--color-input:var(--workspace-border);--color-ring:#5377a8;--color-popover:var(--sl-color-bg);--color-popover-foreground:var(--sl-color-text);--color-destructive:#b5413e;}

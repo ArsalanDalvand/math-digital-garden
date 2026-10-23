@@ -1,0 +1,33 @@
+---
+import {Bookmark} from 'lucide-react';
+import EditorToolbar from './EditorToolbar.astro';
+interface Props {slug:string;libraryId?:string}
+const {slug,libraryId}=Astro.props;
+---
+<section data-workspace-note={slug} data-library-id={libraryId} aria-label="فضای شخصی یادداشت">
+  <div class="workspace-toolbar" data-od-id="personal-tools">
+  <div class="workspace-actions" data-note-actions>
+    <div class="note-mode" role="group" aria-label="حالت یادداشت">
+      <button type="button" aria-pressed="true" data-view>خواندن</button>
+      <button type="button" aria-pressed="false" title="نوشتن (Ctrl/⌘+E)" data-edit>نوشتن</button>
+    </div>
+    <button type="button" data-original hidden>نمایش نسخهٔ اصلی</button>
+    <button type="button" data-save hidden>ذخیره</button>
+    <button type="button" data-share hidden>پیشنهاد اصلاح</button>
+    <button type="button" data-reset hidden>بازنشانی به اصل</button>
+    <button type="button" data-bookmark aria-label="نشانه‌گذاری یادداشت" title="نشانه‌گذاری"><Bookmark size={18}/><span>نشانه‌گذاری</span></button>
+  </div>
+  </div>
+  <p role="status" aria-live="polite" data-save-status></p>
+  <EditorToolbar/>
+  <div data-editor-panel hidden>
+    <div data-editor aria-label="ویرایشگر Markdown"></div>
+    <p class="editor-hint">تغییرات پس از مکث کوتاه ذخیره می‌شوند. Ctrl/⌘+S برای ذخیره و Escape برای خواندن.</p>
+    <details class="note-properties"><summary>ویژگی‌های یادداشت — عنوان، تگ‌ها و نام‌های دیگر</summary><label>Properties (YAML)<textarea data-properties dir="ltr" aria-label="ویژگی‌های YAML یادداشت" spellcheck="false"></textarea></label><p>title، tags و aliases را اینجا تغییر دهید. ویژگی‌های دیگر نیز حفظ می‌شوند.</p><button type="button" data-apply-properties>اعمال ویژگی‌ها</button></details>
+    <article class="note" data-live-preview hidden></article>
+  </div>
+<dialog data-share-dialog aria-labelledby="share-title"><h2 id="share-title">یادداشت شما ذخیره شد</h2><p>می‌خواهید این تغییرات برای مدیر وب‌سایت هم ارسال شوند؟ نسخهٔ رسمی تنها پس از تأیید تغییر می‌کند.</p><form data-proposal-form><label>توضیح پیشنهاد (اختیاری)<textarea name="comment" maxlength="4000"></textarea></label><p role="status" data-share-status></p><div class="workspace-actions"><button type="button" data-share-skip>نه، فقط برای خودم</button><button type="submit">ارسال برای مدیر</button></div></form></dialog>
+</section>
+<script>
+  import '../scripts/workspace-note';
+</script>

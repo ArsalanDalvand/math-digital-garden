@@ -1,0 +1,129 @@
+---
+import 'starlight-site-graph/styles/common.css';
+import 'starlight-site-graph/styles/variables.css';
+import 'starlight-site-graph/styles/starlight.css';
+import { graphSitemap } from '../lib/graph.mjs';
+import { noteHref, buildKnowledge } from '../lib/markdown.mjs';
+interface Props { garden: Awaited<ReturnType<typeof buildKnowledge>>; slug: string }
+const { garden, slug } = Astro.props;
+// Initial settings; the plugin supplies its own interactive controls.
+const config = { depth: 1, prefetchPages: false, renderExternal: false, labelFontSize: 14, linkDistance: 120, repelForce: 120, actions: ['reset-zoom','fullscreen','settings'] };
+---
+<section data-note-graph class="note-graph" aria-label="گراف ارتباط یادداشت‌ها">
+  <h2>گراف ارتباط یادداشت‌ها</h2>
+  <p>برای مطالعه، نودها را انتخاب کنید. <a href="/search">فهرست متنی همهٔ یادداشت‌ها</a></p>
+  <button type="button" class="garden-secondary" data-load-graph>نمایش گراف ارتباطات</button>
+  <p role="status" data-graph-status></p>
+  <template data-graph-template>
+    <div class="slsg-graph-component slsg-graph-skeleton"><div class="slsg-graph-container"></div></div>
+    <graph-component data-config={JSON.stringify(config)} data-sitemap={JSON.stringify(graphSitemap(garden))} data-slug={noteHref(slug).slice(1)} data-debug="false" data-trailing-slashes="false"></graph-component>
+  </template>
+  <noscript>برای گراف تعاملی جاوااسکریپت را فعال کنید؛ فهرست پیوندها در ادامه در دسترس است.</noscript>
+</section>
+<script>
+  const labels: Record<string,string> = {
+    fullscreen: 'تمام‌صفحه یا بازگشت', depth: 'تغییر عمق ارتباطات؛ سطح ۵ گراف سراسری',
+    'reset-zoom': 'بازنشانی زوم', 'render-arrows': 'نمایش یا حذف جهت پیوندها', settings: 'تنظیمات گراف',
+    'Repel Force': 'نیروی دافعه', 'Center Force': 'نیروی مرکز', 'Collider Padding': 'فاصلهٔ نودها',
+    'Link Distance': 'طول پیوندها', 'Alpha Decay': 'سرعت آرام‌شدن حرکت',
+  };
+  // The upstream controls have no accessible names; keep names after they regenerate.
+  function fitGraph(graph:any){
+    const sim=graph.simulator;const canvas=graph.querySelector('canvas');if(!sim?.nodes?.length||!canvas)return;
+    const nodes=sim.nodes.filter((n:any)=>Number.isFinite(n.x)&&Number.isFinite(n.y));if(!nodes.length)return;
+    const xs=nodes.map((n:any)=>n.x),ys=nodes.map((n:any)=>n.y);const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+    const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
+    const k=Math.min(1,(w-100)/Math.max(1,right-left),(h-70)/Math.max(1,bottom-top));
+    const x=w/2-(left+right)/2*k,y=h/2-(top+bottom)/2*k;
+    sim.userZoomed=true;sim.centerTransform=sim.centerTransform.translate(-sim.centerTransform.x,-sim.centerTransform.y);sim.zoomTransform=sim.zoomTransform.constructor===Object?sim.zoomTransform:new sim.zoomTransform.constructor(k,x,y);sim.transform=sim.zoomTransform;sim.renderer.resetZoom(sim.zoomTransform);sim.updateZoom(k,x,y,true);sim.requestRender=true;
+  }
+  function nameGraph(graph: HTMLElement) {
+    graph.style.opacity='0';setTimeout(()=>{if(graph.isConnected){fitGraph(graph);graph.style.opacity='1';}},1800);
+    const nameControls = () => {
+      const actions: string[] = JSON.parse(graph.dataset.config ?? '{}').actions ?? ['fullscreen','depth','reset-zoom','render-arrows','settings'];
+      graph.querySelectorAll<HTMLButtonElement>('.slsg-graph-action-button').forEach((button,index) => {
+        const action = actions[index];
+        button.type = 'button';
+        button.dataset.graphAction = action;
+        button.setAttribute('aria-label', labels[action] ?? action);
+        button.title = labels[action] ?? action;
+      });
+      const popup=graph.querySelector('.slsg-popup-menu');
+      if(popup&&!popup.querySelector('[data-extra-settings]')){const extra=document.createElement('div');extra.dataset.extraSettings='';extra.innerHTML='<label>عمق ارتباطات <select aria-label="عمق ارتباطات"><option value="0">فقط این یادداشت</option><option value="1">همسایه‌ها</option><option value="2">دو مرحله</option><option value="3">سه مرحله</option><option value="4">چهار مرحله</option><option value="5">همه یادداشت‌ها</option></select></label><label><input type="checkbox"/> جهت پیوندها</label>';const g=graph as any;const select=extra.querySelector('select')!;select.value=String(g.config.depth);select.onchange=()=>{g.config.depth=Number(select.value);g.full_refresh();setTimeout(()=>fitGraph(g),1000)};const check=extra.querySelector('input')!;check.checked=g.config.renderArrows;check.onchange=()=>{g.config.renderArrows=check.checked;g.simulator.requestRender=true};popup.prepend(extra);}
+      graph.querySelectorAll<HTMLElement>('.slsg-value-slider').forEach(slider => {
+        const label = slider.querySelector<HTMLElement>('.slsg-value-slider-label');
+        const input = slider.querySelector('input');
+        if (label && input) {
+          const name = labels[label.textContent ?? ''] ?? label.textContent ?? '';
+          if (label.textContent !== name) label.textContent = name;
+          input.setAttribute('aria-label', name);
+        }
+      });
+      const canvas = graph.querySelector('canvas');
+      canvas?.setAttribute('role','img');
+      canvas?.setAttribute('aria-label','نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
+    };
+    const observer = new MutationObserver(nameControls);
+    observer.observe(graph, {childList:true,subtree:true});
+    document.addEventListener('astro:before-swap', () => observer.disconnect(), {once:true});
+    nameControls();
+    graph.addEventListener('click',event => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('[data-graph-action]');
+      if(button?.dataset.graphAction==='reset-zoom')setTimeout(()=>fitGraph(graph),30);
+      if (button && document.activeElement === button) {
+        // Upstream data-config observers may regenerate actions again in a later microtask.
+        setTimeout(() => {
+          nameControls();
+          if (!button.isConnected) graph.querySelector<HTMLButtonElement>(`[data-graph-action="${button.dataset.graphAction}"]`)?.focus();
+        });
+      }
+    },true);
+    graph.addEventListener('keydown',event => {
+      if (event.key === 'Escape' && graph.querySelector('.slsg-popup-menu')) {
+        graph.querySelector('.slsg-popup-menu')?.remove();
+        graph.querySelector<HTMLButtonElement>('[data-graph-action="settings"]')?.focus();
+      }
+    });
+  }
+  const bound = new WeakSet<HTMLElement>();
+  function bindGraphs() {
+    for (const host of document.querySelectorAll<HTMLElement>('[data-note-graph]')) {
+      if (bound.has(host)) continue;
+      bound.add(host);
+      const button = host.querySelector<HTMLButtonElement>('[data-load-graph]')!;
+      const status = host.querySelector<HTMLElement>('[data-graph-status]')!;
+      let pending = false;
+      button.addEventListener('click', async () => {
+        if (pending) return;
+        pending = true;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        status.textContent = 'در حال بارگذاری گراف…';
+        try {
+          // The package exports its Astro wrapper but not its custom element.
+          // Load the existing renderer, rather than rebuilding a graph engine.
+          const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
+          if (!host.isConnected) return;
+          host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
+          if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
+          nameGraph(host.querySelector<HTMLElement>('graph-component')!);
+          button.hidden = true;
+          status.textContent = '';
+        } catch {
+          button.hidden = false;
+          button.textContent = 'تلاش مجدد';
+          status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
+        } finally {
+          pending = false;
+          button.disabled = false;
+          button.removeAttribute('aria-busy');
+        }
+      });
+      // Start the existing renderer automatically without blocking article rendering.
+      button.hidden = true;
+      setTimeout(() => button.click(), 0);
+    }
+  }
+  bindGraphs();
+  document.addEventListener('astro:page-load', bindGraphs);
+</script>

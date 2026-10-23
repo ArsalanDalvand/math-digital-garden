@@ -1,0 +1,14 @@
+{
+  "http": 200,
+  "events": [
+    "message",
+    "message_end",
+    "node_finished",
+    "node_started",
+    "workflow_started"
+  ],
+  "answer": "بر اساس یادداشت constant-derivative، این عبارت بیان می‌کند که یک تابع ثابت همواره مقداری بدون تغییر دارد و از آنجا که مشتق بیانگر نرخ تغییرات تابع است، مقدار آن همیشه برابر با صفر خواهد بود.",
+  "provider": "official 0.0.68",
+  "router": "9Router",
+  "mock": false
+}

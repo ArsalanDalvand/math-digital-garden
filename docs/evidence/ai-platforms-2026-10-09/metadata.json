@@ -1,0 +1,143 @@
+[
+  {
+    "full_name": "langgenius/dify",
+    "stargazers_count": 157985,
+    "archived": false,
+    "pushed_at": "2026-10-09T11:42:17Z",
+    "default_branch": "main",
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    }
+  },
+  {
+    "full_name": "lfnovo/open-notebook",
+    "stargazers_count": 39988,
+    "archived": false,
+    "pushed_at": "2026-10-05T02:29:31Z",
+    "default_branch": "main",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    }
+  },
+  {
+    "full_name": "MODSetter/SurfSense",
+    "stargazers_count": 16340,
+    "archived": false,
+    "pushed_at": "2026-10-09T00:36:54Z",
+    "default_branch": "main",
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    }
+  },
+  {
+    "full_name": "FlowiseAI/Flowise",
+    "stargazers_count": 55496,
+    "archived": true,
+    "pushed_at": "2026-08-13T12:38:19Z",
+    "default_branch": "main",
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    },
+    "LICENSE": "HTTP Error 404: Not Found"
+  },
+  {
+    "full_name": "langflow-ai/langflow",
+    "stargazers_count": 155424,
+    "archived": false,
+    "pushed_at": "2026-10-09T11:32:25Z",
+    "default_branch": "main",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    }
+  },
+  {
+    "full_name": "Mintplex-Labs/anything-llm",
+    "stargazers_count": 66852,
+    "archived": false,
+    "pushed_at": "2026-10-09T01:15:09Z",
+    "default_branch": "master",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    }
+  },
+  {
+    "full_name": "infiniflow/ragflow",
+    "stargazers_count": 91900,
+    "archived": false,
+    "pushed_at": "2026-10-09T11:38:45Z",
+    "default_branch": "main",
+    "license": {
+      "key": "apache-2.0",
+      "name": "Apache License 2.0",
+      "spdx_id": "Apache-2.0",
+      "url": "https://api.github.com/licenses/apache-2.0",
+      "node_id": "MDc6TGljZW5zZTI="
+    }
+  },
+  {
+    "full_name": "onyx-dot-app/onyx",
+    "stargazers_count": 32367,
+    "archived": false,
+    "pushed_at": "2026-10-09T11:30:09Z",
+    "default_branch": "main",
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    }
+  },
+  {
+    "full_name": "open-webui/open-webui",
+    "stargazers_count": 154106,
+    "archived": false,
+    "pushed_at": "2026-10-09T11:09:58Z",
+    "default_branch": "main",
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    }
+  },
+  {
+    "full_name": "LibreChat-AI/LibreChat",
+    "stargazers_count": 45442,
+    "archived": false,
+    "pushed_at": "2026-10-09T10:29:46Z",
+    "default_branch": "main",
+    "license": {
+      "key": "mit",
+      "name": "MIT License",
+      "spdx_id": "MIT",
+      "url": "https://api.github.com/licenses/mit",
+      "node_id": "MDc6TGljZW5zZTEz"
+    }
+  }
+]

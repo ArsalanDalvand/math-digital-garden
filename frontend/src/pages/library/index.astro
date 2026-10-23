@@ -1,0 +1,15 @@
+---
+import Reader from '../../layouts/Reader.astro';
+---
+<Reader title="کتابخانه">
+<p>جزوه‌ها و یادداشت‌های شما در یک جا؛ ویرایش جزوه فقط برای حساب شما ذخیره می‌شود.</p>
+<p><a href="/workspace">فعالیت‌ها، نشانه‌ها و پیشنهادهای من</a></p>
+<div data-library-browser>
+<div class="garden-row"><button data-library-view="items">یادداشت‌ها</button><button data-library-view="favorites">علاقه‌مندی‌ها</button><button data-library-view="watching">پیگیری‌ها</button><button data-library-view="trash">زباله‌دان</button></div>
+<p role="status" data-browser-status></p><div data-browser-path></div>
+<form data-create-item class="garden-row"><label>نام <input name="title" required maxlength="255"/></label><label>نوع <select name="kind"><option value="note">یادداشت</option><option value="folder">پوشه</option></select></label><button type="submit" disabled>ساختن</button></form>
+<ul data-browser-list class="library-browser-list"></ul><button data-browser-more hidden>بیشتر</button>
+</div>
+</Reader>
+<script>import '../../scripts/library-browser';</script>
+<style>.library-browser-list{list-style:none;padding:0}.library-browser-list li{padding:.75rem 0;border-block-end:1px solid var(--border,#ddd);display:flex;gap:1rem;align-items:center;flex-wrap:wrap}</style>

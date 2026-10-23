@@ -1,0 +1,6 @@
+---
+import LibraryActions from './LibraryActions.astro';
+interface Props {slug:string;title:string}
+const {slug}=Astro.props;
+---
+<LibraryActions canonicalSlug={slug}/>

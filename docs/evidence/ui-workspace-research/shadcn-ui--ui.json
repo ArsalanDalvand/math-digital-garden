@@ -1,0 +1,8 @@
+{
+  "repo": "shadcn-ui/ui",
+  "commit": "2d3f1cd436b18ea12f24130de4df781355925b08 2026-10-09T18:55:42+04:00",
+  "files": {
+    "LICENSE.md": "MIT License\n\nCopyright (c) 2023 shadcn\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+    "README.md": "# shadcn/ui\n\nA set of beautifully designed components that you can customize, extend, and build on. Start here then make it your own. Open Source. Open Code. **Use this to build your own component library**.\n\n![hero](apps/v4/public/opengraph-image.png)\n\n## Documentation\n\nVisit https://ui.shadcn.com/docs to view the documentation.\n\n## Contributing\n\nPlease read the [contributing guide](/CONTRIBUTING.md).\n\n## License\n\nLicensed under the [MIT license](./LICENSE.md).\n"
+  }
+}

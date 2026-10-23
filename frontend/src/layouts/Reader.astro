@@ -1,0 +1,130 @@
+---
+import Excalidraw from '../components/Excalidraw.astro';
+import Presentation from '../components/Presentation.astro';
+import MobileStudyTools from '../components/MobileStudyTools';
+import ReadingSettings from '../components/ReadingSettings.astro';
+import NoteOutline from '../components/NoteOutline.astro';
+import AccountMenu from '../components/AccountMenu';
+import LibraryNavigation from '../components/LibraryNavigation.astro';
+import {BookOpen,Search,PanelRightClose,PanelLeft,SunMoon,GitPullRequest,Ellipsis,House} from 'lucide-react';
+import type { StarlightPageProps } from '@astrojs/starlight/components/StarlightPage.astro';
+import '@fontsource/vazirmatn/400.css';
+import '@fontsource/vazirmatn/700.css';
+import 'katex/dist/katex.min.css';
+import '../styles/custom.css';
+import '../styles/workspace.css';
+import '../styles/shadcn.css';
+interface Props {title:string; headings?:StarlightPageProps['headings']; sidebar?:StarlightPageProps['sidebar'];documentPage?:boolean}
+const {title,documentPage=false}=Astro.props;
+const tools=Astro.slots.has('tools');
+const note=tools||documentPage;
+const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
+const siteLang = import.meta.env.PUBLIC_SITE_LANG || process.env.PUBLIC_SITE_LANG || 'fa';
+const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR || (['fa', 'ar', 'he', 'ur'].includes(siteLang) ? 'rtl' : 'ltr');
+---
+<!doctype html><html lang={siteLang} dir={siteDir}><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>{title} | {brandName}</title><link rel="icon" href="/favicon.svg"/>
+<script is:inline>try{const theme=localStorage.getItem('garden-theme')||'light';document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):theme;document.documentElement.dataset.fixedToolbar=localStorage.getItem('garden-fixed-toolbar')||'true'}catch{}</script>
+</head><body class:list={['workspace-app',{'has-tools':tools}]}>
+<a class="workspace-skip" href="#main">رفتن به متن</a>
+<header class="workspace-header">
+  <button data-nav-toggle aria-label="باز و بسته کردن فهرست" aria-controls="workspace-navigation" aria-expanded="true"><PanelRightClose size={18} aria-hidden="true"/></button>
+  <a href="/" class="workspace-brand"><BookOpen size={20} aria-hidden="true"/><strong>{brandName}</strong></a>
+  <nav aria-label="ابزارهای عمومی">
+    <AccountMenu client:load />
+  </nav>
+</header>
+<div class="workspace-grid">
+  <button type="button" data-nav-backdrop class="workspace-nav-backdrop" aria-label="بستن فهرست" hidden></button>
+<aside id="workspace-navigation" class="workspace-nav" aria-label="یادداشت‌ها">
+  <div class="workspace-nav-top"><span>فضای مطالعه</span><button data-nav-close aria-label="بستن فهرست"><PanelRightClose size={18} aria-hidden="true"/></button></div>
+  <nav aria-label="بخش‌های باغ">
+    <a class="workspace-search" href="/search" aria-current={Astro.url.pathname==='/search'?'page':undefined}><Search size={18} aria-hidden="true"/>جست‌وجو در یادداشت‌ها</a>
+    <a href="/" aria-current={Astro.url.pathname==='/'?'page':undefined}><House size={18} aria-hidden="true"/>خانه</a>
+    <a href="/review" data-admin-link hidden aria-current={Astro.url.pathname==='/review'?'page':undefined}><GitPullRequest size={18} aria-hidden="true"/>بازبینی پیشنهادها</a>
+  </nav>
+  <LibraryNavigation/>
+  <div class="workspace-nav-settings"><button data-theme-toggle aria-label="تغییر پوسته"><SunMoon size={18} aria-hidden="true"/><span>پوستهٔ روشن / تیره</span></button><p data-theme-save-status role="status"></p></div>
+</aside>
+<main id="main" class="workspace-main">
+  <div class="document-toolbar-stack"><div class="document-toolbar" role="group" aria-label="ابزارهای یادداشت">
+    <span class="document-location" title={title}>{title}</span>
+    <div data-note-header-actions class="note-header-actions"></div>
+    <div data-note-extra-actions class="note-extra-actions"></div>
+    <div class="document-options">
+      <ReadingSettings />
+      {note&&<NoteOutline />}
+      {tools&&<><button class="desktop-tools-toggle" data-tools-toggle aria-label="ابزارهای مطالعه" title="ابزارهای مطالعه" aria-controls="workspace-study-tools" aria-expanded="true"><PanelLeft size={18} aria-hidden="true"/></button><MobileStudyTools client:load/></>}
+      {note&&<div class="workspace-more">
+        <button type="button" data-more-toggle aria-label="عملیات یادداشت" aria-controls="workspace-more-panel" aria-expanded="false" title="عملیات یادداشت"><Ellipsis size={20} aria-hidden="true"/></button>
+        <div id="workspace-more-panel" class="workspace-more-panel" hidden><p class="note-menu-label">این یادداشت</p><div data-note-more></div></div>
+      </div>}
+    </div>
+  </div>
+  <div data-editor-toolbar-slot></div></div>
+  <div class="workspace-document"><h1>{title}</h1><slot/></div>
+</main>
+{tools&&<aside id="workspace-study-tools" class="workspace-tools" aria-label="ابزارهای مطالعه"><slot name="tools"/></aside>}
+</div><Excalidraw/><Presentation/>
+<script>
+ document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
+ const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+ function updateThemeLabel(){if(themeToggle)themeToggle.setAttribute('aria-label',document.documentElement.dataset.theme==='dark'?'تغییر به پوستهٔ روشن':'تغییر به پوستهٔ تیره');}
+ updateThemeLabel();
+ themeToggle?.addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;updateThemeLabel();try{localStorage.setItem('garden-theme',theme)}catch{}document.dispatchEvent(new CustomEvent('garden:theme-setting',{detail:{theme}}));});
+ document.addEventListener('garden:preferences',updateThemeLabel);
+ const media=matchMedia('(prefers-color-scheme: dark)');media.addEventListener('change',()=>{try{if(localStorage.getItem('garden-theme')==='system'){document.documentElement.dataset.theme=media.matches?'dark':'light';updateThemeLabel();}}catch{}});
+ document.addEventListener('garden:preference-save',event=>{const state=(event as CustomEvent<{state:string}>).detail.state;const status=document.querySelector<HTMLElement>('[data-theme-save-status]');if(status){status.textContent=state==='saving'?'در حال ذخیره…':state==='saved'?'ترجیحات در حساب ذخیره شد.':'ذخیره در حساب انجام نشد؛ تغییر فعلاً روی این دستگاه است.';status.setAttribute('role',state==='error'?'alert':'status');}});
+ const navToggle=document.querySelector<HTMLButtonElement>('[data-nav-toggle]');
+ const navigation=document.querySelector<HTMLElement>('#workspace-navigation');
+ const navClose=document.querySelector<HTMLButtonElement>('[data-nav-close]');
+ const backdrop=document.querySelector<HTMLButtonElement>('[data-nav-backdrop]');
+ const main=document.querySelector<HTMLElement>('#main');
+ const more=document.querySelector<HTMLElement>('.workspace-more');
+ const moreToggle=document.querySelector<HTMLButtonElement>('[data-more-toggle]');
+ const reading=document.querySelector<HTMLDetailsElement>('.reading-settings');
+ const outline=document.querySelector<HTMLDetailsElement>('.note-outline');
+ const morePanel=document.querySelector<HTMLElement>('#workspace-more-panel');
+ const toolsToggle=document.querySelector<HTMLButtonElement>('[data-tools-toggle]');
+ toolsToggle?.addEventListener('click',()=>{
+  const open=toolsToggle.getAttribute('aria-expanded')!=='true';
+  document.body.classList.toggle('tools-collapsed',!open);
+  toolsToggle.setAttribute('aria-expanded',String(open));
+  if(open&&document.documentElement.dataset.readingFocus==='true')document.dispatchEvent(new Event('garden:show-navigation'));
+ });
+ const mobileNavigation=window.matchMedia('(max-width:900px)');
+ let mobile=mobileNavigation.matches;
+ function setNavigation(open:boolean,focus=false){
+  if(open&&document.documentElement.dataset.readingFocus==='true') document.dispatchEvent(new Event('garden:show-navigation'));
+  document.body.classList.toggle('nav-collapsed',!open);
+  document.body.classList.toggle('nav-open',open);
+  navToggle?.setAttribute('aria-expanded',String(open));
+  if(navigation) navigation.inert=!open;
+  if(backdrop)backdrop.hidden=!open||!mobile;
+  if(main)main.inert=open&&mobile;
+  document.body.style.overflow=open&&mobile?'hidden':'';
+  if(focus){if(open&&mobile) navClose?.focus();else if(!open) navToggle?.focus();}
+ }
+ function setMore(open:boolean,focus=false){more?.classList.toggle('is-open',open);moreToggle?.setAttribute('aria-expanded',String(open));if(morePanel)morePanel.hidden=!open;if(open){if(reading)reading.open=false;if(outline)outline.open=false;}if(!open&&focus)moreToggle?.focus();}
+ morePanel?.addEventListener('click',event=>{const button=(event.target as HTMLElement).closest('button');if(button&&!button.hasAttribute('data-share')&&!button.hasAttribute('data-library-command'))setMore(false,true);});
+ document.querySelector('[data-share-dialog]')?.addEventListener('close',()=>setMore(false,true));
+ document.querySelector('[data-library-dialog]')?.addEventListener('close',()=>setMore(false,true));
+ setNavigation(!mobile&&document.documentElement.dataset.readingFocus!=='true');
+ navToggle?.addEventListener('click',()=>setNavigation(navToggle.getAttribute('aria-expanded')!=='true',true));
+ navClose?.addEventListener('click',()=>setNavigation(false,true));
+ backdrop?.addEventListener('click',()=>setNavigation(false,true));
+ moreToggle?.addEventListener('click',()=>setMore(moreToggle.getAttribute('aria-expanded')!=='true'));
+ let wasFocused=false;
+ function syncFocus(){const focused=document.documentElement.dataset.readingFocus==='true';if(focused)setNavigation(false);else if(wasFocused)setNavigation(!mobile);wasFocused=focused;toolsToggle?.setAttribute('aria-expanded',String(!focused&&!document.body.classList.contains('tools-collapsed')));}
+ syncFocus();
+ document.addEventListener('garden:reading-focus-change',syncFocus);
+ document.addEventListener('keydown',event=>{
+  if(event.key!=='Escape'||event.defaultPrevented)return;
+  if(document.querySelector('dialog[open]')||(event.target as Element)?.closest?.('[role="dialog"]'))return;
+  if(outline?.open){outline.open=false;outline.querySelector('summary')?.focus();event.preventDefault();}
+  else if(reading?.open){reading.open=false;reading.querySelector('summary')?.focus();event.preventDefault();}
+  else if(moreToggle?.getAttribute('aria-expanded')==='true'){setMore(false,true);event.preventDefault();}
+  else if(navToggle?.getAttribute('aria-expanded')==='true'){setNavigation(false,true);event.preventDefault();}
+ });
+ document.addEventListener('pointerdown',event=>{const target=event.target as Node;if(reading?.open&&!reading.contains(target))reading.open=false;if(moreToggle?.getAttribute('aria-expanded')==='true'&&!more?.contains(target))setMore(false);});
+ mobileNavigation.addEventListener('change',event=>{mobile=event.matches;setMore(false);setNavigation(!mobile&&document.documentElement.dataset.readingFocus!=='true',navigation?.contains(document.activeElement));});
+</script></body></html>

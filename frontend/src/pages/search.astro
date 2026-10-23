@@ -1,0 +1,59 @@
+---
+import Reader from '../layouts/Reader.astro';
+import { fetchCatalogue } from '../lib/catalogue.mjs';
+import { paginateCatalogue, cataloguePageHref } from '../lib/catalogue-pagination.mjs';
+import { noteMetadata, noteHref } from '../lib/markdown.mjs';
+const q = Astro.url.searchParams.get('q') ?? '';
+const tag = Astro.url.searchParams.get('tag') ?? '';
+let notes: ReturnType<typeof noteMetadata> = [];
+let message = '';
+if(q.length > 200 || tag.length > 200) { Astro.response.status=400; message='عبارت جست‌وجو بیش از حد طولانی است.'; }
+else try { notes=noteMetadata(await fetchCatalogue(q)); } catch {Astro.response.status=503; message='دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';}
+const tags=[...new Set([...notes.flatMap((note)=>note.tags), ...(tag ? [tag] : [])])].sort();
+const results=tag ? notes.filter((note)=>note.tags.includes(tag)) : notes;
+const pagination = paginateCatalogue(results, Astro.url.searchParams.get('page') ?? '1');
+const retryHref = `/search?${new URLSearchParams({ q, tag }).toString()}`;
+---
+<Reader title="جست‌وجو و برچسب‌ها">
+  <p id="search-help">از عنوان یا متن جست‌وجو کنید و با برچسب، موضوع را محدود کنید. مطالعهٔ یادداشت‌ها به حساب نیاز ندارد.</p>
+  <form action="/search" role="search" class="garden-panel garden-stack" data-od-id="catalogue-search" aria-describedby="search-help">
+    <div class="garden-field">
+    <label for="query">عنوان یا متن یادداشت</label>
+    <input id="query" type="search" name="q" maxlength="200" value={q} />
+    </div>
+    <div class="garden-field">
+    <label for="tag">برچسب</label>
+    <select id="tag" name="tag"><option value="">همه</option>{tags.map((item)=><option value={item} selected={item===tag}>{item}</option>)}</select>
+    </div>
+    <div class="garden-row">
+      <button class="garden-button-primary" type="submit" data-od-id="search-submit">جست‌وجو</button>
+      <a href="/search" data-od-id="search-reset">پاک‌کردن فیلترها</a>
+    </div>
+  </form>
+  <section aria-label="نتیجهٔ جست‌وجو" data-od-id="search-results">
+    {message ? <div class="garden-panel">
+      <p role="status">{message}</p>
+      <a href={retryHref} data-od-id="search-retry">تلاش دوباره با همین فیلترها</a>
+    </div> : <>
+      <p role="status">{results.length ? `${results.length.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}</p>
+      {results.length ? <ul class="catalogue-list">{pagination.items.map((note)=><li class="garden-panel" data-od-id={`search-note-${note.slug}`}>
+        <h2><a href={noteHref(note.slug)}>{note.title}</a></h2>
+        {note.tags.length > 0 && <p class="note-summary">موضوع: {note.tags.join('، ')}</p>}
+      </li>)}</ul> : <p>عبارت کوتاه‌تر یا برچسب دیگری انتخاب کنید. برای آشنایی با محیط می‌توانید <a href="/sample">یادداشت نمونه را بخوانید</a>.</p>}
+      {pagination.pages > 1 && <nav class="garden-row catalogue-pagination" aria-label="صفحه‌های نتایج" data-od-id="catalogue-pagination">
+        {pagination.page > 1 && <a href={cataloguePageHref(q, tag, pagination.page - 1)}>نتایج قبلی</a>}
+        <span>صفحهٔ {pagination.page.toLocaleString('fa-IR')} از {pagination.pages.toLocaleString('fa-IR')}</span>
+        {pagination.page < pagination.pages && <a href={cataloguePageHref(q, tag, pagination.page + 1)}>نتایج بعدی</a>}
+      </nav>}
+    </>}
+  </section>
+</Reader>
+<style>
+  section { margin-block-start: var(--space-8); }
+  .catalogue-list { display: grid; gap: var(--space-4); padding: 0; list-style: none; }
+  .catalogue-list h2 { margin: 0; font-size: 1.125rem; }
+  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted); overflow-wrap: anywhere; }
+  form select { inline-size: 100%; }
+  .catalogue-pagination { justify-content: space-between; margin-block: var(--space-6); }
+  .catalogue-pagination a { min-block-size: var(--control-height); display: inline-flex; align-items: center; }
+</style>

@@ -1,0 +1,81 @@
+{
+  "agent_backend": {
+    "image": "langgenius/dify-agent-backend:1.17.1",
+    "ports": []
+  },
+  "agent_ssrf_proxy": {
+    "image": "ubuntu/squid:latest",
+    "ports": []
+  },
+  "api": {
+    "image": "langgenius/dify-api:1.17.1",
+    "ports": []
+  },
+  "db_postgres": {
+    "image": "postgres:15-alpine",
+    "ports": []
+  },
+  "init_permissions": {
+    "image": "busybox:latest",
+    "ports": []
+  },
+  "local_sandbox": {
+    "image": "langgenius/dify-agent-local-sandbox:1.17.1",
+    "ports": []
+  },
+  "nginx": {
+    "image": "nginx:latest",
+    "ports": [
+      {
+        "mode": "ingress",
+        "host_ip": "127.0.0.1",
+        "target": 80,
+        "published": "8186",
+        "protocol": "tcp"
+      },
+      {
+        "mode": "ingress",
+        "host_ip": "127.0.0.1",
+        "target": 443,
+        "published": "8446",
+        "protocol": "tcp"
+      }
+    ]
+  },
+  "plugin_daemon": {
+    "image": "langgenius/dify-plugin-daemon:0.6.10-local",
+    "ports": [
+      {
+        "mode": "ingress",
+        "host_ip": "127.0.0.1",
+        "target": 5003,
+        "published": "5503",
+        "protocol": "tcp"
+      }
+    ]
+  },
+  "redis": {
+    "image": "redis:6-alpine",
+    "ports": []
+  },
+  "sandbox": {
+    "image": "langgenius/dify-sandbox:0.2.15",
+    "ports": []
+  },
+  "ssrf_proxy": {
+    "image": "ubuntu/squid:latest",
+    "ports": []
+  },
+  "web": {
+    "image": "langgenius/dify-web:1.17.1",
+    "ports": []
+  },
+  "worker": {
+    "image": "langgenius/dify-api:1.17.1",
+    "ports": []
+  },
+  "worker_beat": {
+    "image": "langgenius/dify-api:1.17.1",
+    "ports": []
+  }
+}

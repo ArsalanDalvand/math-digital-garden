@@ -1,0 +1,45 @@
+{
+  "plugin_manifest": "0.0.68",
+  "dify_plugin_sdk": "0.10.2",
+  "openai_sdk": "3.17.0",
+  "model": "ag/gemini-3.8-flash-high",
+  "checks": [
+    {
+      "check": "credential_validation",
+      "passed": true
+    },
+    {
+      "check": "blocking",
+      "passed": true
+    },
+    {
+      "check": "streaming",
+      "chunks": 2,
+      "content_chunks": 1,
+      "passed": true
+    }
+  ],
+  "http": [
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "stream": true,
+      "max_tokens": 10
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "stream": false,
+      "max_tokens": 32
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "stream": true,
+      "max_tokens": 32
+    }
+  ]
+}

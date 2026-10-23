@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../../frontend/src/'+p,import.meta.url),'utf8');
+test('manual save keeps writing active and proposal is an explicit action',()=>{const s=read('scripts/workspace-note.ts');const save=s.slice(s.indexOf('async function finishEditing()'),s.indexOf("document.querySelector('[data-save]')!"));assert.doesNotMatch(save,/showModal|modeSwitch/);assert.match(s,/shareButton\.addEventListener\('click'/);});
+test('reading keeps edit, save and proposal controls',()=>{const s=read('components/WorkspaceNote.astro');assert.match(s,/data-share-dialog/);assert.match(s,/data-save hidden>ذخیره/);assert.match(s,/data-share hidden>پیشنهاد اصلاح/);assert.match(s,/data-edit>نوشتن/);assert.doesNotMatch(s,/<h2>پیش‌نمایش زنده/);});

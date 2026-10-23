@@ -1,0 +1,254 @@
+import {parseExcalidraw} from './excalidraw.mjs';
+import { parseFrontmatter, rehypeHeadingIds } from '@astrojs/markdown-remark';
+import { unified } from 'unified';
+import { visit } from 'unist-util-visit';
+import { sanitizeUri } from 'micromark-util-sanitize-uri';
+import remarkParse from 'remark-parse';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import remarkCallout from '@r4ai/remark-callout';
+import remarkWikiLink from 'remark-wiki-link';
+import remarkRehype from 'remark-rehype';
+import rehypeKatex from 'rehype-katex';
+import rehypeStringify from 'rehype-stringify';
+import { LRUCache } from 'lru-cache';
+import {parseGeoGebra,resolveVaultImage} from './obsidian-plugins.mjs';
+import { findAndReplace } from 'mdast-util-find-and-replace';
+import rehypeParse from 'rehype-parse';
+import vaultAssets from './vault-assets.json' with { type: 'json' };
+
+const wikiParser=unified().use(remarkParse).use(remarkWikiLink,{aliasDivider:'|'});
+const htmlParser=unified().use(rehypeParse,{fragment:true});
+
+/** @typedef {{slug:string,title:string,current_content:string,book_slug?:string,chapter_slug?:string,relative_path?:string}} Note */
+/** @param {unknown} value */
+const strings = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+/** @param {string} value */
+const normalize = (value) => value.trim().normalize('NFC').toLocaleLowerCase('fa');
+/** @param {string} slug */
+export const noteHref = (slug) => `/notes/${encodeURIComponent(slug)}`;
+
+/** @param {string} raw @param {Map<string,string[]>} names @param {Map<string,import("astro").MarkdownHeading[]>} headings @param {boolean} math @param {Map<string,string[]>} blocks */
+async function render(raw, names = new Map(), headings = new Map(), math = true, blocks = new Map()) {
+  if(parseFrontmatter(raw).frontmatter['excalidraw-plugin'] || raw.trimStart().startsWith('{')){
+    try{
+      const scene=await parseExcalidraw(raw,vaultAssets);
+      if(scene){
+        /** @type {import('hast').Root} */
+        const tree={type:'root',children:[{type:'element',tagName:'figure',properties:{'data-excalidraw':JSON.stringify(scene)},children:[{type:'text',value:'در حال نمایش نقاشی…'}]}]};
+        const html=unified().use(rehypeStringify).stringify(tree);
+        return {html,previewHtml:html,referencePreviews:/** @type {Record<string,string>} */ ({}),blocks:[],headings:[],outgoing:[]};
+      }
+    }catch{ /* Invalid scenes remain readable Markdown; raw source is never changed. */ }
+  }
+  /** @type {string[]} */
+  const outgoing = [];
+  /** @type {Record<string,string>} */
+  const referencePreviews = Object.create(null);
+  /** @type {string[]} */
+  const blockIds=[];
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath).use(remarkCallout)
+     .use(() => (/** @type {any} */ tree,/** @type {any} */ file) => {
+      const source=String(file);visit(tree,'paragraph',(node,index,parent)=>{
+        if(!parent||index===undefined)return;
+        const parts=[];let children=[];
+        for(const child of node.children){const spelling=source.slice(child.position?.start.offset,child.position?.end.offset);
+          if(child.type==='inlineMath'&&spelling.startsWith('$$')&&spelling.endsWith('$$')){
+            if(children.length){parts.push({type:'paragraph',children});children=[];}
+            parts.push({type:'math',value:child.value,data:{hName:'div',hProperties:{className:['math','math-display']},hChildren:[{type:'text',value:child.value}]}});
+          }else children.push(child);
+        }
+        if(parts.length){if(children.length)parts.push({type:'paragraph',children});parent.children.splice(index,1,...parts);return index+parts.length;}
+      });
+    })
+    .use(remarkWikiLink, { aliasDivider: '|' })
+    .use(() => (/** @type {import('mdast').Root} */ tree) => {
+      findAndReplace(tree,[/!\[\[([^\]\n]+)\]\]/g,(_match,value)=>{
+        const parsed=wikiParser.parse('[['+value+']]');
+        const paragraph=parsed.children[0];
+        const node=paragraph && 'children' in paragraph ? paragraph.children[0] : undefined;
+        if(node?.type!=='wikiLink')return false;
+        node.data.embed=true;
+        return node;
+      }]);
+      visit(tree,'paragraph',(node,index,parent)=>{
+        const last=node.children.at(-1);
+        if(last?.type!=='text')return;
+        const found=last.value.match(/(?:^|\s)\^([a-zA-Z0-9-]+)\s*$/);
+        if(!found)return;
+        last.value=last.value.slice(0,found.index);
+        const target=node.children.every(child=>child.type==='text' && !child.value.trim()) && index && parent ? parent.children[index-1] : node;
+        target.data ??= {};target.data.hProperties ??= {};target.data.hProperties.id='block-'+found[1];
+        blockIds.push(found[1]);
+      });
+      visit(tree, (node) => {
+        if (node.type === 'link' || node.type === 'image' || node.type === 'definition') {
+          node.url = sanitizeUri(node.url, /^(https?|mailto)$/i) ? node.url : '';
+        }
+        if (node.type === 'code' && ['geogebra','ggb'].includes(node.lang?.toLowerCase() ?? '')) {
+          try {
+            const config=parseGeoGebra(node.value,vaultAssets);
+            const {caption}=config;
+            node.data={hName:'figure',hProperties:{'data-geogebra':JSON.stringify(config)},hChildren:[
+              {type:'element',tagName:'figcaption',properties:{},children:[{type:'text',value:caption}]},
+              {type:'element',tagName:'button',properties:{type:'button'},children:[{type:'text',value:'بارگذاری رسم تعاملی'}]},
+              {type:'element',tagName:'div',properties:{'data-geogebra-host':''},children:[]},
+              {type:'element',tagName:'ul',properties:{},children:config.explain.map(/** @param {string} value */ value=>({type:'element',tagName:'li',properties:{},children:[{type:'text',value}]}))},
+              {type:'element',tagName:'details',properties:{},children:[{type:'element',tagName:'summary',properties:{},children:[{type:'text',value:'کد اصلی رسم'}]},{type:'element',tagName:'pre',properties:{tabIndex:0},children:[{type:'text',value:node.value}]}]}
+            ]};
+          } catch { /* Invalid diagrams remain readable code. */ }
+        }
+        if (node.type === 'wikiLink') {
+          const [target, anchor] = node.value.split('#');
+          if(node.data.embed){
+            const image=resolveVaultImage(target,vaultAssets);
+            if(image){
+              const dimensions=String(node.data.alias ?? '').match(/^(\d+)(?:x(\d+))?$/);
+              node.data.hName='img';node.data.hProperties={src:'/'+image.split('/').map(encodeURIComponent).join('/'),alt:target,loading:'lazy',
+                ...(dimensions && Number(dimensions[1])<=1600 ? {width:Number(dimensions[1])} : {}),
+                ...(dimensions?.[2] && Number(dimensions[2])<=1600 ? {height:Number(dimensions[2])} : {})};
+              node.data.hChildren=[];return;
+            }
+          }
+          const candidates = names.get(normalize(target.replace(/\.excalidraw\.md$/,'.excalidraw'))) ?? [];
+          const heading = anchor ? headings.get(candidates[0])?.find((item) => normalize(item.text) === normalize(anchor) || item.slug === anchor) : undefined;
+          const block=anchor?.startsWith('^') && blocks.get(candidates[0])?.includes(anchor.slice(1)) ? 'block-'+anchor.slice(1) : '';
+          const resolved = candidates.length === 1 && (!anchor || !!heading || !!block);
+          node.data.hName = resolved ? 'a' : 'span';
+          node.data.hProperties = resolved
+            ? { href: noteHref(candidates[0]) + (heading ? `#${heading.slug}` : block ? `#${block}` : ''), className: ['wiki-link'], 'data-note-preview': candidates[0] }
+            : { className: [candidates.length > 1 ? 'wiki-ambiguous' : 'wiki-missing'], title: candidates.length > 1 ? 'نام مبهم است' : 'یادداشت یا بخش موجود نیست' };
+          if (resolved) {
+            outgoing.push(candidates[0]);
+            if(node.data.embed){
+              node.data.hName='span';node.data.hProperties={'data-embed-slug':candidates[0],'data-embed-anchor':heading?.slug ?? block};
+              node.data.hChildren=[{type:'element',tagName:'a',properties:{href:noteHref(candidates[0])},children:[{type:'text',value:target}]}];
+            }
+          }
+        }
+      });
+    }).use(remarkRehype).use(rehypeHeadingIds);
+  if (math) processor.use(rehypeKatex, { trust: false, strict: 'ignore' });
+  processor.use(() => (/** @type {import('hast').Root} */ tree, file) => {
+      visit(tree, 'element', (node, index, parent) => {
+        const figure = node.children[0];
+        if (node.tagName === 'pre' && figure?.type === 'element' && figure.tagName === 'figure' && figure.properties['data-geogebra'] && parent && index !== undefined) {
+          parent.children[index] = figure;
+          return index;
+        }
+      });
+      let codeIndex = 0;
+      visit(tree, 'element', node => {
+        if (node.tagName === 'pre') {
+          codeIndex += 1;
+          Object.assign(node.properties, { tabIndex: 0, role: 'region', 'aria-label': codeIndex === 1 ? 'بلوک کد' : `بلوک کد ${codeIndex.toLocaleString('fa-IR')}` });
+        }
+      });
+      // Capture source paragraphs before transclusions add other notes' links.
+      for (const tags of [['p'], ['li','td','th','h1','h2','h3','h4','h5','h6']]) visit(tree, 'element', paragraph => {
+        if (!tags.includes(paragraph.tagName)) return;
+        const targets = new Set();
+        visit(paragraph, 'element', node => {
+          const slug = node.properties['data-note-preview'] ?? node.properties['data-embed-slug'];
+          if (typeof slug === 'string') targets.add(slug);
+        });
+        if (!targets.size) return;
+        const snippet = structuredClone(paragraph);
+        if (['li','td','th'].includes(snippet.tagName)) snippet.tagName = 'div';
+        visit(snippet, 'element', node => { delete node.properties.id; });
+        const html = unified().use(rehypeStringify).stringify({type:'root',children:[snippet]});
+        for (const slug of targets) referencePreviews[slug] ??= html;
+      });
+      const preview = structuredClone({ ...tree, children: tree.children.filter(node => node.type !== 'text' || node.value.trim()).slice(0,3) });
+      visit(preview, 'element', (node) => { delete node.properties.id; });
+      file.data.previewHtml = unified().use(rehypeStringify).stringify(preview);
+    }).use(rehypeStringify);
+  const file = await processor.process(parseFrontmatter(raw).content);
+  return { html: String(file), referencePreviews, previewHtml: String(file.data.previewHtml), blocks:blockIds, headings: file.data.astro?.headings ?? [], outgoing: [...new Set(outgoing)] };
+}
+
+/** @param {string} raw */
+export async function renderMarkdown(raw) { return (await render(raw)).html; }
+
+/** @param {Note[]} notes */
+export function noteMetadata(notes) {
+  return notes.map((note) => {
+    const { frontmatter } = parseFrontmatter(note.current_content);
+    return { ...note, tags: strings(frontmatter.tags), aliases: strings(frontmatter.aliases), order: Number(frontmatter.sidebar?.order) || 0 };
+  });
+}
+
+  /** @param {import('hast').Root} tree @param {Map<string,import('hast').Root>} trees @param {string[]} chain */
+  function expandEmbeds(tree,trees,chain){
+    visit(tree,'element',(node,_index,parent)=>{
+      const slug=String(node.properties.dataEmbedSlug ?? node.properties['data-embed-slug'] ?? '');
+      if(!slug || chain.includes(slug) || chain.length>=3)return;
+      const original=trees.get(slug);if(!original)return;
+      const anchor=String(node.properties.dataEmbedAnchor ?? node.properties['data-embed-anchor'] ?? '');
+      const embedded=structuredClone(original);
+      if(anchor){
+        /** @type {import('hast').Element | undefined} */
+        let block;
+        visit(embedded,'element',element=>{if(element.properties.id===anchor)block=element;});
+        if(!block)return;
+        const start=embedded.children.indexOf(block);
+        if(start>=0 && /^h[1-6]$/.test(block.tagName)){
+          const level=Number(block.tagName[1]);let end=start+1;
+          while(end<embedded.children.length){const next=embedded.children[end];if(next.type==='element' && /^h[1-6]$/.test(next.tagName) && Number(next.tagName[1])<=level)break;end++;}
+          embedded.children=embedded.children.slice(start,end);
+        }else embedded.children=[block];
+      }
+      expandEmbeds(embedded,trees,[...chain,slug]);
+      visit(embedded,'element',element=>{delete element.properties.id;});
+      if(parent?.type==='element' && parent.tagName==='p')parent.tagName='div';
+      node.tagName='div';node.properties={'data-transclusion':slug,className:['transclusion']};
+      node.children=embedded.children.filter(child=>child.type!=='doctype');
+    });
+  }
+
+/** @param {Note[]} notes */
+async function deriveKnowledge(notes) {
+  const metadata = noteMetadata(notes);
+  /** @type {Map<string,string[]>} */
+  const names = new Map();
+  for (const note of metadata) {
+    for (const name of [note.slug, note.title, ...note.aliases, ...(note.relative_path ? [note.relative_path.replace(/\.md$/,''),note.relative_path.replace(/^[^/]+\//,'').replace(/\.md$/,'')] : [])]) {
+      const key = normalize(name);
+      names.set(key, [...new Set([...(names.get(key) ?? []), note.slug])]);
+    }
+  }
+  const outlines=await Promise.all(metadata.map(async(note)=>({slug:note.slug,...await render(note.current_content,undefined,undefined,false)})));
+  const headings=new Map(outlines.map(note=>[note.slug,note.headings]));
+  const blocks=new Map(outlines.map(note=>[note.slug,note.blocks]));
+  const garden = await Promise.all(metadata.map(async(note) => ({ ...note, ...await render(note.current_content, names, headings, true, blocks), backlinks: /** @type {string[]} */ ([]) })));
+  const trees=new Map(garden.map(note=>[note.slug,htmlParser.parse(note.html)]));
+  for(const note of garden){
+    const tree=structuredClone(trees.get(note.slug));
+    if(tree){expandEmbeds(tree,trees,[note.slug]);note.html=unified().use(rehypeStringify).stringify(tree);}
+  }
+  for (const note of garden) note.backlinks = garden.filter((source) => source.outgoing.includes(note.slug)).map((source) => source.slug);
+  return garden;
+}
+
+// shortcut: one canonical snapshot per process; use a persisted index if cold rendering becomes a deployment bottleneck.
+/** @type {LRUCache<string, Awaited<ReturnType<typeof deriveKnowledge>>>} */
+const knowledgeCache = new LRUCache({ max: 1, fetchMethod: key => deriveKnowledge(JSON.parse(key)) });
+/** @param {Note[]} notes */
+export async function buildKnowledge(notes) {
+  return knowledgeCache.forceFetch(JSON.stringify(notes), { ignoreFetchAbort: true });
+}
+
+/** A private preview resolves public links without publishing private text in the graph.
+ * @param {string} raw @param {Awaited<ReturnType<typeof deriveKnowledge>>} garden */
+export async function renderNote(raw, garden) {
+  const names = new Map();
+  for (const note of garden) for (const name of [note.slug,note.title,...note.aliases]) {
+    const key=normalize(name);
+    names.set(key,[...new Set([...(names.get(key) ?? []),note.slug])]);
+  }
+  const result=await render(raw,names,new Map(garden.map(note=>[note.slug,note.headings])),true,new Map(garden.map(note=>[note.slug,note.blocks])));
+  if(!result.html.includes('data-embed-slug'))return result.html;
+  const tree=htmlParser.parse(result.html);
+  expandEmbeds(tree,new Map(garden.map(note=>[note.slug,htmlParser.parse(note.html)])),[]);
+  return unified().use(rehypeStringify).stringify(tree);
+}

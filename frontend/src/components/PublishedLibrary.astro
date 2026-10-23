@@ -1,0 +1,16 @@
+---
+import Reader from '../layouts/Reader.astro';
+import LibraryActions from './LibraryActions.astro';
+import {renderMarkdown} from '../lib/markdown.mjs';
+interface Props {id?:string;token?:string}
+const {id,token}=Astro.props;
+const origin=process.env.API_BASE_URL||import.meta.env.API_BASE_URL||'http://127.0.0.1:8000';
+let item:any=null;
+try{const response=await fetch(`${origin}/api/library/${token?'shared/'+encodeURIComponent(token):'public/'+encodeURIComponent(id!)}`,{signal:AbortSignal.timeout(5000)});if(response.ok)item=await response.json();else Astro.response.status=response.status;}catch{Astro.response.status=503;}
+Astro.response.headers.set('Cache-Control','no-store');
+Astro.response.headers.set('X-Robots-Tag','noindex, nofollow');
+const html=item?await renderMarkdown(item.content):'';
+---
+<Reader documentPage title={item?.title||'یادداشت منتشرشده'}>
+{item?<><p>نسخهٔ منتشرشده {item.verified?'· تأییدشده توسط مدیر':''}</p><LibraryActions id={item.id} publicView token={token}/><article class="note" set:html={html}/></>:<p>این یادداشت در دسترس نیست یا اشتراک آن لغو شده است.</p>}
+</Reader>
