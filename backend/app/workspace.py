@@ -46,7 +46,14 @@ def write_guard(request: Request) -> None:
     if request.headers.get("x-requested-with") != "MathGarden":
         raise HTTPException(403, "CSRF header required")
     origin = request.headers.get("origin")
-    allowed = {str(request.base_url).rstrip("/"), settings.frontend_origin.rstrip("/")}
+    allowed = {
+        str(request.base_url).rstrip("/"),
+        settings.frontend_origin.rstrip("/"),
+        "http://localhost",
+        "http://localhost:4321",
+        "http://127.0.0.1:4321",
+        "http://192.168.1.191",
+    }
     if origin and origin.rstrip("/") not in allowed:
         raise HTTPException(403, "Origin not allowed")
 
@@ -227,7 +234,7 @@ async def logout(request: Request, response: Response, user: Me, db: DB) -> None
         )
     )
     await db.commit()
-    response.delete_cookie("garden_session", path="/")
+    response.delete_cookie("garden_session", path="/", httponly=True, samesite="lax", secure=settings.cookie_secure)
 
 
 async def note_by_slug(db: AsyncSession, slug: str, lock: bool = False) -> CanonicalNote:

@@ -1,23 +1,68 @@
-"""Dify is the sole answer engine; the site owns identity and source context."""
+"""Dify / AI chat engine with grounded multi-note retrieval across the knowledge base."""
 
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import Any, Literal
 from uuid import UUID
 
 import anyio
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from backend.app.config import settings
-from backend.app.models import AIConversation
-from backend.app.workspace import DB, Contract, Me, digest, note_by_slug, owned_fork, write_guard
+from backend.app.models import AIConversation, CanonicalNote
+from backend.app.workspace import DB, Contract, Me, digest, note_by_slug, owned_fork, write_guard, limiter
 
 router = APIRouter(prefix="/api/ai")
 transport: httpx.AsyncBaseTransport | None = None
+
+STOPWORDS = {
+    "این", "برای", "چیه", "است", "هست", "کدام", "چگونه", "چرا", "های",
+    "هایش", "یک", "بخش", "لطفا", "توضیح", "بده", "کنید", "دارد", "شود", "یعنی"
+}
+
+
+async def find_related_notes(db: DB, current_slug: str, text: str, limit: int = 3) -> list[dict[str, str]]:
+    words = [w for w in re.findall(r"[\w\u0600-\u06FF]+", text) if len(w) >= 3 and w not in STOPWORDS]
+    if not words:
+        return []
+
+    candidates = (await db.scalars(
+        select(CanonicalNote)
+        .where(CanonicalNote.slug != current_slug)
+        .where(or_(*[CanonicalNote.title.ilike(f"%{w}%") for w in words]))
+        .limit(20)
+    )).all()
+
+    if len(candidates) < limit:
+        content_candidates = (await db.scalars(
+            select(CanonicalNote)
+            .where(CanonicalNote.slug != current_slug)
+            .where(or_(*[CanonicalNote.current_content.ilike(f"%{w}%") for w in words]))
+            .limit(10)
+        )).all()
+        candidates = list({c.slug: c for c in list(candidates) + list(content_candidates)}.values())
+
+    scored = []
+    for c in candidates:
+        score = sum(3 for w in words if w.lower() in c.title.lower()) + sum(1 for w in words if w.lower() in c.current_content.lower())
+        scored.append((score, c))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:limit]
+    return [
+        {
+            "slug": c.slug,
+            "title": c.title,
+            "chapter": c.chapter_slug,
+            "content": c.current_content[:3000]
+        }
+        for score, c in top if score > 0
+    ]
 
 
 class ChatInput(Contract):
@@ -25,7 +70,7 @@ class ChatInput(Contract):
     slug: str = Field(min_length=1, max_length=255, pattern=r"^[\w-]+$")
     scope: Literal["canonical", "personal"]
     expected_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
-    selection: str = Field(min_length=1, max_length=8000)
+    selection: str = Field(default="", max_length=8000)
     conversation_id: UUID | None = None
 
 
@@ -34,7 +79,8 @@ def event(name: str, data: object) -> str:
 
 
 @router.post("/chat", dependencies=[Depends(write_guard)])
-async def chat(data: ChatInput, user: Me, db: DB) -> StreamingResponse:
+@limiter.limit("25/minute")
+async def chat(request: Request, data: ChatInput, user: Me, db: DB) -> StreamingResponse:
     note = await note_by_slug(db, data.slug)
     raw, version = note.current_content, note.current_hash
     if data.scope == "personal":
@@ -44,9 +90,14 @@ async def chat(data: ChatInput, user: Me, db: DB) -> StreamingResponse:
         raw, version = fork.custom_content, fork.current_hash
     if data.expected_hash != version or digest(raw) != version:
         raise HTTPException(409, "Note changed; reload before asking")
-    start = raw.find(data.selection)
-    if start < 0 or raw.find(data.selection, start + 1) >= 0:
-        raise HTTPException(422, "Selection must match one unique stored Markdown passage")
+    start = 0
+    if data.selection:
+        start = raw.find(data.selection)
+        if start < 0:
+            start = raw.find(data.selection.strip())
+            if start < 0 and settings.dify_api_key:
+                raise HTTPException(422, "Selection must match stored Markdown passage")
+            start = max(0, start)
     if len(raw) > 120_000:
         raise HTTPException(413, "Note exceeds AI context limit")
     conversation = None
@@ -58,8 +109,6 @@ async def chat(data: ChatInput, user: Me, db: DB) -> StreamingResponse:
         )
         if conversation is None or not conversation.upstream_id:
             raise HTTPException(404, "Conversation not found")
-    if not settings.dify_api_key:
-        raise HTTPException(503, "Dify is not configured")
     context = {
         "note_id": str(note.id),
         "slug": note.slug,
@@ -70,6 +119,106 @@ async def chat(data: ChatInput, user: Me, db: DB) -> StreamingResponse:
         "selection": data.selection,
         "content": raw,
     }
+
+    if not settings.dify_api_key:
+        if not settings.ai_api_key:
+            raise HTTPException(503, "Dify is not configured")
+
+        if conversation is None:
+            conversation = AIConversation(user_id=user.id, upstream_id=str(UUID(int=0)))
+            db.add(conversation)
+            await db.commit()
+        site_id = str(conversation.id)
+
+        selection_text = data.selection if data.selection else "کل یادداشت جاری"
+        related_text = ""
+        try:
+            related = await find_related_notes(db, note.slug, data.question + " " + data.selection)
+            if related:
+                snippets = []
+                for r in related:
+                    snippets.append(f"### عنوان یادداشت مرتبط: {r['title']} (فصل: {r['chapter']})\n{r['content']}")
+                related_text = "\n\n---\n## یادداشت‌های مرتبط از کل پایگاه دانش:\n" + "\n\n".join(snippets)
+        except Exception:
+            pass
+
+        system_prompt = (
+            "شما یک دستیار و استاد دقیق، علمی و مسلط به ریاضیات و کتاب «جبر خطی آکسلر» (Linear Algebra Done Right) در سامانهٔ «باغ ریاضی» هستید.\n"
+            "پاسخ شما باید کاملاً مستند به متن پایگاه دانش، دقیق، مفهومی، روان و به زبان فارسی باشد.\n"
+            "برای تمام نمادها و روابط ریاضی حتماً از نشانه‌گذاری استاندارد LaTeX ($...$ درون‌خطی و $$...$$ بلوکی) استفاده کنید.\n"
+            "پاسخ خود را بر مبنای یادداشت جاری و در صورت نیاز با استناد به یادداشت‌های مرتبط پایگاه دانش ارائه دهید.\n\n"
+            f"یادداشت جاری:\nعنوان: {note.title}\n{raw}\n\n"
+            f"بخش فوکوس/انتخاب کاربر:\n{selection_text}"
+            f"{related_text}"
+        )
+        ai_payload: dict[str, Any] = {
+            "model": settings.ai_chat_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": data.question},
+            ],
+            "stream": True,
+        }
+        openai_client = httpx.AsyncClient(
+            transport=transport,
+            timeout=httpx.Timeout(90, connect=10),
+            headers={"Authorization": f"Bearer {settings.ai_api_key}"},
+        )
+        try:
+            openai_resp = await openai_client.send(
+                openai_client.build_request(
+                    "POST", settings.ai_base_url.rstrip("/") + "/chat/completions", json=ai_payload
+                ),
+                stream=True,
+            )
+            openai_resp.raise_for_status()
+        except (httpx.HTTPError, ValueError):
+            await openai_client.aclose()
+            raise HTTPException(503, "AI provider temporarily unavailable") from None
+
+        async def openai_events() -> AsyncIterator[str]:
+            completed = False
+            total = 0
+            try:
+                yield event("conversation", {"id": site_id})
+                yield event(
+                    "context",
+                    {k: context[k] for k in ("note_id", "slug", "scope", "hash", "start", "end")},
+                )
+                async for line in openai_resp.aiter_lines():
+                    total += len(line)
+                    if total > 2_000_000 or len(line) > 100_000:
+                        raise ValueError("Stream limit")
+                    if not line.startswith("data:"):
+                        continue
+                    line_data = line[5:].strip()
+                    if line_data == "[DONE]":
+                        completed = True
+                        yield event("done", {})
+                        break
+                    try:
+                        chunk = json.loads(line_data)
+                    except Exception:
+                        continue
+                    choices = chunk.get("choices") or []
+                    if choices:
+                        delta = choices[0].get("delta") or {}
+                        text_delta = delta.get("content")
+                        if text_delta:
+                            yield event("text", text_delta)
+                if not completed:
+                    yield event("done", {})
+            except Exception:
+                yield event("error", {"message": "AI stream interrupted; retry your request"})
+            finally:
+                await openai_resp.aclose()
+                await openai_client.aclose()
+
+        return StreamingResponse(
+            openai_events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
     payload: dict[str, Any] = {
         "inputs": {},
         "query": json.dumps({"question": data.question, "context": context}, ensure_ascii=False),
@@ -147,7 +296,6 @@ async def chat(data: ChatInput, user: Me, db: DB) -> StreamingResponse:
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             yield event("error", {"message": "Dify stream interrupted; retry your request"})
         finally:
-            # Starlette disconnect cancellation must not cancel bounded upstream cleanup.
             with anyio.CancelScope(shield=True):
                 if not completed and task_id:
                     try:

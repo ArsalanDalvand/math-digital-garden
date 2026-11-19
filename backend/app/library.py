@@ -262,14 +262,37 @@ async def ensure_canonical_item(slug: str, db: DB, user: Me, _: Writes):
 
 
 async def ancestors(db, item, user_id, forbidden=None):
-    seen = set()
-    while item is not None:
-        if item.id in seen or item.id == forbidden:
+    if item is None:
+        return
+    if item.id == forbidden:
+        raise HTTPException(409, "Folder cycle")
+    if item.trashed_at is not None:
+        raise HTTPException(404, "Item not found")
+    if not item.parent_id:
+        return
+    from sqlalchemy import text
+    query = text("""
+        WITH RECURSIVE tree AS (
+            SELECT id, parent_id, trashed_at, 1 AS depth, ARRAY[id] AS path
+            FROM library_items
+            WHERE id = :item_id AND user_id = :user_id
+            UNION ALL
+            SELECT parent.id, parent.parent_id, parent.trashed_at, tree.depth + 1, path || parent.id
+            FROM library_items parent
+            JOIN tree ON parent.id = tree.parent_id
+            WHERE parent.user_id = :user_id AND NOT (parent.id = ANY(tree.path)) AND tree.depth < 50
+        )
+        SELECT id, parent_id, trashed_at FROM tree;
+    """)
+    res = await db.execute(query, {"item_id": item.parent_id, "user_id": user_id})
+    rows = res.fetchall()
+    seen = {item.id}
+    for row in rows:
+        if row.id in seen or row.id == forbidden:
             raise HTTPException(409, "Folder cycle")
-        seen.add(item.id)
-        if item.trashed_at is not None:
+        seen.add(row.id)
+        if row.trashed_at is not None:
             raise HTTPException(404, "Item not found")
-        item = await owned(db, user_id, item.parent_id, active=False) if item.parent_id else None
 
 
 async def parent(db, user_id, parent_id, forbidden=None):

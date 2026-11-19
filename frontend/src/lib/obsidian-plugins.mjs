@@ -3,7 +3,8 @@ import {parse as parseYaml} from 'yaml';
 /** @param {string} raw @param {string[]} assets */
 export function parseGeoGebra(raw,assets=[]) {
   if(raw.length>600_000)throw new Error('GeoGebra block too large');
-  let value=parseYaml(raw,{maxAliasCount:0});
+  const cleanRaw = raw.split(/\r?\n/).map(line => line.replace(/^\s*>\s?/, '')).join('\n');
+  let value=parseYaml(cleanRaw,{maxAliasCount:0});
   if(typeof value==='string')value={commands:raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)};
   if(!value || typeof value!=='object' || Array.isArray(value))throw new Error('Invalid GeoGebra block');
   const config={appName:'graphing',width:700,height:450,caption:'رسم تعاملی',commands:[],explain:[],...value};

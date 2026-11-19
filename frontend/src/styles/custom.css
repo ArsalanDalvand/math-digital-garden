@@ -189,3 +189,383 @@ starlight-menu-button button { min-inline-size: 44px; min-block-size: 44px; padd
   .garden-entry-actions a { inline-size: 100%; justify-content: center; }
   .garden-tools { margin-block: var(--space-4); }
 }
+
+
+/* Knowledge Bases (Vaults) Showcase Grid */
+.garden-vaults { margin-block: 2rem; }
+.garden-vaults > h2 { font-size: 1.25rem; font-weight: 700; margin: 0 0 1rem; color: var(--sl-color-text, #fff); }
+.vaults-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+.vault-card {
+  background: var(--sl-color-bg-nav, rgba(255,255,255,.02));
+  border: 1px solid var(--workspace-border, rgba(255,255,255,.08));
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  transition: all .2s ease;
+}
+.vault-card.vault-active {
+  border-color: var(--sl-color-accent, #a78bfa);
+  background: var(--sl-color-bg-nav, rgba(167, 139, 250, .03));
+}
+.vault-card.vault-upcoming {
+  opacity: 0.75;
+  border-style: dashed;
+}
+.vault-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,.15);
+}
+.vault-badge {
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--sl-color-accent, #a78bfa);
+  color: #09090b;
+  margin-bottom: 12px;
+}
+.vault-badge.upcoming {
+  background: var(--sl-color-gray-5, #383838);
+  color: var(--sl-color-gray-2, #a1a1aa);
+}
+.vault-card h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: var(--sl-color-text, #fff);
+}
+.vault-card p {
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--sl-color-gray-2, #a1a1aa);
+  margin: 0 0 16px;
+  flex: 1;
+}
+.vault-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+.vault-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  background: var(--sl-color-gray-6, rgba(255,255,255,.06));
+  color: var(--sl-color-text, #f4f4f5);
+  border: 1px solid var(--workspace-border, rgba(255,255,255,.12));
+  transition: all .15s ease;
+}
+.vault-btn:hover {
+  background: var(--sl-color-accent, #a78bfa);
+  color: #09090b;
+}
+.vault-btn.primary {
+  background: var(--sl-color-accent, #a78bfa);
+  color: #09090b;
+  font-weight: 600;
+}
+.vault-btn.primary:hover {
+  background: #c4b5fd;
+}
+.vault-status-text {
+  font-size: 12px;
+  color: var(--sl-color-gray-3, #71717a);
+  font-style: italic;
+  margin-top: auto;
+}
+
+/* Tables: RTL-correct */
+.note table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.75rem 0;
+  direction: rtl;
+  display: table;
+  text-align: right;
+  font-family: var(--font-reading);
+  font-size: 0.925rem;
+  line-height: 1.7;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 0 1px var(--sl-color-gray-5, rgba(255,255,255,0.1));
+}
+
+.note .table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1.75rem 0;
+  border-radius: 10px;
+}
+
+.note .table-wrapper,
+.note div:has(> table) {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1.75rem 0;
+  border-radius: 10px;
+}
+
+.note th, .note td {
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--sl-color-gray-5, rgba(255,255,255,0.1));
+  text-align: right;
+  vertical-align: middle;
+  font-family: var(--font-reading, Vazirmatn, sans-serif);
+}
+
+.note table th {
+  background: var(--sl-color-bg-nav, rgba(255,255,255,0.05));
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--sl-color-text, #f4f4f5);
+  border-bottom: 2px solid var(--sl-color-gray-4, rgba(255,255,255,0.15));
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.note table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.025);
+}
+
+.note table tbody tr:hover {
+  background: rgba(167,139,250,0.07);
+  transition: background 0.15s ease;
+}
+
+.note table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.note [align='right'] {
+  text-align: end;
+}
+
+.note [align='left'] {
+  text-align: start;
+}
+
+.note [align='center'] {
+  text-align: center;
+}
+
+
+/* لینک‌های داخل سلول جدول: هر لینک روی یک خط جدا */
+.note table td a,
+.note table th a {
+  display: flex;
+  margin-bottom: 4px;
+  line-height: 1.6;
+}
+.note table td a:last-child,
+.note table th a:last-child {
+  margin-bottom: 0;
+}
+
+/* موبایل */
+@media (max-width: 50rem) {
+  .note table th,
+  .note table td {
+    padding: 9px 12px;
+    font-size: 0.85rem;
+  }
+}
+
+/* ==========================================
+   AI Assistant Response Box Fix
+   ========================================== */
+
+/* بزرگ کردن باکس پاسخ AI وقتی پاسخ طولانیه */
+.study-assistant .assistant-messages {
+  height: auto !important;
+  min-height: 120px !important;
+  max-height: 520px !important;
+  overflow-y: auto !important;
+}
+
+/* در workspace panel */
+.workspace-tools .study-assistant .assistant-messages {
+  max-height: 420px !important;
+  min-height: 100px !important;
+}
+
+/* موبایل */
+@media (max-width: 900px) {
+  .mobile-study-body .assistant-messages {
+    max-height: 320px !important;
+    height: auto !important;
+  }
+}
+
+/* پاسخ AI در sidebar note page */
+.garden-reading-layout [data-tutor-slug] .assistant-messages {
+  max-height: 60vh !important;
+  height: auto !important;
+}
+
+/* ========================================================
+   AI Assistant LaTeX & Markdown Styling
+   ======================================================== */
+.assistant-response, .assistant-user {
+  white-space: normal !important;
+}
+
+.assistant-markdown, .user-markdown {
+  line-height: 1.8;
+  direction: rtl;
+  text-align: right;
+  word-break: break-word;
+}
+
+.assistant-markdown p, .user-markdown p {
+  margin: 0.5rem 0;
+}
+
+.assistant-markdown p:first-child, .user-markdown p:first-child {
+  margin-top: 0;
+}
+
+.assistant-markdown p:last-child, .user-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-markdown ul, .assistant-markdown ol, .user-markdown ul, .user-markdown ol {
+  margin: 0.5rem 0;
+  padding-inline-start: 1.5rem;
+}
+
+.assistant-markdown li, .user-markdown li {
+  margin: 0.25rem 0;
+}
+
+.assistant-markdown code:not(pre code), .user-markdown code:not(pre code) {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  background: var(--sl-color-gray-6);
+  border-radius: 4px;
+  font-size: 0.875em;
+  font-family: monospace;
+}
+
+.assistant-markdown pre, .user-markdown pre {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate;
+  background: var(--sl-color-gray-6);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.assistant-markdown .katex-display {
+  direction: ltr !important;
+  text-align: center !important;
+  margin: 0.85rem 0;
+  padding: 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.assistant-markdown .katex {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+}
+
+.assistant-cursor {
+  display: inline-block;
+  margin-inline-start: 2px;
+  animation: assistant-blink 1s infinite;
+  color: var(--sl-color-accent, #3b82f6);
+}
+
+@keyframes assistant-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Assistant Tables & Callouts */
+.assistant-markdown table,
+.user-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  direction: rtl;
+  text-align: right;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px var(--sl-color-gray-5, rgba(255,255,255,0.1));
+  display: table;
+}
+
+.assistant-markdown table th,
+.assistant-markdown table td,
+.user-markdown table th,
+.user-markdown table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--sl-color-gray-5, rgba(255,255,255,0.08));
+  vertical-align: middle;
+}
+
+.assistant-markdown table th,
+.user-markdown table th {
+  background: var(--sl-color-gray-6, rgba(255,255,255,0.05));
+  font-weight: 600;
+}
+
+.assistant-markdown [data-callout] {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, rgba(255,255,255,0.15));
+  border-radius: 8px;
+  background: var(--surface, rgba(255,255,255,0.03));
+}
+
+.assistant-markdown [data-callout-title] {
+  font-weight: 700;
+  margin-bottom: 0.4rem;
+}
+
+/* Modern Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+:root {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+:root[data-theme="dark"] {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 9999px;
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}

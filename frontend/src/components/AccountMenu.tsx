@@ -57,6 +57,14 @@ export default function AccountMenu(){
   const initial=Array.from(name)[0] || '؟';
   const avatar=user?.avatar_url?<img src={user.avatar_url} alt="" className="account-avatar" width={28} height={28}/>:<span className="account-avatar" aria-hidden="true">{user?initial:<UserRound size={16}/>}</span>;
   async function logout(){try{await api('/auth/logout',undefined,'POST');document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.assign('/account');}catch{setError('خروج انجام نشد؛ دوباره تلاش کنید.');}}
+  if (!user) {
+    return (
+      <a href="/account" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors" aria-label="ورود یا ثبت‌نام در حساب کاربری">
+        <UserRound size={15} />
+        <span>ورود / ثبت‌نام</span>
+      </a>
+    );
+  }
   return <DirectionProvider direction="rtl"><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" aria-label={'منوی حساب: '+name}/>}>{avatar}<span className="max-w-32 truncate hidden sm:inline">{name}</span><ChevronDown size={14}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-64">
     {user?<><div className="flex items-center gap-2.5 px-3 py-2.5">
       {user.avatar_url?<img src={user.avatar_url} alt="" className="size-8 rounded-full object-cover shrink-0 ring-1 ring-white/10"/>:<span className="size-8 rounded-full bg-violet-500/20 text-violet-300 font-bold text-xs flex items-center justify-center shrink-0">{initial}</span>}

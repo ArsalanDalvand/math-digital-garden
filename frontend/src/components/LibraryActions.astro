@@ -5,6 +5,8 @@ const {id='',canonicalSlug='',publicView=false,token=''}=Astro.props;
 <div data-library-actions={id} data-canonical-slug={canonicalSlug} data-public={String(publicView)} data-token={token}>
   <div data-library-top class="garden-row"><button type="button" data-library-command="share">اشتراک‌گذاری</button><button type="button" data-library-command="comments">دیدگاه‌ها</button></div>
   <div data-library-menu class="library-menu">
+    <button type="button" data-library-command="share" class="mobile-only-action">اشتراک‌گذاری</button>
+    <button type="button" data-library-command="comments" class="mobile-only-action">دیدگاه‌ها</button>
     <button type="button" data-library-command="link">کپی پیوند</button>
     <button type="button" data-library-command="markdown">کپی Markdown</button>
     <button type="button" data-library-command="favorite">افزودن به علاقه‌مندی‌ها</button>

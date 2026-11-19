@@ -1,9 +1,23 @@
 ---
-import {Plus,Folder,FileText} from 'lucide-react';
+import {Plus,Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from "lucide-react";
 ---
 <section data-library-navigation class="library-navigation" aria-label="کتابخانه">
-  <div class="workspace-nav-label library-heading"><a href="/library" aria-current={Astro.url.pathname==='/library'?'page':undefined}>کتابخانه</a><button type="button" data-library-add aria-label="ساخت یادداشت یا پوشه" title="ساخت یادداشت یا پوشه"><Plus size={18} aria-hidden="true"/></button></div>
-  <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها"><div class="folder-tree" data-library-tree></div><p role="status" data-library-status></p></nav>
+  <div class="library-heading">
+    <span class="library-title">کتابخانه</span>
+    <div class="library-toolbar-actions">
+      <button type="button" data-library-expand aria-label="باز کردن همه پوشه‌ها" title="باز کردن همه پوشه‌ها"><ChevronsDown size={14} aria-hidden="true"/></button>
+      <button type="button" data-library-collapse aria-label="بستن همه پوشه‌ها" title="بستن همه پوشه‌ها"><ChevronsUp size={14} aria-hidden="true"/></button>
+      <button type="button" data-library-add aria-label="ساخت یادداشت یا پوشه" title="ساخت یادداشت یا پوشه"><Plus size={15} aria-hidden="true"/></button>
+    </div>
+  </div>
+  <div class="library-filter-container">
+    <Search size={13} aria-hidden="true" class="library-filter-icon" />
+    <input type="search" data-library-filter placeholder="فیلتر سریع یادداشت‌ها…" aria-label="فیلتر سریع در یادداشت‌ها" autocomplete="off" />
+  </div>
+  <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها">
+    <div class="folder-tree" data-library-tree></div>
+    <p role="status" data-library-status></p>
+  </nav>
   <dialog data-library-create aria-labelledby="library-create-title">
     <h2 id="library-create-title" data-create-heading>ساختن در کتابخانه</h2><p data-create-location></p>
     <form>
@@ -13,19 +27,42 @@ import {Plus,Folder,FileText} from 'lucide-react';
       <div class="garden-row"><button type="button" data-create-cancel>انصراف</button><button type="submit">ساختن</button></div>
     </form>
   </dialog>
-  <template data-tree-icon="note"><FileText size={16} aria-hidden="true"/></template>
-  <template data-tree-icon="folder"><Folder size={16} aria-hidden="true"/></template>
+  <template data-tree-icon="note"><FileText size={14} aria-hidden="true" class="tree-note-icon"/></template>
+  <template data-tree-icon="folder"><Folder size={14} aria-hidden="true" class="tree-folder-icon"/></template>
+  <template data-tree-icon="caret"><ChevronLeft size={13} aria-hidden="true" class="tree-caret"/></template>
 </section>
-<script>import '../scripts/library-navigation';</script>
+<script>import "../scripts/library-navigation";</script>
 <style>
-.library-navigation{display:flex;flex-direction:column;min-height:0;flex:1}
-.library-heading{display:flex;align-items:center;justify-content:space-between;padding:8px 0 0}
-.library-heading a{font-weight:600}.library-heading button{min-width:44px;min-height:44px}
-:global([data-library-tree] summary){min-height:44px;overflow-wrap:anywhere}
-:global([data-library-tree] summary>span){min-width:0;flex:1}
+.library-navigation{display:flex;flex-direction:column;min-height:0;flex:1;min-width:0;max-width:100%}
+.library-heading{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 6px;border-block-start:1px solid var(--workspace-border, rgba(255,255,255,0.08));margin-block-start:8px}
+.library-title{font-weight:600;font-size:0.85rem;color:var(--sl-color-gray-2);letter-spacing:-0.01em}
+.library-toolbar-actions{display:flex;align-items:center;gap:3px}
+.library-toolbar-actions button{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--sl-color-gray-2);cursor:pointer;transition:all .15s ease}
+.library-toolbar-actions button:hover{background:var(--sl-color-gray-6, rgba(255,255,255,0.08));color:var(--sl-color-text)}
+.library-toolbar-actions button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--sl-color-accent, #3b82f6)}
+.library-filter-container{position:relative;margin:4px 0 8px;display:flex;align-items:center;min-width:0}
+:global(.library-filter-icon){position:absolute;inset-inline-start:9px;color:var(--sl-color-gray-3);pointer-events:none}
+.library-filter-container input{width:100%;height:30px;padding:4px 10px;padding-inline-start:28px;font-size:0.78rem;border:1px solid var(--workspace-border, rgba(255,255,255,0.1));border-radius:6px;background:var(--sl-color-gray-6, rgba(255,255,255,0.04));color:inherit;outline:none;transition:border-color .15s ease,background-color .15s ease}
+.library-filter-container input:focus{border-color:var(--sl-color-accent, #3b82f6);background:var(--sl-color-bg)}
+.library-filter-container input::placeholder{color:var(--sl-color-gray-3);opacity:0.8}
+:global([data-library-tree]){min-width:0;width:100%}
+:global([data-library-tree] details){width:100%;max-width:100%;min-width:0}
+:global([data-library-tree] summary){width:100%;max-width:100%;min-width:0;min-height:30px;padding:4px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none;transition:background .15s ease,color .15s ease}
+:global([data-library-tree] summary::-webkit-details-marker){display:none}
+:global([data-library-tree] summary>span:not(.tree-badge)){min-width:0;flex:1 1 0%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.84rem;font-weight:500}
 :global([data-library-tree] summary svg){flex-shrink:0}
-:global([data-library-tree] .library-child-add){margin-inline-start:auto;min-width:44px;min-height:44px;border-radius:5px}
-:global([data-library-tree] a:hover),:global([data-library-tree] summary:hover),:global(.library-heading button:hover){background:var(--sl-color-gray-6)}
+:global([data-library-tree] .tree-caret){transition:transform .2s ease;color:var(--sl-color-gray-3);flex-shrink:0}
+:global([data-library-tree] details[open] > summary > .tree-caret){transform:rotate(-90deg)}
+:global([data-library-tree] .tree-badge){flex:0 0 auto;width:auto;font-size:0.68rem;padding:1px 6px;border-radius:9999px;background:var(--sl-color-gray-6, rgba(255,255,255,0.08));color:var(--sl-color-gray-2);font-variant-numeric:tabular-nums;margin-inline-start:auto;line-height:1.3}
+:global([data-library-tree] .tree-folder-icon){color:var(--sl-color-gray-2);opacity:0.85}
+:global([data-library-tree] .tree-note-icon){color:var(--sl-color-gray-3);opacity:0.75}
+:global([data-library-tree] a){width:100%;max-width:100%;min-width:0;min-height:28px;padding:3px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:0.825rem;color:var(--sl-color-gray-2);text-decoration:none;transition:all .15s ease}
+:global([data-library-tree] a>span){min-width:0;flex:1 1 0%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:global([data-library-tree] a:hover),:global([data-library-tree] summary:hover){background:var(--sl-color-gray-6, rgba(255,255,255,0.06));color:var(--sl-color-text)}
+:global([data-library-tree] a[aria-current="page"]){background:var(--sl-color-accent-low, rgba(59,130,246,0.12));color:var(--sl-color-accent-high, #60a5fa);font-weight:600;border-inline-start:2px solid var(--sl-color-accent, #3b82f6);padding-inline-start:5px}
+:global([data-library-tree] .library-child-add){margin-inline-start:auto;width:22px;height:22px;border-radius:4px;border:0;background:transparent;color:var(--sl-color-gray-3);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+:global([data-library-tree] .library-child-add:hover){background:var(--sl-color-gray-5);color:var(--sl-color-text)}
+:global([data-library-tree] details > .folder-tree){padding-inline-start:10px;margin-inline-start:5px;border-inline-start:1px solid var(--sl-color-gray-6, rgba(255,255,255,0.08))}
 [data-library-status]:empty{display:none}[data-library-status]{font-size:12px;padding-inline:12px}
 dialog{width:min(420px,calc(100vw - 32px));padding:24px;border:1px solid var(--workspace-border);border-radius:10px;background:var(--sl-color-bg);color:var(--sl-color-text)}
 dialog::backdrop{background:#0006}dialog h2{font-size:20px;margin:0}dialog label{display:grid;gap:6px;margin-block:16px}dialog input,dialog select{width:100%;min-height:44px;background:var(--sl-color-bg);color:inherit;border:1px solid var(--workspace-border);border-radius:6px;padding:8px}dialog button{min-height:44px}dialog button[type=submit]{background:var(--sl-color-text);color:var(--sl-color-bg);border-radius:6px}dialog p{font-size:13px}dialog .garden-row{justify-content:flex-end}

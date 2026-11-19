@@ -29,7 +29,7 @@ const normalize = (value) => value.trim().normalize('NFC').toLocaleLowerCase('fa
 export const noteHref = (slug) => `/notes/${encodeURIComponent(slug)}`;
 
 /** @param {string} raw @param {Map<string,string[]>} names @param {Map<string,import("astro").MarkdownHeading[]>} headings @param {boolean} math @param {Map<string,string[]>} blocks */
-async function render(raw, names = new Map(), headings = new Map(), math = true, blocks = new Map()) {
+async function render(raw, names = new Map(), headings = new Map(), math = true, blocks = new Map(), metadata = []) {
   if(parseFrontmatter(raw).frontmatter['excalidraw-plugin'] || raw.trimStart().startsWith('{')){
     try{
       const scene=await parseExcalidraw(raw,vaultAssets);
@@ -99,18 +99,31 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
           } catch { /* Invalid diagrams remain readable code. */ }
         }
         if (node.type === 'wikiLink') {
-          const [target, anchor] = node.value.split('#');
+          let rawValue = node.value || '';
+          let [targetPart, anchor] = rawValue.split('#');
+          let cleanTarget = targetPart.replace(/[\s\\\/]+$/, '').trim().replace(/\.md$/, '');
           if(node.data.embed){
-            const image=resolveVaultImage(target,vaultAssets);
+            const image=resolveVaultImage(cleanTarget,vaultAssets);
             if(image){
               const dimensions=String(node.data.alias ?? '').match(/^(\d+)(?:x(\d+))?$/);
-              node.data.hName='img';node.data.hProperties={src:'/'+image.split('/').map(encodeURIComponent).join('/'),alt:target,loading:'lazy',
+              node.data.hName='img';node.data.hProperties={src:'/'+image.split('/').map(encodeURIComponent).join('/'),alt:cleanTarget,loading:'lazy',
                 ...(dimensions && Number(dimensions[1])<=1600 ? {width:Number(dimensions[1])} : {}),
                 ...(dimensions?.[2] && Number(dimensions[2])<=1600 ? {height:Number(dimensions[2])} : {})};
               node.data.hChildren=[];return;
             }
           }
-          const candidates = names.get(normalize(target.replace(/\.excalidraw\.md$/,'.excalidraw'))) ?? [];
+          let candidates = names.get(normalize(cleanTarget.replace(/\.excalidraw\.md$/,'.excalidraw'))) ?? [];
+          if (!candidates.length && cleanTarget.includes('/')) {
+            const stem = cleanTarget.split('/').pop()?.trim() ?? '';
+            candidates = names.get(normalize(stem.replace(/\.excalidraw\.md$/,'.excalidraw'))) ?? [];
+          }
+          if (candidates.length > 1 && cleanTarget.includes('/')) {
+            const exact = candidates.filter(slug => {
+              const n = metadata.find(m => m.slug === slug);
+              return n && normalize(n.relative_path || '').includes(normalize(cleanTarget));
+            });
+            if (exact.length === 1) candidates = exact;
+          }
           const heading = anchor ? headings.get(candidates[0])?.find((item) => normalize(item.text) === normalize(anchor) || item.slug === anchor) : undefined;
           const block=anchor?.startsWith('^') && blocks.get(candidates[0])?.includes(anchor.slice(1)) ? 'block-'+anchor.slice(1) : '';
           const resolved = candidates.length === 1 && (!anchor || !!heading || !!block);
@@ -118,11 +131,14 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
           node.data.hProperties = resolved
             ? { href: noteHref(candidates[0]) + (heading ? `#${heading.slug}` : block ? `#${block}` : ''), className: ['wiki-link'], 'data-note-preview': candidates[0] }
             : { className: [candidates.length > 1 ? 'wiki-ambiguous' : 'wiki-missing'], title: candidates.length > 1 ? 'نام مبهم است' : 'یادداشت یا بخش موجود نیست' };
+          if (node.data.hChildren?.[0]?.value) {
+            node.data.hChildren[0].value = node.data.hChildren[0].value.replace(/^[\s\\\|]+|[\s\\\|]+$/g, '').trim();
+          }
           if (resolved) {
             outgoing.push(candidates[0]);
             if(node.data.embed){
               node.data.hName='span';node.data.hProperties={'data-embed-slug':candidates[0],'data-embed-anchor':heading?.slug ?? block};
-              node.data.hChildren=[{type:'element',tagName:'a',properties:{href:noteHref(candidates[0])},children:[{type:'text',value:target}]}];
+              node.data.hChildren=[{type:'element',tagName:'a',properties:{href:noteHref(candidates[0])},children:[{type:'text',value:cleanTarget}]}];
             }
           }
         }
@@ -135,6 +151,16 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
         if (node.tagName === 'pre' && figure?.type === 'element' && figure.tagName === 'figure' && figure.properties['data-geogebra'] && parent && index !== undefined) {
           parent.children[index] = figure;
           return index;
+        }
+        if (node.tagName === 'table' && parent && index !== undefined && !(parent.type === 'element' && Array.isArray(parent.properties?.className) && parent.properties.className.includes('table-scroll'))) {
+          const wrapper = {
+            type: 'element',
+            tagName: 'div',
+            properties: { className: ['table-scroll'], role: 'region', tabIndex: 0 },
+            children: [node]
+          };
+          parent.children[index] = wrapper;
+          return index + 1;
         }
       });
       let codeIndex = 0;
@@ -212,7 +238,12 @@ async function deriveKnowledge(notes) {
   /** @type {Map<string,string[]>} */
   const names = new Map();
   for (const note of metadata) {
-    for (const name of [note.slug, note.title, ...note.aliases, ...(note.relative_path ? [note.relative_path.replace(/\.md$/,''),note.relative_path.replace(/^[^/]+\//,'').replace(/\.md$/,'')] : [])]) {
+    const paths = note.relative_path ? [
+      note.relative_path.replace(/\.md$/,''),
+      note.relative_path.replace(/^[^/]+\//,'').replace(/\.md$/,''),
+      note.relative_path.split('/').pop().replace(/\.md$/,'')
+    ] : [];
+    for (const name of [note.slug, note.title, ...note.aliases, ...paths]) {
       const key = normalize(name);
       names.set(key, [...new Set([...(names.get(key) ?? []), note.slug])]);
     }
@@ -220,7 +251,7 @@ async function deriveKnowledge(notes) {
   const outlines=await Promise.all(metadata.map(async(note)=>({slug:note.slug,...await render(note.current_content,undefined,undefined,false)})));
   const headings=new Map(outlines.map(note=>[note.slug,note.headings]));
   const blocks=new Map(outlines.map(note=>[note.slug,note.blocks]));
-  const garden = await Promise.all(metadata.map(async(note) => ({ ...note, ...await render(note.current_content, names, headings, true, blocks), backlinks: /** @type {string[]} */ ([]) })));
+  const garden = await Promise.all(metadata.map(async(note) => ({ ...note, ...await render(note.current_content, names, headings, true, blocks, metadata), backlinks: /** @type {string[]} */ ([]) })));
   const trees=new Map(garden.map(note=>[note.slug,htmlParser.parse(note.html)]));
   for(const note of garden){
     const tree=structuredClone(trees.get(note.slug));
@@ -242,11 +273,18 @@ export async function buildKnowledge(notes) {
  * @param {string} raw @param {Awaited<ReturnType<typeof deriveKnowledge>>} garden */
 export async function renderNote(raw, garden) {
   const names = new Map();
-  for (const note of garden) for (const name of [note.slug,note.title,...note.aliases]) {
-    const key=normalize(name);
-    names.set(key,[...new Set([...(names.get(key) ?? []),note.slug])]);
+  for (const note of garden) {
+    const paths = note.relative_path ? [
+      note.relative_path.replace(/\.md$/,''),
+      note.relative_path.replace(/^[^/]+\//,'').replace(/\.md$/,''),
+      note.relative_path.split('/').pop().replace(/\.md$/,'')
+    ] : [];
+    for (const name of [note.slug, note.title, ...note.aliases, ...paths]) {
+      const key = normalize(name);
+      names.set(key, [...new Set([...(names.get(key) ?? []), note.slug])]);
+    }
   }
-  const result=await render(raw,names,new Map(garden.map(note=>[note.slug,note.headings])),true,new Map(garden.map(note=>[note.slug,note.blocks])));
+  const result=await render(raw,names,new Map(garden.map(note=>[note.slug,note.headings])),true,new Map(garden.map(note=>[note.slug,note.blocks])),garden);
   if(!result.html.includes('data-embed-slug'))return result.html;
   const tree=htmlParser.parse(result.html);
   expandEmbeds(tree,new Map(garden.map(note=>[note.slug,htmlParser.parse(note.html)])),[]);
