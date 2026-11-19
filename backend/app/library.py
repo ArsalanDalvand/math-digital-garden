@@ -2,7 +2,9 @@
 
 import base64
 import binascii
+import os
 import secrets
+import tempfile
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from urllib.parse import quote
@@ -12,11 +14,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import Field, field_validator
 from sqlalchemy import and_, insert, literal, or_, select, update
 
+from backend.app.library_import import (
+    clone_git_repo,
+    extract_zip_archive,
+    ingest_directory_to_library,
+    validate_git_url,
+)
 from backend.app.library_models import (
     LibraryAttachment,
     LibraryCanonical,
     LibraryComment,
     LibraryFavorite,
+    LibraryGitSource,
     LibraryItem,
     LibraryRevision,
     LibraryWatch,
@@ -78,6 +87,21 @@ class Expected(Contract):
 
 class Publication(Contract):
     visibility: Literal["private", "unlisted", "public"]
+
+
+class GitImportRequest(Contract):
+    repo_url: str = Field(min_length=5, max_length=1024)
+    branch: str = Field(default="main", max_length=255)
+    title: str | None = Field(default=None, max_length=255)
+    parent_id: UUID | None = None
+
+
+class ZipImportRequest(Contract):
+    filename: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(max_length=70_000_000)
+    title: str | None = Field(default=None, max_length=255)
+    parent_id: UUID | None = None
+
 
 
 class Attachment(Contract):
@@ -335,12 +359,13 @@ async def list_items(
 ):
     await parent(db, user.id, parent_id)
     query = (
-        select(LibraryItem, CanonicalNote.slug)
+        select(LibraryItem, CanonicalNote.slug, LibraryGitSource.id, LibraryGitSource.repo_url)
         .outerjoin(
             LibraryCanonical,
             and_(LibraryCanonical.item_id == LibraryItem.id, LibraryCanonical.user_id == user.id),
         )
         .outerjoin(CanonicalNote, CanonicalNote.id == LibraryCanonical.note_id)
+        .outerjoin(LibraryGitSource, LibraryGitSource.item_id == LibraryItem.id)
         .where(LibraryItem.user_id == user.id)
     )
     if trashed:
@@ -353,7 +378,15 @@ async def list_items(
             query.order_by(LibraryItem.title, LibraryItem.id).offset(offset).limit(limit)
         )
     ).all()
-    return [{**dto(item), "canonical_slug": slug} for item, slug in rows]
+    return [
+        {
+            **dto(item),
+            "canonical_slug": slug,
+            "has_git": git_id is not None,
+            "git_repo_url": repo_url,
+        }
+        for item, slug, git_id, repo_url in rows
+    ]
 
 
 @router.post("/items", status_code=201)
@@ -520,26 +553,70 @@ async def restore_revision(
 @router.put("/items/{item_id}/publication")
 async def publish(item_id: UUID, body: Publication, db: DB, user: Me, _: Writes):
     item = await owned(db, user.id, item_id, lock=True)
-    if item.kind != "note":
-        raise HTTPException(422, "Only notes can be published")
     item.verified_hash = None
     item.verified_by = None
     item.verified_at = None
-    await db.execute(
-        update(LibraryAttachment)
-        .where(LibraryAttachment.item_id == item.id, LibraryAttachment.user_id == user.id)
-        .values(published=body.visibility != "private")
-    )
-    item.visibility = body.visibility
-    item.share_token = secrets.token_urlsafe(32) if body.visibility == "unlisted" else None
-    item.published_title = item.title if body.visibility != "private" else None
-    item.published_content = item.content if body.visibility != "private" else None
-    item.published_hash = item.current_hash if body.visibility != "private" else None
+
+    if item.kind == "note":
+        await db.execute(
+            update(LibraryAttachment)
+            .where(LibraryAttachment.item_id == item.id, LibraryAttachment.user_id == user.id)
+            .values(published=body.visibility != "private")
+        )
+        item.visibility = body.visibility
+        item.share_token = secrets.token_urlsafe(32) if body.visibility == "unlisted" else None
+        item.published_title = item.title if body.visibility != "private" else None
+        item.published_content = item.content if body.visibility != "private" else None
+        item.published_hash = item.current_hash if body.visibility != "private" else None
+    elif item.kind == "folder":
+        item.visibility = body.visibility
+        item.share_token = secrets.token_urlsafe(32) if body.visibility == "unlisted" else None
+        item.published_title = item.title if body.visibility != "private" else None
+        item.published_content = None
+        item.published_hash = "folder" if body.visibility != "private" else None
+
+        all_items = (
+            await db.scalars(
+                select(LibraryItem).where(
+                    LibraryItem.user_id == user.id, LibraryItem.trashed_at.is_(None)
+                )
+            )
+        ).all()
+        frontier = [item.id]
+        while frontier:
+            next_frontier = []
+            for desc in all_items:
+                if desc.parent_id in frontier:
+                    desc.visibility = body.visibility
+                    desc.published_title = desc.title if body.visibility != "private" else None
+                    if desc.kind == "note":
+                        desc.published_content = (
+                            desc.content if body.visibility != "private" else None
+                        )
+                        desc.published_hash = (
+                            desc.current_hash if body.visibility != "private" else None
+                        )
+                        await db.execute(
+                            update(LibraryAttachment)
+                            .where(
+                                LibraryAttachment.item_id == desc.id,
+                                LibraryAttachment.user_id == user.id,
+                            )
+                            .values(published=body.visibility != "private")
+                        )
+                    else:
+                        desc.published_content = None
+                        desc.published_hash = (
+                            "folder" if body.visibility != "private" else None
+                        )
+                    next_frontier.append(desc.id)
+            frontier = next_frontier
+
     await db.commit()
     return dto(item)
 
 
-async def public_item(db, *, item_id=None, token=None):
+async def public_item(db, *, item_id=None, token=None, note_id=None):
     query = select(LibraryItem).where(LibraryItem.published_hash.is_not(None))
     query = (
         query.where(LibraryItem.share_token == token, LibraryItem.visibility == "unlisted")
@@ -549,18 +626,302 @@ async def public_item(db, *, item_id=None, token=None):
     item = await db.scalar(query)
     if item is None:
         raise HTTPException(404, "Page not found")
-    await ancestors(db, item, item.user_id)
-    return dto(item, public=True)
+
+    if item.kind == "note":
+        await ancestors(db, item, item.user_id)
+        return dto(item, public=True)
+
+    all_user_items = (
+        await db.scalars(
+            select(LibraryItem).where(
+                LibraryItem.user_id == item.user_id,
+                LibraryItem.trashed_at.is_(None),
+                LibraryItem.published_hash.is_not(None),
+            )
+        )
+    ).all()
+
+    children_map: dict[UUID, list[LibraryItem]] = {}
+    for it in all_user_items:
+        if it.parent_id is not None:
+            children_map.setdefault(it.parent_id, []).append(it)
+
+    descendants: list[LibraryItem] = []
+    frontier = [item.id]
+    while frontier:
+        next_frontier = []
+        for ch in all_user_items:
+            if ch.parent_id in frontier:
+                descendants.append(ch)
+                next_frontier.append(ch.id)
+        frontier = next_frontier
+
+    descendant_ids = {d.id for d in descendants}
+
+    def build_tree(pid: UUID) -> list[dict]:
+        nodes = []
+        for ch in sorted(children_map.get(pid, []), key=lambda x: x.title):
+            node = {
+                "id": str(ch.id),
+                "title": ch.published_title or ch.title,
+                "kind": ch.kind,
+            }
+            if ch.kind == "folder":
+                node["children"] = build_tree(ch.id)
+            nodes.append(node)
+        return nodes
+
+    tree = build_tree(item.id)
+
+    target_note: LibraryItem | None = None
+    if note_id:
+        try:
+            target_uuid = UUID(note_id) if isinstance(note_id, str) else note_id
+            if target_uuid in descendant_ids:
+                target_note = next(
+                    (it for it in all_user_items if it.id == target_uuid and it.kind == "note"),
+                    None,
+                )
+        except (ValueError, TypeError):
+            pass
+
+    if target_note is None:
+        notes = [it for it in descendants if it.kind == "note"]
+        target_note = next(
+            (n for n in notes if n.title.lower() in ("readme", "راهنما", "index")),
+            notes[0] if notes else None,
+        )
+
+    res = dto(item, public=True)
+    res["tree"] = tree
+    res["folder_title"] = item.published_title or item.title
+    if target_note:
+        res["active_note_id"] = str(target_note.id)
+        res["active_note_title"] = target_note.published_title or target_note.title
+        note_t = target_note.published_title or target_note.title
+        folder_t = item.published_title or item.title
+        res["title"] = f"{note_t} — {folder_t}"
+        res["content"] = target_note.published_content or ""
+        res["current_hash"] = target_note.published_hash or ""
+        res["verified"] = bool(
+            target_note.published_hash and target_note.verified_hash == target_note.published_hash
+        )
+    else:
+        res["active_note_id"] = None
+        res["active_note_title"] = None
+        res["content"] = "این پوشه هنوز یادداشت منتشرشده‌ای ندارد."
+
+    return res
 
 
 @router.get("/public/{item_id}")
-async def public_page(item_id: UUID, db: DB):
-    return await public_item(db, item_id=item_id)
+async def public_page(item_id: UUID, db: DB, note: str | None = None):
+    return await public_item(db, item_id=item_id, note_id=note)
 
 
 @router.get("/shared/{token}")
-async def shared_page(token: str, db: DB):
-    return await public_item(db, token=token)
+async def shared_page(token: str, db: DB, note: str | None = None):
+    return await public_item(db, token=token, note_id=note)
+
+
+@router.get("/shared/{token}/notes/{note_id}")
+async def shared_note(token: str, note_id: UUID, db: DB):
+    return await public_item(db, token=token, note_id=str(note_id))
+
+
+@router.get("/public/{item_id}/notes/{note_id}")
+async def public_note(item_id: UUID, note_id: UUID, db: DB):
+    return await public_item(db, item_id=item_id, note_id=str(note_id))
+
+
+@router.post("/import/git", status_code=201)
+async def import_git(body: GitImportRequest, db: DB, user: Me, _: Writes):
+    validate_git_url(body.repo_url)
+
+    title = body.title
+    if not title:
+        raw_name = body.repo_url.rstrip("/").split("/")[-1]
+        if raw_name.endswith(".git"):
+            raw_name = raw_name[:-4]
+        title = raw_name or "مستندات گیت"
+
+    if body.parent_id:
+        parent_item = await owned(db, user.id, body.parent_id)
+        if parent_item.kind != "folder":
+            raise HTTPException(422, "Parent must be a folder")
+
+    root_folder = LibraryItem(
+        user_id=user.id,
+        parent_id=body.parent_id,
+        kind="folder",
+        title=title,
+        content="",
+        current_hash=digest(""),
+    )
+    db.add(root_folder)
+    await db.flush()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        clone_dir = os.path.join(tmp_dir, "repo")
+        commit_sha = clone_git_repo(body.repo_url, body.branch, clone_dir)
+        stats = await ingest_directory_to_library(
+            db, user.id, clone_dir, root_folder, is_sync=False
+        )
+
+    git_source = LibraryGitSource(
+        item_id=root_folder.id,
+        user_id=user.id,
+        repo_url=body.repo_url,
+        branch=body.branch,
+        last_synced_hash=commit_sha,
+        last_synced_at=datetime.now(UTC),
+        sync_status="synced",
+    )
+    db.add(git_source)
+    await db.commit()
+    await db.refresh(root_folder)
+
+    res = dto(root_folder)
+    res["stats"] = stats
+    res["has_git"] = True
+    res["git_repo_url"] = git_source.repo_url
+    return res
+
+
+@router.post("/import/zip", status_code=201)
+async def import_zip(body: ZipImportRequest, db: DB, user: Me, _: Writes):
+    try:
+        zip_bytes = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(400, "داده‌های فایل زیپ نامعتبر است.") from None
+
+    title = body.title
+    if not title:
+        title = os.path.splitext(body.filename)[0].strip() or "مستندات زیپ"
+
+    if body.parent_id:
+        parent_item = await owned(db, user.id, body.parent_id)
+        if parent_item.kind != "folder":
+            raise HTTPException(422, "Parent must be a folder")
+
+    root_folder = LibraryItem(
+        user_id=user.id,
+        parent_id=body.parent_id,
+        kind="folder",
+        title=title,
+        content="",
+        current_hash=digest(""),
+    )
+    db.add(root_folder)
+    await db.flush()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        extract_zip_archive(zip_bytes, tmp_dir)
+        stats = await ingest_directory_to_library(
+            db, user.id, tmp_dir, root_folder, is_sync=False
+        )
+
+    await db.commit()
+    await db.refresh(root_folder)
+
+    res = dto(root_folder)
+    res["stats"] = stats
+    return res
+
+
+@router.post("/items/{item_id}/git-sync")
+async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
+    root_folder = await owned(db, user.id, item_id, lock=True)
+    if root_folder.kind != "folder":
+        raise HTTPException(422, "تنها پوشه‌های متصل به گیت امکان بروزرسانی دارند.")
+
+    git_source = await db.scalar(
+        select(LibraryGitSource).where(
+            LibraryGitSource.item_id == item_id, LibraryGitSource.user_id == user.id
+        )
+    )
+    if git_source is None:
+        raise HTTPException(404, "منبع گیت برای این پوشه یافت نشد.")
+
+    validate_git_url(git_source.repo_url)
+
+    git_source.sync_status = "syncing"
+    await db.commit()
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            clone_dir = os.path.join(tmp_dir, "repo")
+            commit_sha = clone_git_repo(git_source.repo_url, git_source.branch, clone_dir)
+            stats = await ingest_directory_to_library(
+                db, user.id, clone_dir, root_folder, is_sync=True
+            )
+
+        git_source.last_synced_hash = commit_sha
+        git_source.last_synced_at = datetime.now(UTC)
+        git_source.sync_status = "synced"
+        git_source.error_message = None
+
+        if root_folder.published_hash:
+            all_items = (
+                await db.scalars(
+                    select(LibraryItem).where(
+                        LibraryItem.user_id == user.id, LibraryItem.trashed_at.is_(None)
+                    )
+                )
+            ).all()
+            frontier = [root_folder.id]
+            while frontier:
+                next_frontier = []
+                for it in all_items:
+                    if it.parent_id in frontier:
+                        if it.kind == "note":
+                            it.published_title = it.title
+                            it.published_content = it.content
+                            it.published_hash = it.current_hash
+                        else:
+                            it.published_title = it.title
+                            it.published_hash = "folder"
+                        next_frontier.append(it.id)
+                frontier = next_frontier
+
+        msg = (
+            f"بروزرسانی با موفقیت انجام شد "
+            f"({stats['added']} جدید، {stats['updated']} ویرایش، {stats['deleted']} حذف)."
+        )
+        await db.commit()
+        return {
+            "status": "success",
+            "commit_sha": commit_sha,
+            "stats": stats,
+            "message": msg,
+        }
+    except Exception as exc:
+        git_source.sync_status = "error"
+        git_source.error_message = str(exc)
+        await db.commit()
+        raise HTTPException(500, f"خطا در بروزرسانی مخزن: {exc}") from exc
+
+
+@router.get("/items/{item_id}/git-source")
+async def get_git_source(item_id: UUID, db: DB, user: Me):
+    git_source = await db.scalar(
+        select(LibraryGitSource).where(
+            LibraryGitSource.item_id == item_id, LibraryGitSource.user_id == user.id
+        )
+    )
+    if git_source is None:
+        return {"has_git": False}
+    return {
+        "has_git": True,
+        "repo_url": git_source.repo_url,
+        "branch": git_source.branch,
+        "last_synced_hash": git_source.last_synced_hash,
+        "last_synced_at": (
+            git_source.last_synced_at.isoformat() if git_source.last_synced_at else None
+        ),
+        "sync_status": git_source.sync_status,
+        "error_message": git_source.error_message,
+    }
 
 
 @router.post("/items/{item_id}/attachments", status_code=201)

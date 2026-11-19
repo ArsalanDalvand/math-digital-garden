@@ -117,3 +117,23 @@ class LibraryFavorite(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     access_token: Mapped[str | None] = mapped_column(String(64))
+
+
+class LibraryGitSource(Base):
+    __tablename__ = "library_git_sources"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    item_id: Mapped[UUID] = mapped_column(
+        ForeignKey("library_items.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    repo_url: Mapped[str] = mapped_column(String(1024))
+    branch: Mapped[str] = mapped_column(String(255), default="main")
+    subpath: Mapped[str | None] = mapped_column(String(512))
+    last_synced_hash: Mapped[str | None] = mapped_column(String(64))
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sync_status: Mapped[str] = mapped_column(String(32), default="synced")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
