@@ -97,6 +97,10 @@ if(root){
       // Open if it contains the active page OR if it is the top-level book folder
       if(hasActive || node.label.includes('جبر خطی آکسلر')){
         details.open=true;
+        if(!loaded){
+          loaded=true;
+          void publicNodes(children,node.items??[],version).catch(error=>{loaded=false;if(version===generation)status.textContent=message(error);});
+        }
       }
       insert(host,details,node.label);
     }
@@ -174,7 +178,10 @@ if(root){
 
   // Expand All / Collapse All
   expandBtn?.addEventListener('click', () => {
-    tree.querySelectorAll<HTMLDetailsElement>('details').forEach(d => d.open = true);
+    tree.querySelectorAll<HTMLDetailsElement>('details').forEach(d => {
+      d.open = true;
+      d.dispatchEvent(new Event('toggle'));
+    });
   });
 
   collapseBtn?.addEventListener('click', () => {
