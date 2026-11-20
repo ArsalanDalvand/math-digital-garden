@@ -3,15 +3,81 @@ import Reader from '../../layouts/Reader.astro';
 import WorkspaceNote from '../../components/WorkspaceNote.astro';
 import LibraryActions from '../../components/LibraryActions.astro';
 import {renderMarkdown} from '../../lib/markdown.mjs';
-export const prerender=false;
-const id=Astro.params.id!;
-const origin=process.env.API_BASE_URL||import.meta.env.API_BASE_URL||'http://127.0.0.1:8000';
-let item:any=null;
-try{const response=await fetch(`${origin}/api/library/items/${encodeURIComponent(id)}`,{headers:{Cookie:Astro.request.headers.get('cookie')||''},signal:AbortSignal.timeout(5000)});if(response.ok)item=await response.json();else Astro.response.status=response.status;}catch{Astro.response.status=503;}
-Astro.response.headers.set('Cache-Control','private, no-store');
-if(item?.canonical_slug)return Astro.redirect('/notes/'+encodeURIComponent(item.canonical_slug)+Astro.url.search);
-const html=item?.kind==='note'?await renderMarkdown(item.content):'';
+import {buildNoteLinkResolver} from '../../lib/library-links.mjs';
+
+export const prerender = false;
+const id = Astro.params.id!;
+const noteParam = Astro.url.searchParams.get('note');
+const origin = process.env.API_BASE_URL || import.meta.env.API_BASE_URL || 'http://127.0.0.1:8000';
+
+let item: any = null;
+try {
+  const targetUrl = `${origin}/api/library/items/${encodeURIComponent(id)}${noteParam ? '?note=' + encodeURIComponent(noteParam) : ''}`;
+  const response = await fetch(targetUrl, {
+    headers: { Cookie: Astro.request.headers.get('cookie') || '' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (response.ok) {
+    item = await response.json();
+  } else {
+    Astro.response.status = response.status;
+  }
+} catch {
+  Astro.response.status = 503;
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+if (item?.canonical_slug) {
+  return Astro.redirect('/notes/' + encodeURIComponent(item.canonical_slug) + Astro.url.search);
+}
+
+// If the user requested a folder, redirect to its active note if available
+if (item?.kind === 'folder') {
+  if (item.active_note_id) {
+    return Astro.redirect('/library/' + encodeURIComponent(item.active_note_id));
+  }
+}
+
+const linkResolver = item?.notes && item.notes.length
+  ? buildNoteLinkResolver(item.notes, '/library/', item.path || '')
+  : null;
+
+let html = item?.kind === 'note' && item?.content
+  ? await renderMarkdown(item.content, { linkResolver })
+  : '';
+
+if (html && linkResolver) {
+  html = html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*?)>/gi, (match, prefix, href, suffix) => {
+    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && !href.startsWith('#') && !href.startsWith('/shared/') && !href.startsWith('/library/')) {
+      const resolved = linkResolver(href);
+      if (resolved) {
+        return `<a ${prefix}href="${resolved}"${suffix}>`;
+      }
+    }
+    return match;
+  });
+}
 ---
-<Reader documentPage title={item?.title||'یادداشت شخصی'}>
-{item?.kind==='note'?<><WorkspaceNote slug={id} libraryId={id}/><LibraryActions id={id}/><article class="note" set:html={html}/></>:<p>یادداشت در دسترس نیست. <a href="/account">ورود</a> · <a href="/library">کتابخانه</a></p>}
+<Reader documentPage title={item?.title || 'یادداشت شخصی'}>
+  {item?.kind === 'note' ? (
+    <>
+      {item.root_folder_title && (
+        <div class="note-meta">
+          <span class="note-status">پوشه: {item.root_folder_title}</span>
+        </div>
+      )}
+      <WorkspaceNote slug={id} libraryId={id} />
+      <LibraryActions id={id} />
+      <article class="note" set:html={html} />
+    </>
+  ) : item?.kind === 'folder' ? (
+    <div class="shared-empty-state">
+      <h2>پوشهٔ «{item.title}»</h2>
+      <p>این پوشه یادداشتی برای نمایش مستقیم ندارد.</p>
+      <p><a href="/library">بازگشت به کتابخانه</a></p>
+    </div>
+  ) : (
+    <p>یادداشت در دسترس نیست. <a href="/account">ورود</a> · <a href="/library">کتابخانه</a></p>
+  )}
 </Reader>

@@ -250,24 +250,24 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.35);
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+html, body, aside, nav, div, section, ul, ol, main, article, * {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--scrollbar-thumb) transparent !important;
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 5px !important;
+  height: 5px !important;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: transparent !important;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 9999px;
+  background: var(--scrollbar-thumb) !important;
+  border-radius: 9999px !important;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+  background: var(--scrollbar-thumb-hover) !important;
 }
 
 .workspace-nav{display:flex;flex-direction:column;padding:12px 10px;overflow:hidden!important;min-width:0;box-sizing:border-box}
@@ -291,8 +291,9 @@
 .folder-tree,.folder-tree *{min-width:0;box-sizing:border-box}
 .folder-tree{width:100%;max-width:100%;min-width:0;overflow-x:hidden!important}
 .folder-tree details{width:100%;max-width:100%;min-width:0}
-.folder-tree summary{width:100%;max-width:100%;min-width:0;min-height:30px;padding:4px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none;transition:background .15s ease,color .15s ease}
-.folder-tree summary::-webkit-details-marker{display:none}
+.folder-tree summary{width:100%;max-width:100%;min-width:0;min-height:30px;padding:4px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none!important;list-style-type:none!important;transition:background .15s ease,color .15s ease}
+.folder-tree summary::-webkit-details-marker{display:none!important}
+.folder-tree summary::marker{display:none!important;content:''!important}
 .folder-tree summary>span:not(.tree-badge){min-width:0;flex:1 1 0%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.84rem;font-weight:500}
 .folder-tree summary svg{flex-shrink:0}
 .folder-tree .tree-caret{transition:transform .2s ease;color:var(--sl-color-gray-3);flex-shrink:0}

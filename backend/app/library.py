@@ -410,9 +410,145 @@ async def create_item(body: CreateItem, db: DB, user: Me, _: Writes):
     return dto(item)
 
 
+def collect_folder_tree_and_notes(
+    root_folder_id: UUID,
+    items: list[LibraryItem],
+    use_published: bool = False,
+) -> tuple[list[dict], list[dict[str, str]], dict[UUID, str]]:
+    children_map: dict[UUID, list[LibraryItem]] = {}
+    for it in items:
+        if it.parent_id is not None:
+            children_map.setdefault(it.parent_id, []).append(it)
+
+    flat_notes: list[dict[str, str]] = []
+    path_map: dict[UUID, str] = {}
+
+    def build_tree(pid: UUID, current_path: str = "") -> list[dict]:
+        nodes = []
+        for ch in sorted(children_map.get(pid, []), key=lambda x: x.title):
+            node_title = (ch.published_title if use_published else None) or ch.title
+            node_path = f"{current_path}/{node_title}" if current_path else node_title
+            path_map[ch.id] = node_path
+            node = {
+                "id": str(ch.id),
+                "title": node_title,
+                "kind": ch.kind,
+                "path": node_path,
+            }
+            if ch.kind == "folder":
+                node["children"] = build_tree(ch.id, node_path)
+            else:
+                flat_notes.append({
+                    "id": str(ch.id),
+                    "title": node_title,
+                    "path": node_path,
+                })
+            nodes.append(node)
+        return nodes
+
+    tree = build_tree(root_folder_id)
+    return tree, flat_notes, path_map
+
+
 @router.get("/items/{item_id}")
-async def read_item(item_id: UUID, db: DB, user: Me):
-    return dto(await owned(db, user.id, item_id))
+async def read_item(item_id: UUID, db: DB, user: Me, note: str | None = None):
+    item = await owned(db, user.id, item_id)
+    all_user_items = (
+        await db.scalars(
+            select(LibraryItem).where(
+                LibraryItem.user_id == user.id,
+                LibraryItem.trashed_at.is_(None),
+            )
+        )
+    ).all()
+    item_map = {it.id: it for it in all_user_items}
+
+    if item.kind == "folder":
+        tree, flat_notes, path_map = collect_folder_tree_and_notes(
+            item.id, all_user_items, use_published=False
+        )
+        git_source = await db.scalar(
+            select(LibraryGitSource).where(
+                LibraryGitSource.item_id == item.id,
+                LibraryGitSource.user_id == user.id,
+            )
+        )
+        descendants = [it for it in all_user_items if it.id in path_map]
+        descendant_ids = set(path_map.keys())
+
+        target_note: LibraryItem | None = None
+        if note:
+            try:
+                target_uuid = UUID(note)
+                if target_uuid in descendant_ids:
+                    target_note = item_map.get(target_uuid)
+            except (ValueError, TypeError):
+                pass
+
+        if target_note is None or target_note.kind != "note":
+            notes = [it for it in descendants if it.kind == "note"]
+            target_note = next(
+                (n for n in notes if n.title.lower() in ("readme", "راهنما", "index")),
+                notes[0] if notes else None,
+            )
+
+        res = dto(item)
+        res["tree"] = tree
+        res["notes"] = flat_notes
+        res["has_git"] = bool(git_source)
+        res["git_repo_url"] = git_source.repo_url if git_source else None
+        res["root_folder_id"] = str(item.id)
+        res["root_folder_title"] = item.title
+
+        if target_note:
+            res["active_note_id"] = str(target_note.id)
+            res["active_note_title"] = target_note.title
+            res["active_note_path"] = path_map.get(target_note.id, "")
+            res["content"] = target_note.content
+            res["current_hash"] = target_note.current_hash
+            res["title"] = target_note.title
+        else:
+            res["active_note_id"] = None
+            res["active_note_title"] = None
+            res["active_note_path"] = ""
+        return res
+
+    # item.kind == "note"
+    res = dto(item)
+    curr_pid = item.parent_id
+    root_folder: LibraryItem | None = None
+    while curr_pid:
+        p = item_map.get(curr_pid)
+        if not p:
+            break
+        root_folder = p
+        curr_pid = p.parent_id
+
+    if root_folder:
+        tree, flat_notes, path_map = collect_folder_tree_and_notes(
+            root_folder.id, all_user_items, use_published=False
+        )
+        git_source = await db.scalar(
+            select(LibraryGitSource).where(
+                LibraryGitSource.item_id == root_folder.id,
+                LibraryGitSource.user_id == user.id,
+            )
+        )
+        res["notes"] = flat_notes
+        res["path"] = path_map.get(item.id, item.title)
+        res["root_folder_id"] = str(root_folder.id)
+        res["root_folder_title"] = root_folder.title
+        res["has_git"] = bool(git_source)
+        res["git_repo_url"] = git_source.repo_url if git_source else None
+    else:
+        res["notes"] = []
+        res["path"] = item.title
+        res["root_folder_id"] = None
+        res["root_folder_title"] = None
+        res["has_git"] = False
+        res["git_repo_url"] = None
+
+    return res
 
 
 async def save_content(db, user, item, content, expected_hash):
@@ -641,47 +777,11 @@ async def public_item(db, *, item_id=None, token=None, note_id=None):
         )
     ).all()
 
-    children_map: dict[UUID, list[LibraryItem]] = {}
-    for it in all_user_items:
-        if it.parent_id is not None:
-            children_map.setdefault(it.parent_id, []).append(it)
-
-    descendants: list[LibraryItem] = []
-    frontier = [item.id]
-    while frontier:
-        next_frontier = []
-        for ch in all_user_items:
-            if ch.parent_id in frontier:
-                descendants.append(ch)
-                next_frontier.append(ch.id)
-        frontier = next_frontier
-
-    descendant_ids = {d.id for d in descendants}
-    flat_notes: list[dict[str, str]] = []
-
-    def build_tree(pid: UUID, current_path: str = "") -> list[dict]:
-        nodes = []
-        for ch in sorted(children_map.get(pid, []), key=lambda x: x.title):
-            node_title = ch.published_title or ch.title
-            node_path = f"{current_path}/{node_title}" if current_path else node_title
-            node = {
-                "id": str(ch.id),
-                "title": node_title,
-                "kind": ch.kind,
-                "path": node_path,
-            }
-            if ch.kind == "folder":
-                node["children"] = build_tree(ch.id, node_path)
-            else:
-                flat_notes.append({
-                    "id": str(ch.id),
-                    "title": node_title,
-                    "path": node_path,
-                })
-            nodes.append(node)
-        return nodes
-
-    tree = build_tree(item.id)
+    tree, flat_notes, path_map = collect_folder_tree_and_notes(
+        item.id, all_user_items, use_published=True
+    )
+    descendants = [it for it in all_user_items if it.id in path_map]
+    descendant_ids = set(path_map.keys())
 
     target_note: LibraryItem | None = None
     if note_id:
@@ -709,8 +809,7 @@ async def public_item(db, *, item_id=None, token=None, note_id=None):
     if target_note:
         res["active_note_id"] = str(target_note.id)
         res["active_note_title"] = target_note.published_title or target_note.title
-        active_entry = next((n for n in flat_notes if n["id"] == str(target_note.id)), None)
-        res["active_note_path"] = active_entry["path"] if active_entry else ""
+        res["active_note_path"] = path_map.get(target_note.id, "")
         note_t = target_note.published_title or target_note.title
         folder_t = item.published_title or item.title
         res["title"] = f"{note_t} — {folder_t}"
@@ -874,7 +973,7 @@ async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
         git_source.sync_status = "synced"
         git_source.error_message = None
 
-        if root_folder.published_hash:
+        if root_folder.published_hash or root_folder.visibility != "private":
             all_items = (
                 await db.scalars(
                     select(LibraryItem).where(
@@ -887,6 +986,7 @@ async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
                 next_frontier = []
                 for it in all_items:
                     if it.parent_id in frontier:
+                        it.visibility = root_folder.visibility
                         if it.kind == "note":
                             it.published_title = it.title
                             it.published_content = it.content

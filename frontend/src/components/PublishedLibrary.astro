@@ -25,7 +25,7 @@ Astro.response.headers.set('X-Robots-Tag','noindex, nofollow');
 
 const baseUrl = token
   ? `/shared/${encodeURIComponent(token)}?note=`
-  : `/library/${encodeURIComponent(id || '')}?note=`;
+  : `/published/${encodeURIComponent(id || '')}?note=`;
 
 const linkResolver = item?.notes && item.notes.length
   ? buildNoteLinkResolver(item.notes, baseUrl, item.active_note_path || '')
