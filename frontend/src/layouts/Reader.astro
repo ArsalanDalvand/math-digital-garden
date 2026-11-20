@@ -44,7 +44,7 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
     <a href="/" aria-current={Astro.url.pathname==='/'?'page':undefined}><House size={18} aria-hidden="true"/>خانه</a>
     <a href="/review" data-admin-link hidden aria-current={Astro.url.pathname==='/review'?'page':undefined}><GitPullRequest size={18} aria-hidden="true"/>بازبینی پیشنهادها</a>
   </nav>
-  <LibraryNavigation/>
+  <slot name="nav"><LibraryNavigation/></slot>
   <div class="workspace-nav-settings"><button data-theme-toggle aria-label="تغییر پوسته"><SunMoon size={18} aria-hidden="true"/><span>پوستهٔ روشن / تیره</span></button><p data-theme-save-status role="status"></p></div>
 </aside>
 <main id="main" class="workspace-main">

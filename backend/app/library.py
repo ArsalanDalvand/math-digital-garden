@@ -657,17 +657,27 @@ async def public_item(db, *, item_id=None, token=None, note_id=None):
         frontier = next_frontier
 
     descendant_ids = {d.id for d in descendants}
+    flat_notes: list[dict[str, str]] = []
 
-    def build_tree(pid: UUID) -> list[dict]:
+    def build_tree(pid: UUID, current_path: str = "") -> list[dict]:
         nodes = []
         for ch in sorted(children_map.get(pid, []), key=lambda x: x.title):
+            node_title = ch.published_title or ch.title
+            node_path = f"{current_path}/{node_title}" if current_path else node_title
             node = {
                 "id": str(ch.id),
-                "title": ch.published_title or ch.title,
+                "title": node_title,
                 "kind": ch.kind,
+                "path": node_path,
             }
             if ch.kind == "folder":
-                node["children"] = build_tree(ch.id)
+                node["children"] = build_tree(ch.id, node_path)
+            else:
+                flat_notes.append({
+                    "id": str(ch.id),
+                    "title": node_title,
+                    "path": node_path,
+                })
             nodes.append(node)
         return nodes
 
@@ -694,10 +704,13 @@ async def public_item(db, *, item_id=None, token=None, note_id=None):
 
     res = dto(item, public=True)
     res["tree"] = tree
+    res["notes"] = flat_notes
     res["folder_title"] = item.published_title or item.title
     if target_note:
         res["active_note_id"] = str(target_note.id)
         res["active_note_title"] = target_note.published_title or target_note.title
+        active_entry = next((n for n in flat_notes if n["id"] == str(target_note.id)), None)
+        res["active_note_path"] = active_entry["path"] if active_entry else ""
         note_t = target_note.published_title or target_note.title
         folder_t = item.published_title or item.title
         res["title"] = f"{note_t} — {folder_t}"

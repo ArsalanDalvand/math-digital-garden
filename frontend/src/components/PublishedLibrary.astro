@@ -2,6 +2,8 @@
 import Reader from '../layouts/Reader.astro';
 import LibraryActions from './LibraryActions.astro';
 import {renderMarkdown} from '../lib/markdown.mjs';
+import {buildNoteLinkResolver} from '../lib/library-links.mjs';
+import {Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from 'lucide-react';
 
 interface Props {id?:string;token?:string}
 const {id,token}=Astro.props;
@@ -20,183 +22,181 @@ try{
 
 Astro.response.headers.set('Cache-Control','no-store');
 Astro.response.headers.set('X-Robots-Tag','noindex, nofollow');
-const html=item?.content ? await renderMarkdown(item.content) : '';
+
+const baseUrl = token
+  ? `/shared/${encodeURIComponent(token)}?note=`
+  : `/library/${encodeURIComponent(id || '')}?note=`;
+
+const linkResolver = item?.notes && item.notes.length
+  ? buildNoteLinkResolver(item.notes, baseUrl, item.active_note_path || '')
+  : null;
+
+let html = item?.content ? await renderMarkdown(item.content, { linkResolver }) : '';
+
+// Extra fallback for any relative links that might have escaped the Markdown parser
+if (html && linkResolver) {
+  html = html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*?)>/gi, (match, prefix, href, suffix) => {
+    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && !href.startsWith('#') && !href.startsWith('/shared/') && !href.startsWith('/library/')) {
+      const resolved = linkResolver(href);
+      if (resolved) {
+        return `<a ${prefix}href="${resolved}"${suffix}>`;
+      }
+    }
+    return match;
+  });
+}
+
+function sortTree(nodes: any[]): any[] {
+  if (!nodes || !nodes.length) return [];
+  const collator = new Intl.Collator('fa', { numeric: true, sensitivity: 'base' });
+  const sorted = [...nodes].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+    return collator.compare(a.title, b.title);
+  });
+  for (const node of sorted) {
+    if (node.children) node.children = sortTree(node.children);
+  }
+  return sorted;
+}
+
+function containsActive(node: any, activeId: string): boolean {
+  if (!node || !activeId) return false;
+  if (node.id === activeId) return true;
+  if (node.children) {
+    return node.children.some((child: any) => containsActive(child, activeId));
+  }
+  return false;
+}
+
+const sortedTree = item?.tree ? sortTree(item.tree) : [];
+const activeNoteId = item?.active_note_id || (item?.kind === 'note' ? item?.id : '');
+const activeTitle = item?.active_note_title || item?.title || 'مستندات';
+const collectionTitle = item?.folder_title || item?.title || 'مجموعه مستندات';
+const hasSidebarTree = item?.kind === 'folder' || sortedTree.length > 0;
 ---
-<Reader documentPage title={item?.title||'مستندات منتشرشده'}>
-{item ? (
-  item.kind === 'folder' ? (
-    <div class="shared-collection-layout">
-      <header class="shared-collection-header">
-        <div class="shared-header-info">
-          <span class="shared-badge">مجموعه مستندات اشتراکی</span>
-          <h1 class="shared-collection-title">{item.folder_title}</h1>
-          {item.active_note_title && <p class="shared-current-note">یادداشت جاری: <strong>{item.active_note_title}</strong></p>}
+<Reader documentPage title={activeTitle}>
+  {hasSidebarTree && (
+    <section slot="nav" data-shared-navigation class="library-navigation" aria-label={collectionTitle}>
+      <div class="library-heading">
+        <span class="library-title" title={collectionTitle}>{collectionTitle}</span>
+        <div class="library-toolbar-actions">
+          <button type="button" data-shared-expand aria-label="باز کردن همه پوشه‌ها" title="باز کردن همه پوشه‌ها"><ChevronsDown size={14} aria-hidden="true"/></button>
+          <button type="button" data-shared-collapse aria-label="بستن همه پوشه‌ها" title="بستن همه پوشه‌ها"><ChevronsUp size={14} aria-hidden="true"/></button>
         </div>
-      </header>
-
-      <div class="shared-collection-body">
-        {item.tree && item.tree.length > 0 && (
-          <aside class="shared-collection-nav" aria-label="فهرست مستندات">
-            <h2 class="shared-nav-heading">فهرست یادداشت‌ها</h2>
-            <nav class="shared-tree">
-              {function renderNodes(nodes: any[], level = 0) {
-                return (
-                  <ul class={`shared-tree-list level-${level}`}>
-                    {nodes.map((node: any) => (
-                      <li class={`shared-tree-item kind-${node.kind}`}>
-                        {node.kind === 'folder' ? (
-                          <details open={level === 0}>
-                            <summary class="shared-folder-label">📁 {node.title}</summary>
-                            {node.children && renderNodes(node.children, level + 1)}
-                          </details>
-                        ) : (
-                          <a
-                            href={`/shared/${token || id}?note=${node.id}`}
-                            class={`shared-note-link ${item.active_note_id === node.id ? 'active' : ''}`}
-                          >
-                            📄 {node.title}
-                          </a>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                );
-              }(item.tree)}
-            </nav>
-          </aside>
-        )}
-
-        <main class="shared-collection-content">
-          <article class="note" set:html={html || '<p>محتوایی برای این یادداشت وجود ندارد.</p>'} />
-        </main>
       </div>
-    </div>
-  ) : (
+      <div class="library-filter-container">
+        <Search size={13} aria-hidden="true" class="library-filter-icon" />
+        <input type="search" data-shared-filter placeholder="فیلتر سریع یادداشت‌ها…" aria-label="فیلتر سریع در یادداشت‌ها" autocomplete="off" />
+      </div>
+      <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها">
+        <div class="folder-tree" data-shared-tree>
+          {function renderNodes(nodes: any[]) {
+            return nodes.map((node: any) => {
+              const isCurrent = activeNoteId === node.id;
+              if (node.kind === 'folder') {
+                const isOpen = containsActive(node, activeNoteId);
+                return (
+                  <details open={isOpen} data-tree-item>
+                    <summary>
+                      <ChevronLeft size={13} aria-hidden="true" class="tree-caret"/>
+                      <Folder size={14} aria-hidden="true" class="tree-folder-icon"/>
+                      <span>{node.title}</span>
+                    </summary>
+                    <div class="folder-tree">
+                      {node.children && renderNodes(node.children)}
+                    </div>
+                  </details>
+                );
+              }
+              return (
+                <a
+                  href={`${baseUrl}${node.id}`}
+                  data-tree-item
+                  aria-current={isCurrent ? 'page' : undefined}
+                  class={isCurrent ? 'active' : ''}
+                  title={node.title}
+                >
+                  <FileText size={14} aria-hidden="true" class="tree-note-icon"/>
+                  <span>{node.title}</span>
+                </a>
+              );
+            });
+          }(sortedTree)}
+        </div>
+      </nav>
+    </section>
+  )}
+
+  {item ? (
     <>
-      <p>نسخهٔ منتشرشده {item.verified ? '· تأییدشده توسط مدیر' : ''}</p>
-      <LibraryActions id={item.id} publicView token={token}/>
-      <article class="note" set:html={html}/>
+      <div class="note-meta">
+        <span class="note-status">
+          {item.kind === 'folder' ? `مستندات اشتراکی · ${collectionTitle}` : 'نسخهٔ منتشرشده'}
+        </span>
+        {item.verified && <span class="note-status">· تأییدشده توسط مدیر</span>}
+      </div>
+      <LibraryActions id={item.active_note_id || item.id} publicView token={token} />
+      <article class="note" set:html={html || '<p>محتوایی برای این یادداشت وجود ندارد.</p>'} />
     </>
-  )
-) : (
-  <div class="shared-empty-state">
-    <h2>یادداشت یا مستندات در دسترس نیست</h2>
-    <p>این یادداشت ممکن است حذف شده باشد یا اشتراک‌گذاری آن توسط صاحب اثر لغو شده باشد.</p>
-  </div>
-)}
+  ) : (
+    <div class="shared-empty-state">
+      <h2>یادداشت یا مستندات در دسترس نیست</h2>
+      <p>این یادداشت ممکن است حذف شده باشد یا اشتراک‌گذاری آن توسط صاحب اثر لغو شده باشد.</p>
+    </div>
+  )}
 </Reader>
 
-<style>
-.shared-collection-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  margin-block-start: 1rem;
-}
-.shared-collection-header {
-  padding: 1.25rem 1.5rem;
-  background: var(--surface-2, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-  border-radius: 12px;
-}
-.shared-badge {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent, #60a5fa);
-  background: rgba(96, 165, 250, 0.12);
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
-  margin-bottom: 0.5rem;
-}
-.shared-collection-title {
-  margin: 0;
-  font-size: 1.5rem;
-  color: var(--text-1, #f3f4f6);
-}
-.shared-current-note {
-  margin: 0.5rem 0 0 0;
-  font-size: 0.9rem;
-  color: var(--text-2, #9ca3af);
-}
-.shared-collection-body {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 2rem;
-  align-items: start;
-}
-@media (max-width: 768px) {
-  .shared-collection-body {
-    grid-template-columns: 1fr;
+<script>
+  const nav = document.querySelector('[data-shared-navigation]');
+  if (nav) {
+    const filterInput = nav.querySelector<HTMLInputElement>('[data-shared-filter]');
+    const expandBtn = nav.querySelector<HTMLButtonElement>('[data-shared-expand]');
+    const collapseBtn = nav.querySelector<HTMLButtonElement>('[data-shared-collapse]');
+    const tree = nav.querySelector<HTMLElement>('[data-shared-tree]');
+
+    expandBtn?.addEventListener('click', () => {
+      tree?.querySelectorAll('details').forEach(d => (d.open = true));
+    });
+
+    collapseBtn?.addEventListener('click', () => {
+      tree?.querySelectorAll('details').forEach(d => (d.open = false));
+    });
+
+    filterInput?.addEventListener('input', () => {
+      const q = filterInput.value.trim().toLowerCase();
+      if (!tree) return;
+      if (!q) {
+        tree.querySelectorAll<HTMLElement>('[data-tree-item]').forEach(el => (el.hidden = false));
+        return;
+      }
+      tree.querySelectorAll<HTMLElement>('a[data-tree-item]').forEach(link => {
+        const text = link.textContent?.toLowerCase() || '';
+        const match = text.includes(q);
+        link.hidden = !match;
+      });
+      tree.querySelectorAll<HTMLDetailsElement>('details[data-tree-item]').forEach(details => {
+        const hasVisibleChild = Array.from(details.querySelectorAll<HTMLElement>('a[data-tree-item]')).some(a => !a.hidden);
+        const folderMatch = details.querySelector('summary')?.textContent?.toLowerCase().includes(q);
+        if (hasVisibleChild || folderMatch) {
+          details.hidden = false;
+          details.open = true;
+        } else {
+          details.hidden = true;
+        }
+      });
+    });
   }
+</script>
+
+<style>
+.shared-empty-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--sl-color-gray-3);
 }
-.shared-collection-nav {
-  background: var(--surface-1, rgba(255, 255, 255, 0.02));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
-  padding: 1.25rem;
-  position: sticky;
-  top: 1rem;
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.shared-nav-heading {
-  font-size: 1rem;
-  margin: 0 0 1rem 0;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  color: var(--text-1, #f3f4f6);
-}
-.shared-tree-list {
-  list-style: none;
-  padding-inline-start: 0.75rem;
-  margin: 0;
-}
-.shared-tree-list.level-0 {
-  padding-inline-start: 0;
-}
-.shared-tree-item {
-  margin: 0.35rem 0;
-}
-.shared-folder-label {
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-1, #f3f4f6);
-  padding: 0.3rem 0.5rem;
-  border-radius: 6px;
-  user-select: none;
-}
-.shared-folder-label:hover {
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
-}
-.shared-note-link {
-  display: block;
-  font-size: 0.875rem;
-  color: var(--text-2, #9ca3af);
-  text-decoration: none;
-  padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  transition: all 0.15s ease;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shared-note-link:hover {
-  color: var(--text-1, #f3f4f6);
-  background: var(--surface-2, rgba(255, 255, 255, 0.06));
-}
-.shared-note-link.active {
-  color: var(--accent, #60a5fa);
-  background: rgba(96, 165, 250, 0.15);
-  font-weight: 600;
-}
-.shared-collection-content {
-  background: var(--surface-1, rgba(255, 255, 255, 0.02));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
-  padding: 2rem;
-  min-height: 400px;
+.shared-empty-state h2 {
+  font-size: 1.25rem;
+  color: var(--sl-color-text);
+  margin-block-end: 0.75rem;
 }
 </style>

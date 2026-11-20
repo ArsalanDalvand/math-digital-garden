@@ -92,3 +92,26 @@ test('Reference links, images, callout titles and KaTeX commands cannot inject a
 `);
   assert.doesNotMatch(html, /href="javascript:|src="data:|onerror=/i);
 });
+
+test('renderMarkdown resolves relative markdown links and wiki links via options.linkResolver', async () => {
+  const linkResolver = (target) => {
+    if (target.includes('overview')) return '/shared/TOKEN?note=111';
+    if (target.includes('account')) return '/shared/TOKEN?note=222';
+    return null;
+  };
+
+  const md = `
+[معرفی](01-getting-started/overview.md)
+[ورود](./01-getting-started/account.md)
+[بیرونی](https://example.com)
+[[overview|مرور سریع]]
+[[overview#مقدمه]]
+`;
+
+  const html = await renderMarkdown(md, { linkResolver });
+  assert.match(html, /href="\/shared\/TOKEN\?note=111"/);
+  assert.match(html, /href="\/shared\/TOKEN\?note=222"/);
+  assert.match(html, /href="https:\/\/example\.com"/);
+  assert.match(html, /<a href="\/shared\/TOKEN\?note=111" class="wiki-link">مرور سریع<\/a>/);
+  assert.match(html, /<a href="\/shared\/TOKEN\?note=111" class="wiki-link">overview#مقدمه<\/a>/);
+});

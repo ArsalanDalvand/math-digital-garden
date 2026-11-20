@@ -244,7 +244,34 @@
 .workspace-nav{display:flex;flex-direction:column;padding:14px 10px;overflow:hidden;min-width:0}
 .workspace-nav nav{min-width:0}
 .workspace-library{min-height:0;overflow-y:auto;overflow-x:hidden!important;flex:1;min-width:0;scrollbar-gutter:stable}
+.library-navigation{display:flex;flex-direction:column;min-height:0;flex:1;min-width:0;max-width:100%}
+.library-heading{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 6px;border-block-start:1px solid var(--workspace-border, rgba(255,255,255,0.08));margin-block-start:8px}
+.library-title{font-weight:600;font-size:0.85rem;color:var(--sl-color-gray-2);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+.library-toolbar-actions{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.library-toolbar-actions button{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--sl-color-gray-2);cursor:pointer;transition:all .15s ease}
+.library-toolbar-actions button:hover{background:var(--sl-color-gray-6, rgba(255,255,255,0.08));color:var(--sl-color-text)}
+.library-toolbar-actions button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--sl-color-accent, #3b82f6)}
+.library-filter-container{position:relative;margin:4px 0 8px;display:flex;align-items:center;min-width:0}
+.library-filter-icon{position:absolute;inset-inline-start:9px;color:var(--sl-color-gray-3);pointer-events:none}
+.library-filter-container input{width:100%;height:30px;padding:4px 10px;padding-inline-start:28px;font-size:0.78rem;border:1px solid var(--workspace-border, rgba(255,255,255,0.1));border-radius:6px;background:var(--sl-color-gray-6, rgba(255,255,255,0.04));color:inherit;outline:none;transition:border-color .15s ease,background-color .15s ease}
+.library-filter-container input:focus{border-color:var(--sl-color-accent, #3b82f6);background:var(--sl-color-bg)}
+.library-filter-container input::placeholder{color:var(--sl-color-gray-3);opacity:0.8}
 .folder-tree,.folder-tree *{min-width:0;box-sizing:border-box}
+.folder-tree details{width:100%;max-width:100%;min-width:0}
+.folder-tree summary{width:100%;max-width:100%;min-width:0;min-height:30px;padding:4px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none;transition:background .15s ease,color .15s ease}
+.folder-tree summary::-webkit-details-marker{display:none}
+.folder-tree summary>span:not(.tree-badge){min-width:0;flex:1 1 0%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.84rem;font-weight:500}
+.folder-tree summary svg{flex-shrink:0}
+.folder-tree .tree-caret{transition:transform .2s ease;color:var(--sl-color-gray-3);flex-shrink:0}
+.folder-tree details[open] > summary > .tree-caret{transform:rotate(-90deg)}
+.folder-tree .tree-badge{flex:0 0 auto;width:auto;font-size:0.68rem;padding:1px 6px;border-radius:9999px;background:var(--sl-color-gray-6, rgba(255,255,255,0.08));color:var(--sl-color-gray-2);font-variant-numeric:tabular-nums;margin-inline-start:auto;line-height:1.3}
+.folder-tree .tree-folder-icon{color:var(--sl-color-gray-2);opacity:0.85}
+.folder-tree .tree-note-icon{color:var(--sl-color-gray-3);opacity:0.75}
+.folder-tree a{width:100%;max-width:100%;min-width:0;min-height:28px;padding:3px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;font-size:0.825rem;color:var(--sl-color-gray-2);text-decoration:none;transition:all .15s ease}
+.folder-tree a>span{min-width:0;flex:1 1 0%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-tree a:hover, .folder-tree summary:hover{background:var(--sl-color-gray-6, rgba(255,255,255,0.06));color:var(--sl-color-text)}
+.folder-tree a[aria-current="page"], .folder-tree a.active{background:var(--sl-color-accent-low, rgba(59,130,246,0.12));color:var(--sl-color-accent-high, #60a5fa);font-weight:600;border-inline-start:2px solid var(--sl-color-accent, #3b82f6);padding-inline-start:5px}
+.folder-tree details > .folder-tree{padding-inline-start:10px;margin-inline-start:5px;border-inline-start:1px solid var(--sl-color-gray-6, rgba(255,255,255,0.08))}
 .folder-tree a,.folder-tree summary{min-height:30px!important;padding:3px 6px!important;font-size:0.83rem!important;line-height:1.4!important}
 .mobile-only-action{display:none!important}
 @media(max-width:600px){

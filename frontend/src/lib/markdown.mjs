@@ -29,7 +29,7 @@ const normalize = (value) => value.trim().normalize('NFC').toLocaleLowerCase('fa
 export const noteHref = (slug) => `/notes/${encodeURIComponent(slug)}`;
 
 /** @param {string} raw @param {Map<string,string[]>} names @param {Map<string,import("astro").MarkdownHeading[]>} headings @param {boolean} math @param {Map<string,string[]>} blocks */
-async function render(raw, names = new Map(), headings = new Map(), math = true, blocks = new Map(), metadata = []) {
+async function render(raw, names = new Map(), headings = new Map(), math = true, blocks = new Map(), metadata = [], options = {}) {
   if(parseFrontmatter(raw).frontmatter['excalidraw-plugin'] || raw.trimStart().startsWith('{')){
     try{
       const scene=await parseExcalidraw(raw,vaultAssets);
@@ -82,7 +82,15 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
         blockIds.push(found[1]);
       });
       visit(tree, (node) => {
-        if (node.type === 'link' || node.type === 'image' || node.type === 'definition') {
+        if (node.type === 'link') {
+          if (options?.linkResolver && node.url && !/^(https?|mailto|ftp):/i.test(node.url)) {
+            const resolved = options.linkResolver(node.url);
+            if (resolved) {
+              node.url = resolved;
+            }
+          }
+          node.url = sanitizeUri(node.url, /^(https?|mailto)$/i) ? node.url : '';
+        } else if (node.type === 'image' || node.type === 'definition') {
           node.url = sanitizeUri(node.url, /^(https?|mailto)$/i) ? node.url : '';
         }
         if (node.type === 'code' && ['geogebra','ggb'].includes(node.lang?.toLowerCase() ?? '')) {
@@ -102,6 +110,17 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
           let rawValue = node.value || '';
           let [targetPart, anchor] = rawValue.split('#');
           let cleanTarget = targetPart.replace(/[\s\\\/]+$/, '').trim().replace(/\.md$/, '');
+          if (options?.linkResolver) {
+            const resolvedUrl = options.linkResolver(rawValue) || options.linkResolver(cleanTarget);
+            if (resolvedUrl) {
+              node.data.hName = 'a';
+              node.data.hProperties = { href: resolvedUrl, className: ['wiki-link'] };
+              if (node.data.hChildren?.[0]?.value) {
+                node.data.hChildren[0].value = node.data.hChildren[0].value.replace(/^[\s\\\|]+|[\s\\\|]+$/g, '').trim();
+              }
+              return;
+            }
+          }
           if(node.data.embed){
             const image=resolveVaultImage(cleanTarget,vaultAssets);
             if(image){
@@ -193,8 +212,8 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
   return { html: String(file), referencePreviews, previewHtml: String(file.data.previewHtml), blocks:blockIds, headings: file.data.astro?.headings ?? [], outgoing: [...new Set(outgoing)] };
 }
 
-/** @param {string} raw */
-export async function renderMarkdown(raw) { return (await render(raw)).html; }
+/** @param {string} raw @param {any} [options] */
+export async function renderMarkdown(raw, options = {}) { return (await render(raw, undefined, undefined, true, undefined, [], options)).html; }
 
 /** @param {Note[]} notes */
 export function noteMetadata(notes) {
