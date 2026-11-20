@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useState,useRef} from 'react';
 import {AssistantRuntimeProvider,useLocalRuntime,ThreadPrimitive,MessagePrimitive,ComposerPrimitive,ErrorPrimitive,useMessagePartText,type ChatModelAdapter} from '@assistant-ui/react';
 import {DirectionProvider} from '@base-ui/react/direction-provider';
 import {Send,Square,Sparkles} from 'lucide-react';
@@ -79,6 +79,7 @@ function UserMarkdownText() {
 export default function StudyAssistant({slug}:{slug:string}){
  const [selection,setSelection]=useState('');
  const [source,setSource]=useState<HTMLElement|null>(null);
+ const conversationIdRef = useRef<string>('');
  const adapter=useMemo<ChatModelAdapter>(()=>({async *run({messages,abortSignal}){
   const activeSource = source || document.querySelector<HTMLElement>('[data-ai-scope]') || document.querySelector<HTMLElement>('article.note');
   if(activeSource?.dataset.aiDirty==='true')throw new Error('ابتدا تغییرها را ذخیره کنید.');
@@ -104,13 +105,16 @@ export default function StudyAssistant({slug}:{slug:string}){
     throw new Error(detail || (r.status===401?'وارد حساب شوید.':r.status===503?'دستیار فعلاً پیکربندی نشده یا در دسترس نیست.':'دریافت پاسخ ناموفق بود.'));
   }
   let text='';let failure:unknown;let done=false;const queue:string[]=[];
-  const pump=consumeTutorStream(r.body,(event,data)=>{if(event==='text'){text+=data;queue.push(text);}}).catch(e=>{failure=e}).finally(()=>{done=true});
+  const pump=consumeTutorStream(r.body,(event,data)=>{
+    if(event==='text'){text+=data;queue.push(text);}
+    else if(event==='conversation'&&data?.id){conversationIdRef.current=String(data.id);}
+  }).catch(e=>{failure=e}).finally(()=>{done=true});
   while(!done||queue.length){if(abortSignal.aborted)break;if(queue.length){yield {content:[{type:'text',text:queue.shift()!}]};}else await new Promise(resolve=>setTimeout(resolve,25));}
   await pump;if(failure)throw failure;
  }}),[slug,source,selection]);
  const runtime=useLocalRuntime(adapter);
  useEffect(()=>{function select(){const s=window.getSelection();if(!s?.rangeCount||s.isCollapsed)return;const r=s.getRangeAt(0);const e=r.commonAncestorContainer instanceof Element?r.commonAncestorContainer:r.commonAncestorContainer.parentElement;const a=e?.closest<HTMLElement>('[data-ai-scope]');if(a&&a.contains(r.startContainer)&&a.contains(r.endContainer)){runtime.thread.cancelRun();setSelection(s.toString());setSource(a);}}
- function clear(){runtime.thread.cancelRun();runtime.thread.reset();setSelection('');setSource(null);}
+ function clear(){runtime.thread.cancelRun();runtime.thread.reset();setSelection('');setSource(null);conversationIdRef.current='';}
  document.addEventListener('selectionchange',select);document.addEventListener('garden:context-change',clear);return()=>{document.removeEventListener('selectionchange',select);document.removeEventListener('garden:context-change',clear);};},[runtime]);
  return <DirectionProvider direction="rtl"><AssistantRuntimeProvider runtime={runtime}><section className="study-assistant" aria-label="دستیار مطالعه"><header><Sparkles size={18}/><strong>دستیار مطالعه</strong></header><p className="assistant-hint">دربارهٔ بخشی از همین جزوه یا کل یادداشت بپرسید.</p>{selection&&<button className="assistant-selection" onClick={()=>{setSelection('');setSource(null);runtime.thread.cancelRun();}}>متن انتخابی: {selection.slice(0,95)} · حذف</button>}<ThreadPrimitive.Root><ThreadPrimitive.Viewport className="assistant-messages"><ThreadPrimitive.Empty><p>پرسش خود دربارهٔ این یادداشت را بنویسید (یا بخشی از متن را با موس انتخاب کنید).</p></ThreadPrimitive.Empty><ThreadPrimitive.Messages components={{UserMessage:()=> <MessagePrimitive.Root className="assistant-user"><MessagePrimitive.Content components={{ Text: UserMarkdownText }} /></MessagePrimitive.Root>,AssistantMessage:()=> <MessagePrimitive.Root className="assistant-response"><MessagePrimitive.Content components={{ Text: AssistantMarkdownText }} /><MessagePrimitive.Error><p role="alert" className="text-destructive text-sm leading-relaxed p-2"><ErrorPrimitive.Message /></p></MessagePrimitive.Error></MessagePrimitive.Root>}}/></ThreadPrimitive.Viewport><ComposerPrimitive.Root className="assistant-composer"><ComposerPrimitive.Input placeholder="این بخش را ساده‌تر توضیح بده…" aria-label="پرسش از دستیار"/><div><ComposerPrimitive.Send aria-label="ارسال پرسش"><Send size={18}/></ComposerPrimitive.Send><ComposerPrimitive.Cancel aria-label="توقف پاسخ"><Square size={16}/></ComposerPrimitive.Cancel></div></ComposerPrimitive.Root></ThreadPrimitive.Root></section></AssistantRuntimeProvider></DirectionProvider>;
 }

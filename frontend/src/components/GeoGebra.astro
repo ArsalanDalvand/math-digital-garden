@@ -78,7 +78,12 @@
           };
           window.addEventListener('message',receive);cleanup=()=>{window.removeEventListener('message',receive);const idx=activeFigures.indexOf(figure);if(idx!==-1)activeFigures.splice(idx,1);};
           // A different hostname isolates private DOM/cookies while allowing GeoGebra's nested frames.
-          const origin=viewerOrigin(location.origin,import.meta.env.PUBLIC_GEOGEBRA_VIEWER_ORIGIN);
+          let origin = location.origin;
+          try {
+            origin = viewerOrigin(location.origin, import.meta.env.PUBLIC_GEOGEBRA_VIEWER_ORIGIN);
+          } catch {
+            origin = location.origin;
+          }
           frame.src=origin+'/drawings/geogebra';
           frame.addEventListener('load',()=>frame.contentWindow?.postMessage({type:'garden:geogebra:init',config,token},origin),{once:true});
           figure.querySelector('[data-geogebra-host]')!.replaceChildren(frame);button.textContent='بارگذاری دوباره';

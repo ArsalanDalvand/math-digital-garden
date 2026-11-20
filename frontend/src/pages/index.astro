@@ -1,26 +1,557 @@
 ---
 import Reader from '../layouts/Reader.astro';
+import {BookOpen, Search, Sparkles, Share2, Compass, Layers, ArrowLeft} from 'lucide-react';
 export const prerender = true;
 const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
 ---
 <Reader title={brandName}>
-  <section class="garden-intro" data-od-id="reading-intro" aria-label="شروع مطالعه">
-    <p class="garden-lead">از یک تعریف تا یک برهان؛ یادداشت‌های به‌هم‌پیوسته را با سرعت خودتان بخوانید. برای شروع مطالعه نیازی به حساب کاربری نیست.</p>
-    <div class="garden-entry-actions">
-      <a class="garden-primary" href="/sample" data-od-id="start-reading">شروع با نمونهٔ مطالعه</a>
-      <a href="/search" data-od-id="browse-notes">مرور همهٔ یادداشت‌ها ←</a>
-    </div>
-  </section>
-  <section class="garden-discovery" data-od-id="discover-notes" aria-labelledby="discover-title">
-    <h2 id="discover-title" data-od-id="discover-heading">دنبال چه مفهومی هستید؟</h2>
-    <form action="/search" role="search" class="garden-home-search" data-od-id="home-search">
-      <label for="home-query">عنوان یا عبارت موردنظر</label>
-      <div><input id="home-query" name="q" type="search" maxlength="200" placeholder="مثلاً کانتور یا مجموعه‌ها" data-od-id="search-query" /><button type="submit" data-od-id="search-submit">جست‌وجو</button></div>
-    </form>
-  </section>
-  <section class="garden-guide" data-od-id="reading-guide" aria-label="راهنمای استفاده">
-    <article data-od-id="guide-reading"><h3>از متن شروع کنید</h3><p>تعریف‌ها و قضایا را بخوانید؛ برهان را وقتی آماده‌اید باز کنید.</p></article>
-    <article data-od-id="guide-connections"><h3>به پیش‌نیازها برگردید</h3><p>پیوندهای درون یادداشت، راهی برای فهم مفهوم‌های مرتبط هستند.</p></article>
-    <article data-od-id="guide-personal"><h3>توضیح خودتان را اضافه کنید</h3><p>با ورود به حساب، نسخهٔ شخصی بسازید؛ متن اصلی دست‌نخورده می‌ماند.</p><a href="/library">رفتن به کتابخانه ←</a></article>
-  </section>
+  <div class="home-container">
+    <!-- Hero / Lead -->
+    <header class="home-hero">
+      <div class="hero-badge">
+        <Sparkles size={14} class="hero-badge-icon" aria-hidden="true" />
+        <span>سامانه جامع آموزش و یادگیری تعاملی ریاضیات</span>
+      </div>
+      <h1 class="hero-title">{brandName}</h1>
+      <p class="hero-lead">
+        یادداشت‌های اتمیک، برهان‌های دقیق بدون پرش، تجسم‌های تعاملی جئوجبرا و دستیار هوشمند مقید به متن برای درک عمیق ریاضیات دانشگاهی.
+      </p>
+      <div class="hero-actions">
+        <a class="garden-primary" href="/sample">شروع با نمونهٔ مطالعه</a>
+      </div>
+    </header>
+
+    <!-- Specialized Knowledge Bases -->
+    <section class="kb-section" aria-labelledby="kb-heading">
+      <div class="section-header">
+        <h2 id="kb-heading" class="section-title">پایگاه‌های دانش تخصصی</h2>
+        <p class="section-subtitle">مخازن و جزوات ساختاریافته متصل به گراف مفاهیم و یادداشت‌های اتمیک</p>
+      </div>
+
+      <div class="kb-grid">
+        <!-- Card 1: Linear Algebra Axler (Active) -->
+        <article class="kb-card active-card">
+          <div class="card-glow" aria-hidden="true"></div>
+          <div class="card-header">
+            <span class="badge active-badge">فعال · ۲۲۳ یادداشت</span>
+            <span class="card-tag">ویرایش چهارم ۲۰۲۴</span>
+          </div>
+          <h3 class="card-title">
+            <a href="/notes/axler-2debc85d452ad205">جبر خطی آکسلر (Linear Algebra Done Right)</a>
+          </h3>
+          <p class="card-desc">
+            مرجع کامل مفاهیم، قضایا، برهان‌های ریاضی و تمرینات کتاب آکسلر، شامل فضاهای برداری، پایه‌ها و بعد، ترکیب‌های خطی، زیرفضاها، جمع مستقیم و فرمول گراسمان.
+          </p>
+          <div class="card-actions">
+            <a href="/notes/axler-2debc85d452ad205" class="action-btn primary-btn">
+              <Compass size={14} aria-hidden="true" />
+              <span>نقشه راه جامع</span>
+            </a>
+            <a href="/notes/axler-e4a02d4295df7fb9" class="action-btn secondary-btn">فصل ۱: فضاهای برداری</a>
+            <a href="/notes/axler-e3c2143b75ca96b1" class="action-btn secondary-btn">فصل ۲: بعد متناهی</a>
+            <a href="/notes/axler-9bafd064aa1cbbd2" class="action-btn secondary-btn">حل تمرینات</a>
+            <a href="/notes/axler-a354fd365fa3e3ed" class="action-btn secondary-btn">تجسم‌های هندسی</a>
+          </div>
+        </article>
+
+        <!-- Card 2: Foundations of Math (Coming Soon) -->
+        <article class="kb-card coming-card">
+          <div class="card-header">
+            <span class="badge coming-badge">به‌زودی</span>
+          </div>
+          <h3 class="card-title">مبانی ریاضیات و منطق</h3>
+          <p class="card-desc">
+            نظریه اصول موضوعی مجموعه‌ها، استدلال و منطق ریاضی، سورها، حساب گزاره‌ها، روابط هم‌ارزی، توابع، شمارایی و ساختارهای بنیادین.
+          </p>
+          <div class="coming-status">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span>در حال آماده‌سازی و اتصال مخزن...</span>
+          </div>
+        </article>
+
+        <!-- Card 3: Calculus 3 (Coming Soon) -->
+        <article class="kb-card coming-card">
+          <div class="card-header">
+            <span class="badge coming-badge">به‌زودی</span>
+          </div>
+          <h3 class="card-title">ریاضی ۳ و حساب دیفرانسیل</h3>
+          <p class="card-desc">
+            حساب دیفرانسیل و انتگرال چندمتغیره، میدان‌های برداری، سری‌های نامتناهی، انتگرال‌های روی خط و سطح، قضایای گرین، استوکس و دیورژانس.
+          </p>
+          <div class="coming-status">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span>در حال آماده‌سازی و اتصال مخزن...</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Search Section -->
+    <section class="home-search-section" aria-labelledby="discover-title">
+      <h2 id="discover-title" class="discover-heading">دنبال چه قضیه یا مفهومی هستید؟</h2>
+      <form action="/search" role="search" class="home-search-form">
+        <label for="home-query" class="sr-only">جست‌وجوی مفهوم، قضیه یا تعریف</label>
+        <div class="search-bar">
+          <Search size={18} aria-hidden="true" class="search-bar-icon" />
+          <input
+            id="home-query"
+            name="q"
+            type="search"
+            maxlength="200"
+            placeholder="مثلاً فضای برداری، قضیه بعد، استقلال خطی، جمع مستقیم، کانتور..."
+            autocomplete="off"
+          />
+          <button type="submit" class="search-submit-btn">جست‌وجو</button>
+        </div>
+        <div class="quick-tags">
+          <span class="quick-tags-title">کلیدواژه‌های پرکاربرد:</span>
+          <div class="tags-list">
+            <a href="/search?q=%D9%81%D8%B6%D8%A7%DB%8C+%D8%A8%D8%B1%D8%AF%D8%A7%D8%B1%DB%8C">#فضای_برداری</a>
+            <a href="/search?q=%D9%BE%D8%A7%DB%8C%D9%87+%D9%88+%D8%A8%D8%B9%D8%AF">#پایه_و_بعد</a>
+            <a href="/search?q=%D8%A7%D8%B3%D8%AA%D9%82%D9%84%D8%A7%D9%84+%D8%AE%D8%B7%DB%8C">#استقلال_خطی</a>
+            <a href="/search?q=%D8%AC%D9%85%D8%B9+%D9%85%D8%B3%D8%AA%D9%82%DB%8C%D9%85">#جمع_مستقیم</a>
+            <a href="/search?q=%D8%B2%DB%8C%D8%B1%D9%81%D8%B6%D8%A7">#زیرفضا</a>
+            <a href="/search?q=%DA%AF%D8%B1%D8%A7%D8%B3%D9%85%D8%A7%D9%86">#فرمول_گراسمان</a>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- Key Features / Benefits -->
+    <section class="features-section" aria-label="ویژگی‌های باغ ریاضی">
+      <div class="features-grid">
+        <article class="feature-card">
+          <div class="feature-icon-box">
+            <BookOpen size={22} aria-hidden="true" />
+          </div>
+          <h3 class="feature-title">یادداشت‌های اتمیک و ساختاریافته</h3>
+          <p class="feature-desc">
+            از تعاریف و اصول موضوعه تا قضایای پیشرفته، به تفکیک و قابل ارجاع با فرمول‌نویسی دوطرفه و اثبات بدون پرش محاسباتی.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon-box">
+            <Share2 size={22} aria-hidden="true" />
+          </div>
+          <h3 class="feature-title">پیوندهای دوطرفه و گراف مفهومی</h3>
+          <p class="feature-desc">
+            مشاهده نقشه ارتباط میان قضایا، بک‌لینک‌ها و درک توالی پیش‌نیازها به همراه پیش‌نمایش شناور یادداشت‌ها.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <div class="feature-icon-box">
+            <Sparkles size={22} aria-hidden="true" />
+          </div>
+          <h3 class="feature-title">دستیار هوش مصنوعی و نسخه شخصی</h3>
+          <p class="feature-desc">
+            امکان پرسش و رفع اشکال حین مطالعه با دستیار متصل به پایگاه دانش، و ایجاد نسخه و یادداشت‌های شخصی.
+          </p>
+        </article>
+      </div>
+    </section>
+  </div>
 </Reader>
+
+<style>
+.home-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2.75rem;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem 0.5rem 3rem;
+}
+
+.home-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--sl-color-accent-high, #60a5fa);
+  background: var(--sl-color-accent-low, rgba(59, 130, 246, 0.12));
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 9999px;
+  padding: 4px 12px;
+}
+
+.hero-badge-icon {
+  color: var(--sl-color-accent, #3b82f6);
+}
+
+.hero-title {
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--sl-color-text, #f3f4f6);
+}
+
+.hero-lead {
+  font-size: 1.05rem;
+  line-height: 1.85;
+  color: var(--sl-color-gray-2, #9ca3af);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* Section Header */
+.section-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+  color: var(--sl-color-text, #f3f4f6);
+}
+
+.section-subtitle {
+  font-size: 0.9rem;
+  color: var(--sl-color-gray-3, #6b7280);
+  margin: 0;
+}
+
+/* KB Grid */
+.kb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1.25rem;
+}
+
+.kb-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.4rem;
+  border-radius: 14px;
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.08));
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+
+.active-card {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: 0 4px 20px -2px rgba(59, 130, 246, 0.1);
+}
+
+.active-card:hover {
+  border-color: var(--sl-color-accent, #3b82f6);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px -4px rgba(59, 130, 246, 0.2);
+}
+
+.coming-card {
+  opacity: 0.82;
+  border-style: dashed;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.active-badge {
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.16);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.coming-badge {
+  color: var(--sl-color-gray-3, #9ca3af);
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.06));
+}
+
+.card-tag {
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3, #9ca3af);
+}
+
+.card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+  line-height: 1.45;
+}
+
+.card-title a {
+  color: var(--sl-color-text, #f3f4f6);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.card-title a:hover {
+  color: var(--sl-color-accent-high, #60a5fa);
+}
+
+.card-desc {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--sl-color-gray-2, #9ca3af);
+  margin: 0 0 1.25rem;
+  flex: 1;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.action-btn {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.primary-btn {
+  background: var(--sl-color-accent, #3b82f6);
+  color: #fff;
+  font-weight: 600;
+}
+
+.primary-btn:hover {
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondary-btn {
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.06));
+  color: var(--sl-color-gray-2, #d1d5db);
+  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.08));
+}
+
+.secondary-btn:hover {
+  background: var(--sl-color-gray-5, rgba(255, 255, 255, 0.12));
+  color: var(--sl-color-text, #fff);
+}
+
+.coming-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--sl-color-gray-3, #9ca3af);
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Search Section */
+.home-search-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.25rem;
+  padding: 2.25rem 1.5rem;
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+}
+
+.discover-heading {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--sl-color-text, #f3f4f6);
+}
+
+.home-search-form {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+:global(.search-bar-icon) {
+  position: absolute;
+  inset-inline-start: 14px;
+  color: var(--sl-color-gray-3, #9ca3af);
+  pointer-events: none;
+}
+
+.search-bar input {
+  width: 100%;
+  height: 46px;
+  padding: 8px 16px;
+  padding-inline-start: 42px;
+  padding-inline-end: 90px;
+  border-radius: 10px;
+  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.12));
+  background: var(--sl-color-bg, #09090b);
+  color: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-bar input:focus {
+  border-color: var(--sl-color-accent, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.search-submit-btn {
+  position: absolute;
+  inset-inline-end: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 7px;
+  border: 0;
+  background: var(--sl-color-text, #fff);
+  color: var(--sl-color-bg, #09090b);
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.search-submit-btn:hover {
+  opacity: 0.9;
+}
+
+.quick-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.quick-tags-title {
+  color: var(--sl-color-gray-3, #9ca3af);
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tags-list a {
+  color: var(--sl-color-accent-high, #60a5fa);
+  text-decoration: none;
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.05));
+  padding: 2px 8px;
+  border-radius: 5px;
+  transition: all 0.15s ease;
+}
+
+.tags-list a:hover {
+  background: var(--sl-color-accent-low, rgba(59, 130, 246, 0.15));
+}
+
+/* Features Section */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.feature-card {
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.06));
+}
+
+.feature-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--sl-color-accent-low, rgba(59, 130, 246, 0.12));
+  color: var(--sl-color-accent-high, #60a5fa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.85rem;
+}
+
+.feature-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--sl-color-text, #f3f4f6);
+}
+
+.feature-desc {
+  font-size: 0.84rem;
+  line-height: 1.7;
+  color: var(--sl-color-gray-2, #9ca3af);
+  margin: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@media (max-width: 640px) {
+  .hero-title {
+    font-size: 1.85rem;
+  }
+  .kb-grid {
+    grid-template-columns: 1fr;
+  }
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
