@@ -16,6 +16,7 @@ import {parseGeoGebra,resolveVaultImage} from './obsidian-plugins.mjs';
 import { findAndReplace } from 'mdast-util-find-and-replace';
 import rehypeParse from 'rehype-parse';
 import vaultAssets from './vault-assets.json' with { type: 'json' };
+import { UMKO_RELATIONS } from './umko.mjs';
 
 function stripObsidianComments(content) {
   const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g);
@@ -494,6 +495,14 @@ async function deriveKnowledge(notes) {
           targetNote.reverseRelations[relKey] ??= [];
           if (!targetNote.reverseRelations[relKey].includes(source.slug)) {
             targetNote.reverseRelations[relKey].push(source.slug);
+          }
+          const revKey = UMKO_RELATIONS[relKey]?.reverseKey;
+          if (revKey && revKey !== relKey) {
+            Object.defineProperty(targetNote.reverseRelations, revKey, {
+              get() { return targetNote.reverseRelations[relKey]; },
+              enumerable: false,
+              configurable: true
+            });
           }
         }
       }

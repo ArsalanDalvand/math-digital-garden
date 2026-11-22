@@ -20,7 +20,7 @@ const config = {
   tagStyles: {
     '#kind:assertion': { shape: 'circle', shapeSize: 9, shapeColor: '#1d4ed8', strokeColor: '#60a5fa', strokeWidth: 1.5 },
     '#kind:concept': { shape: 'circle', shapeSize: 9, shapeColor: '#0d9488', strokeColor: '#2dd4bf', strokeWidth: 1.5 },
-    '#kind:proof': { shape: 'circle', shapeSize: 8, shapeColor: '#475569', strokeColor: '#94a3b8', strokeWidth: 1.5 },
+    '#kind:proof': { shape: 'circle', shapeSize: 8, shapeColor: '#64748b', strokeColor: '#94a3b8', strokeWidth: 1.5 },
     '#kind:problem': { shape: 'circle', shapeSize: 9, shapeColor: '#ea580c', strokeColor: '#fb923c', strokeWidth: 1.5 },
     '#kind:solution': { shape: 'circle', shapeSize: 8, shapeColor: '#059669', strokeColor: '#34d399', strokeWidth: 1.5 },
     '#kind:technique': { shape: 'circle', shapeSize: 8, shapeColor: '#d97706', strokeColor: '#fbbf24', strokeWidth: 1.5 },
@@ -96,7 +96,11 @@ const config = {
   function nameGraph(graph: HTMLElement) {
     graph.style.opacity='0';setTimeout(()=>{if(graph.isConnected){fitGraph(graph);graph.style.opacity='1';}},1800);
     const nameControls = () => {
-      const actions: string[] = JSON.parse(graph.dataset.config ?? '{}').actions ?? ['fullscreen','depth','reset-zoom','render-arrows','settings'];
+      let actions: string[] = ['fullscreen','depth','reset-zoom','render-arrows','settings'];
+      try {
+        const parsed = JSON.parse(graph.dataset.config ?? '{}');
+        if (Array.isArray(parsed.actions)) actions = parsed.actions;
+      } catch {}
       graph.querySelectorAll<HTMLButtonElement>('.slsg-graph-action-button').forEach((button,index) => {
         const action = actions[index];
         button.type = 'button';
