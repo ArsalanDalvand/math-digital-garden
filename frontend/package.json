@@ -9,7 +9,7 @@
     "astro": "astro",
     "check": "astro check",
     "tsc": "tsc --noEmit",
-    "test": "node --test --test-isolation=none ../tests/frontend/*.test.mjs",
+    "test": "node --test ../tests/frontend/*.test.mjs",
     "test:reader": "node --test --test-isolation=none ../tests/integration/reader.test.mjs"
   },
   "dependencies": {
