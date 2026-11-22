@@ -3,27 +3,57 @@ import Reader from '../layouts/Reader.astro';
 import { fetchCatalogue } from '../lib/catalogue.mjs';
 import { paginateCatalogue, cataloguePageHref } from '../lib/catalogue-pagination.mjs';
 import { noteMetadata, noteHref } from '../lib/markdown.mjs';
+import { UMKO_KINDS, UMKO_TRACKS, UMKO_LEVELS } from '../lib/umko.mjs';
 const q = Astro.url.searchParams.get('q') ?? '';
 const tag = Astro.url.searchParams.get('tag') ?? '';
+const track = Astro.url.searchParams.get('track') ?? '';
+const kind = Astro.url.searchParams.get('kind') ?? '';
 let notes: ReturnType<typeof noteMetadata> = [];
 let message = '';
 if(q.length > 200 || tag.length > 200) { Astro.response.status=400; message='عبارت جست‌وجو بیش از حد طولانی است.'; }
 else try { notes=noteMetadata(await fetchCatalogue(q)); } catch {Astro.response.status=503; message='دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';}
 const tags=[...new Set([...notes.flatMap((note)=>note.tags), ...(tag ? [tag] : [])])].sort();
-const results=tag ? notes.filter((note)=>note.tags.includes(tag)) : notes;
+const availableTracks=[...new Set(notes.flatMap((n)=>Array.isArray(n.tracks) ? n.tracks : []))].sort();
+const availableKinds=[...new Set(notes.map((n)=>n.kind).filter(Boolean))].sort();
+
+let results = notes;
+if (tag) results = results.filter((note) => note.tags.includes(tag));
+if (track) results = results.filter((note) => Array.isArray(note.tracks) && note.tracks.includes(track));
+if (kind) results = results.filter((note) => note.kind === kind);
+
 const pagination = paginateCatalogue(results, Astro.url.searchParams.get('page') ?? '1');
-const retryHref = `/search?${new URLSearchParams({ q, tag }).toString()}`;
+const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toString()}`;
 ---
-<Reader title="جست‌وجو و برچسب‌ها">
-  <p id="search-help">از عنوان یا متن جست‌وجو کنید و با برچسب، موضوع را محدود کنید. مطالعهٔ یادداشت‌ها به حساب نیاز ندارد.</p>
+<Reader title="جست‌وجو و پایگاه دانش">
+  <p id="search-help">از عنوان یا متن جست‌وجو کنید و با برچسب، نوع سند یا مسیر مطالعه، موضوع را محدود کنید. مطالعهٔ یادداشت‌ها به حساب نیاز ندارد.</p>
   <form action="/search" role="search" class="garden-panel garden-stack" data-od-id="catalogue-search" aria-describedby="search-help">
     <div class="garden-field">
     <label for="query">عنوان یا متن یادداشت</label>
     <input id="query" type="search" name="q" maxlength="200" value={q} />
     </div>
-    <div class="garden-field">
-    <label for="tag">برچسب</label>
-    <select id="tag" name="tag"><option value="">همه</option>{tags.map((item)=><option value={item} selected={item===tag}>{item}</option>)}</select>
+    <div class="search-filters-grid">
+      <div class="garden-field">
+        <label for="tag">برچسب</label>
+        <select id="tag" name="tag"><option value="">همهٔ برچسب‌ها</option>{tags.map((item)=><option value={item} selected={item===tag}>{item}</option>)}</select>
+      </div>
+      {availableTracks.length > 0 && (
+        <div class="garden-field">
+          <label for="track">مسیر مطالعه</label>
+          <select id="track" name="track">
+            <option value="">همهٔ مسیرها</option>
+            {availableTracks.map((t)=><option value={t} selected={t===track}>{UMKO_TRACKS[t] || t}</option>)}
+          </select>
+        </div>
+      )}
+      {availableKinds.length > 0 && (
+        <div class="garden-field">
+          <label for="kind">نوع سند (UMKO)</label>
+          <select id="kind" name="kind">
+            <option value="">همهٔ انواع</option>
+            {availableKinds.map((k)=><option value={k} selected={k===kind}>{UMKO_KINDS[k]?.label || k}</option>)}
+          </select>
+        </div>
+      )}
     </div>
     <div class="garden-row">
       <button class="garden-button-primary" type="submit" data-od-id="search-submit">جست‌وجو</button>
@@ -38,6 +68,12 @@ const retryHref = `/search?${new URLSearchParams({ q, tag }).toString()}`;
       <p role="status">{results.length ? `${results.length.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}</p>
       {results.length ? <ul class="catalogue-list">{pagination.items.map((note)=><li class="garden-panel" data-od-id={`search-note-${note.slug}`}>
         <h2><a href={noteHref(note.slug)}>{note.title}</a></h2>
+        {note.slogan_fa && <p class="note-slogan-search">«{note.slogan_fa}»</p>}
+        <div class="note-result-badges">
+          {note.kind && <span class="badge-mini" style={`color: ${UMKO_KINDS[note.kind]?.color || 'inherit'}`}>{UMKO_KINDS[note.kind]?.label || note.kind}</span>}
+          {note.level && <span class="badge-mini">🎓 {UMKO_LEVELS[note.level]?.label || note.level}</span>}
+          {note.tracks?.map((t: string) => <span class="badge-mini">🎯 {UMKO_TRACKS[t] || t}</span>)}
+        </div>
         {note.tags.length > 0 && <p class="note-summary">موضوع: {note.tags.join('، ')}</p>}
       </li>)}</ul> : <p>عبارت کوتاه‌تر یا برچسب دیگری انتخاب کنید. برای آشنایی با محیط می‌توانید <a href="/sample">یادداشت نمونه را بخوانید</a>.</p>}
       {pagination.pages > 1 && <nav class="garden-row catalogue-pagination" aria-label="صفحه‌های نتایج" data-od-id="catalogue-pagination">
@@ -50,9 +86,13 @@ const retryHref = `/search?${new URLSearchParams({ q, tag }).toString()}`;
 </Reader>
 <style>
   section { margin-block-start: var(--space-8); }
+  .search-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
   .catalogue-list { display: grid; gap: var(--space-4); padding: 0; list-style: none; }
   .catalogue-list h2 { margin: 0; font-size: 1.125rem; }
-  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted); overflow-wrap: anywhere; }
+  .note-slogan-search { margin-block: var(--space-1) var(--space-2); font-size: 0.9rem; color: var(--sl-color-text-accent, var(--accent)); font-style: italic; }
+  .note-result-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: var(--space-1); }
+  .badge-mini { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); }
+  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted); overflow-wrap: anywhere; font-size: 0.85rem; }
   form select { inline-size: 100%; }
   .catalogue-pagination { justify-content: space-between; margin-block: var(--space-6); }
   .catalogue-pagination a { min-block-size: var(--control-height); display: inline-flex; align-items: center; }

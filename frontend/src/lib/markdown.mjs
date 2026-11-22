@@ -372,7 +372,43 @@ export async function renderMarkdown(raw, options = {}) { return (await render(r
 export function noteMetadata(notes) {
   return notes.map((note) => {
     const { frontmatter } = parseFrontmatter(note.current_content);
-    return { ...note, tags: strings(frontmatter.tags), aliases: strings(frontmatter.aliases), order: Number(frontmatter.sidebar?.order) || 0 };
+    const relations = {};
+    for (const [k, v] of Object.entries(frontmatter)) {
+      if (k.startsWith('rel_') && Array.isArray(v)) {
+        relations[k] = v.map(String).map(s => s.replace(/^\[\[(.*)\]\]$/, '$1').split('|')[0].trim()).filter(Boolean);
+      }
+    }
+    return {
+      ...note,
+      uid: typeof frontmatter.uid === 'string' ? frontmatter.uid : '',
+      kind: typeof frontmatter.kind === 'string' ? frontmatter.kind : '',
+      subtype: typeof frontmatter.subtype === 'string' ? frontmatter.subtype : '',
+      status: typeof frontmatter.status === 'string' ? frontmatter.status : 'canonical',
+      schema_version: typeof frontmatter.schema_version === 'string' ? frontmatter.schema_version : '',
+      title_fa: typeof frontmatter.title_fa === 'string' ? frontmatter.title_fa : note.title,
+      title_en: typeof frontmatter.title_en === 'string' ? frontmatter.title_en : '',
+      slogan_fa: typeof frontmatter.slogan_fa === 'string' ? frontmatter.slogan_fa : '',
+      slogan_en: typeof frontmatter.slogan_en === 'string' ? frontmatter.slogan_en : '',
+      msc_primary: typeof frontmatter.msc_primary === 'string' ? frontmatter.msc_primary : '',
+      msc_secondary: strings(frontmatter.msc_secondary),
+      tracks: strings(frontmatter.tracks),
+      theory_scope: typeof frontmatter.theory_scope === 'string' ? frontmatter.theory_scope : '',
+      level: typeof frontmatter.level === 'string' ? frontmatter.level : '',
+      bloom_cognitive: typeof frontmatter.bloom_cognitive === 'string' ? frontmatter.bloom_cognitive : '',
+      bloom_knowledge: typeof frontmatter.bloom_knowledge === 'string' ? frontmatter.bloom_knowledge : '',
+      dok: typeof frontmatter.dok === 'number' ? frontmatter.dok : undefined,
+      sources: strings(frontmatter.sources),
+      authors: strings(frontmatter.authors),
+      created: typeof frontmatter.created === 'string' ? frontmatter.created : '',
+      updated: typeof frontmatter.updated === 'string' ? frontmatter.updated : '',
+      superseded_by: typeof frontmatter.superseded_by === 'string' ? frontmatter.superseded_by.replace(/^\[\[(.*)\]\]$/, '$1').trim() : '',
+      tags: strings(frontmatter.tags),
+      aliases: strings(frontmatter.aliases),
+      order: Number(frontmatter.sidebar?.order) || 0,
+      relations,
+      resolvedRelations: /** @type {Record<string, string[]>} */ ({}),
+      reverseRelations: /** @type {Record<string, string[]>} */ ({})
+    };
   });
 }
 
@@ -428,6 +464,40 @@ async function deriveKnowledge(notes) {
   for(const note of garden){
     const tree=structuredClone(trees.get(note.slug));
     if(tree){expandEmbeds(tree,trees,[note.slug]);note.html=unified().use(rehypeStringify).stringify(tree);}
+  }
+  for (const note of garden) {
+    note.resolvedRelations = {};
+    note.reverseRelations = {};
+    for (const [relKey, targets] of Object.entries(note.relations || {})) {
+      const resolvedSlugs = [];
+      for (const t of targets) {
+        const clean = normalize(t.replace(/\.md$/, ''));
+        const candidates = names.get(clean);
+        if (candidates?.length === 1) {
+          resolvedSlugs.push(candidates[0]);
+          if (!note.outgoing.includes(candidates[0])) {
+            note.outgoing.push(candidates[0]);
+          }
+        }
+      }
+      if (resolvedSlugs.length) {
+        note.resolvedRelations[relKey] = resolvedSlugs;
+      }
+    }
+  }
+  for (const source of garden) {
+    for (const [relKey, targets] of Object.entries(source.resolvedRelations || {})) {
+      for (const targetSlug of targets) {
+        const targetNote = garden.find(n => n.slug === targetSlug);
+        if (targetNote) {
+          targetNote.reverseRelations ??= {};
+          targetNote.reverseRelations[relKey] ??= [];
+          if (!targetNote.reverseRelations[relKey].includes(source.slug)) {
+            targetNote.reverseRelations[relKey].push(source.slug);
+          }
+        }
+      }
+    }
   }
   for (const note of garden) note.backlinks = garden.filter((source) => source.outgoing.includes(note.slug)).map((source) => source.slug);
   return garden;

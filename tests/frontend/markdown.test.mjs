@@ -160,3 +160,61 @@ flowchart TD
   assert.match(html, /<kbd>Ctrl\+S<\/kbd>/);
   assert.match(html, /<u>زیرخط<\/u>/);
 });
+
+test('UMKO v1.1 YAML frontmatter: full metadata extraction and forward/reverse relations', async () => {
+  const { buildKnowledge } = await import('../../frontend/src/lib/markdown.mjs');
+  const note1 = {
+    slug: 'vector-space',
+    title: 'فضای برداری',
+    current_content: `---
+uid: "MK-04HE1N"
+kind: "concept"
+subtype: "structure"
+slug: "vector-space"
+status: "canonical"
+schema_version: "1.1.0"
+title_fa: "فضای برداری"
+title_en: "Vector Space"
+slogan_fa: "مجموعه‌ای مجهز به جمع و ضرب اسکالر."
+msc_primary: "15A03"
+tracks:
+  - "pure_university"
+level: "L3_undergrad_core"
+rel_requires:
+  - "[[field-axioms]]"
+tags:
+  - جبر_خطی
+---
+# فضای برداری
+`
+  };
+  const note2 = {
+    slug: 'field-axioms',
+    title: 'اصول میدان',
+    current_content: `---
+uid: "MK-01AX01"
+kind: "axiom"
+subtype: "foundational"
+slug: "field-axioms"
+status: "canonical"
+title_fa: "اصول میدان"
+slogan_fa: "اصول حاکم بر میدان‌های اسکالر."
+---
+# اصول میدان
+`
+  };
+
+  const garden = await buildKnowledge([note1, note2]);
+  const vs = garden.find(n => n.slug === 'vector-space');
+  const fa = garden.find(n => n.slug === 'field-axioms');
+
+  assert.equal(vs.uid, 'MK-04HE1N');
+  assert.equal(vs.kind, 'concept');
+  assert.equal(vs.subtype, 'structure');
+  assert.equal(vs.slogan_fa, 'مجموعه‌ای مجهز به جمع و ضرب اسکالر.');
+  assert.equal(vs.msc_primary, '15A03');
+  assert.deepEqual(vs.tracks, ['pure_university']);
+  assert.deepEqual(vs.resolvedRelations.rel_requires, ['field-axioms']);
+  assert.ok(vs.outgoing.includes('field-axioms'));
+  assert.deepEqual(fa.reverseRelations.rel_requires, ['vector-space']);
+});

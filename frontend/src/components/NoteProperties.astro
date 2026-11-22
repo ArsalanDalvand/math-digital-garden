@@ -1,0 +1,169 @@
+---
+import { UMKO_KINDS, UMKO_SUBTYPES, UMKO_LEVELS, UMKO_TRACKS, UMKO_STATUSES } from '../lib/umko.mjs';
+
+interface Props {
+  note: any;
+}
+
+const { note } = Astro.props;
+if (!note) return;
+
+const kindInfo = UMKO_KINDS[note.kind] || { label: note.kind, color: 'var(--sl-color-accent)' };
+const subtypeLabel = UMKO_SUBTYPES[note.subtype] || note.subtype;
+const levelInfo = UMKO_LEVELS[note.level] || (note.level ? { label: note.level } : null);
+const statusInfo = UMKO_STATUSES[note.status] || { label: note.status || 'نسخهٔ رسمی', color: 'var(--muted)' };
+const tracks = Array.isArray(note.tracks) ? note.tracks : [];
+const tags = Array.isArray(note.tags) ? note.tags : [];
+---
+
+<div class="note-properties" data-uid={note.uid}>
+  {note.status === 'deprecated' && (
+    <div class="note-deprecated-alert" role="alert">
+      <strong>⚠️ هشدار منسوخ‌شدن:</strong> این یادداشت طبق استاندارد پایگاه دانش منسوخ (Deprecated) شده است.
+      {note.superseded_by && (
+        <span> لطفاً به نسخهٔ جدید مراجعه کنید: <a href={`/notes/${encodeURIComponent(note.superseded_by)}`}>{note.superseded_by}</a></span>
+      )}
+    </div>
+  )}
+
+  {note.slogan_fa && (
+    <p class="note-slogan">
+      <span class="slogan-quote-mark" aria-hidden="true">«</span>
+      {note.slogan_fa}
+      <span class="slogan-quote-mark" aria-hidden="true">»</span>
+    </p>
+  )}
+
+  <div class="note-meta-strip">
+    {note.kind && (
+      <span class="meta-badge meta-badge-kind" style={`--badge-color: ${kindInfo.color}`}>
+        {subtypeLabel ? `${kindInfo.label} (${subtypeLabel})` : kindInfo.label}
+      </span>
+    )}
+
+    {levelInfo && (
+      <span class="meta-badge meta-badge-level" title="سطح آموزشی">
+        🎓 {levelInfo.label}
+      </span>
+    )}
+
+    {tracks.map((t: string) => (
+      <a class="meta-badge meta-badge-track" href={`/search?track=${encodeURIComponent(t)}`} title="مسیر مطالعه">
+        🎯 {UMKO_TRACKS[t] || t}
+      </a>
+    ))}
+
+    {note.msc_primary && (
+      <span class="meta-badge meta-badge-msc" title="کد رده‌بندی جهانی ریاضیات MSC2020">
+        📐 MSC {note.msc_primary}
+      </span>
+    )}
+
+    {note.status && (
+      <span class="meta-badge meta-badge-status" style={`--status-color: ${statusInfo.color}`}>
+        ● {statusInfo.label}
+      </span>
+    )}
+
+    {note.uid && (
+      <span class="meta-badge meta-badge-uid" title="شناسه پایدار یکتا">
+        #{note.uid}
+      </span>
+    )}
+
+    {note.title_en && (
+      <span class="meta-badge meta-badge-en" dir="ltr" title="International Mathematical Title">
+        {note.title_en}
+      </span>
+    )}
+
+    {tags.map((tag: string) => (
+      <a class="tag" href={`/search?tag=${encodeURIComponent(tag)}`}>#{tag}</a>
+    ))}
+  </div>
+</div>
+
+<style>
+  .note-properties {
+    margin-block: var(--space-3) var(--space-6);
+  }
+
+  .note-deprecated-alert {
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, #dc2626 12%, var(--surface));
+    border: 1px solid #dc2626;
+    color: var(--fg);
+    margin-block-end: 1rem;
+    font-size: 0.95rem;
+  }
+  .note-deprecated-alert a {
+    color: #dc2626;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  .note-slogan {
+    font-size: 1.1rem;
+    line-height: 1.85;
+    color: var(--sl-color-text-accent, var(--accent));
+    font-weight: 500;
+    margin-block: 0 var(--space-4);
+    padding-inline: 0.75rem;
+    border-inline-start: 3px solid var(--accent);
+  }
+  .slogan-quote-mark {
+    font-family: serif;
+    opacity: 0.6;
+  }
+
+  .note-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.825rem;
+    line-height: 1.5;
+  }
+
+  .meta-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    text-decoration: none;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .meta-badge-kind {
+    border-color: var(--badge-color);
+    color: var(--badge-color);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--badge-color) 8%, var(--surface));
+  }
+
+  .meta-badge-track:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .meta-badge-status {
+    color: var(--status-color);
+    border-color: color-mix(in srgb, var(--status-color) 40%, var(--border));
+  }
+
+  .meta-badge-msc, .meta-badge-uid {
+    font-family: monospace;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+  }
+
+  .meta-badge-en {
+    color: var(--muted);
+    font-style: italic;
+  }
+</style>

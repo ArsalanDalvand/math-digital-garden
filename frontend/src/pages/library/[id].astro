@@ -4,6 +4,8 @@ import WorkspaceNote from '../../components/WorkspaceNote.astro';
 import LibraryActions from '../../components/LibraryActions.astro';
 import {renderMarkdown} from '../../lib/markdown.mjs';
 import {buildNoteLinkResolver} from '../../lib/library-links.mjs';
+import NoteProperties from '../../components/NoteProperties.astro';
+import {parseFrontmatter} from '@astrojs/markdown-remark';
 
 export const prerender = false;
 const id = Astro.params.id!;
@@ -66,6 +68,13 @@ if (html && linkResolver) {
     return match;
   });
 }
+
+const frontmatter = item?.content ? parseFrontmatter(item.content).frontmatter : {};
+const noteProps = {
+  ...frontmatter,
+  title: item?.title || '',
+  tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : []
+};
 ---
 <Reader documentPage title={item?.title || 'یادداشت شخصی'}>
   {item?.kind === 'note' ? (
@@ -75,6 +84,7 @@ if (html && linkResolver) {
           <span class="note-status">پوشه: {item.root_folder_title}</span>
         </div>
       )}
+      <NoteProperties note={noteProps} />
       <WorkspaceNote slug={id} libraryId={id} />
       <LibraryActions id={id} />
       <article class="note" set:html={html} />
