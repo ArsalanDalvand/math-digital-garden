@@ -17,6 +17,32 @@ import { findAndReplace } from 'mdast-util-find-and-replace';
 import rehypeParse from 'rehype-parse';
 import vaultAssets from './vault-assets.json' with { type: 'json' };
 
+function stripObsidianComments(content) {
+  const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 1) return part;
+    return part.replace(/%%[\s\S]*?%%/g, '');
+  }).join('');
+}
+
+function sanitizeRawHtml(raw) {
+  let s = raw.replace(/<\s*(?:script|style|object|applet|form)[\s\S]*?(?:<\s*\/\s*(?:script|style|object|applet|form)\s*>|$)/gi, '');
+  s = s.replace(/\s+on\w+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)/gi, '');
+  s = s.replace(/\bhref\s*=\s*[\"']\s*javascript:[^\"']*[\"']/gi, 'href=""');
+  s = s.replace(/\bsrc\s*=\s*[\"']\s*(?:javascript|data):[^\"']*[\"']/gi, 'src=""');
+  s = s.replace(/<\s*img\b[^>]*>/gi, '');
+  s = s.replace(/<iframe\b([^>]*)>/gi, (match, attrs) => {
+    const srcMatch = attrs.match(/src=[\"']([^\"']*)[\"']/i);
+    const src = srcMatch ? srcMatch[1] : '';
+    if (!src.startsWith('https://') && !src.startsWith('http://') && !src.startsWith('/')) {
+      return '';
+    }
+    const cleanAttrs = attrs.trim();
+    return '<iframe ' + cleanAttrs + ' sandbox="allow-scripts allow-same-origin allow-popups" loading="lazy">';
+  });
+  return s;
+}
+
 const wikiParser=unified().use(remarkParse).use(remarkWikiLink,{aliasDivider:'|'});
 const htmlParser=unified().use(rehypeParse,{fragment:true});
 
@@ -63,14 +89,29 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
     })
     .use(remarkWikiLink, { aliasDivider: '|' })
     .use(() => (/** @type {import('mdast').Root} */ tree) => {
-      findAndReplace(tree,[/!\[\[([^\]\n]+)\]\]/g,(_match,value)=>{
-        const parsed=wikiParser.parse('[['+value+']]');
-        const paragraph=parsed.children[0];
-        const node=paragraph && 'children' in paragraph ? paragraph.children[0] : undefined;
-        if(node?.type!=='wikiLink')return false;
-        node.data.embed=true;
-        return node;
-      }]);
+      findAndReplace(tree,[
+        [/!\[\[([^\]\n]+)\]\]/g,(_match,value)=>{
+          const parsed=wikiParser.parse('[['+value+']]');
+          const paragraph=parsed.children[0];
+          const node=paragraph && 'children' in paragraph ? paragraph.children[0] : undefined;
+          if(node?.type!=='wikiLink')return false;
+          node.data.embed=true;
+          return node;
+        }],
+        [/==([^=\n]+)==/g,(_match,value)=>({
+          type:'element',
+          data:{hName:'mark'},
+          children:[{type:'text',value}]
+        })],
+        [/(?:^|(?<=\s))#(?=[\p{L}\p{N}_\/-]*\p{L})([\p{L}\p{N}_\/-]+)/gu,(_match,tag)=>({
+          type:'element',
+          data:{
+            hName:'a',
+            hProperties:{className:['tag'],href:'/search?tag='+encodeURIComponent(tag)}
+          },
+          children:[{type:'text',value:'#'+tag}]
+        })]
+      ]);
       visit(tree,'paragraph',(node,index,parent)=>{
         const last=node.children.at(-1);
         if(last?.type!=='text')return;
@@ -92,6 +133,29 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
           node.url = sanitizeUri(node.url, /^(https?|mailto)$/i) ? node.url : '';
         } else if (node.type === 'image' || node.type === 'definition') {
           node.url = sanitizeUri(node.url, /^(https?|mailto)$/i) ? node.url : '';
+        }
+        if (node.type === 'code' && ['mermaid','flowchart'].includes(node.lang?.toLowerCase() ?? '')) {
+          node.data = {
+            hName: 'figure',
+            hProperties: { className: ['mermaid-diagram'], 'data-mermaid': '' },
+            hChildren: [
+              {
+                type: 'element',
+                tagName: 'div',
+                properties: { className: ['mermaid-chart'], 'data-mermaid-source': encodeURIComponent(node.value) },
+                children: [{ type: 'text', value: 'در حال ترسیم نمودار…' }]
+              },
+              {
+                type: 'element',
+                tagName: 'details',
+                properties: { className: ['mermaid-details'] },
+                children: [
+                  { type: 'element', tagName: 'summary', properties: {}, children: [{ type: 'text', value: 'کد منبع Mermaid' }] },
+                  { type: 'element', tagName: 'pre', properties: { tabIndex: 0 }, children: [{ type: 'text', value: node.value }] }
+                ]
+              }
+            ]
+          };
         }
         if (node.type === 'code' && ['geogebra','ggb'].includes(node.lang?.toLowerCase() ?? '')) {
           try {
@@ -122,6 +186,87 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
             }
           }
           if(node.data.embed){
+            if (cleanTarget.endsWith('.pdf')) {
+              const pdfAsset = resolveVaultImage(cleanTarget, vaultAssets) || cleanTarget;
+              const srcUrl = pdfAsset.startsWith('/') ? pdfAsset : '/vault/' + pdfAsset;
+              let page = '';
+              let height = '500px';
+              if (anchor) {
+                const pageMatch = anchor.match(/page=(\d+)/);
+                if (pageMatch) page = `#page=${pageMatch[1]}`;
+                const heightMatch = anchor.match(/height=(\d+)/);
+                if (heightMatch) height = `${heightMatch[1]}px`;
+              } else if (node.data.alias && node.data.alias !== cleanTarget) {
+                const hMatch = String(node.data.alias).match(/(\d+)/);
+                if (hMatch) height = `${hMatch[1]}px`;
+              }
+              node.data.hName = 'figure';
+              node.data.hProperties = { className: ['pdf-embed-wrapper'] };
+              node.data.hChildren = [
+                {
+                  type: 'element',
+                  tagName: 'iframe',
+                  properties: {
+                    src: srcUrl + page,
+                    className: ['pdf-embed'],
+                    style: `width:100%;height:${height};border:1px solid var(--border);border-radius:0.5rem;`,
+                    title: cleanTarget,
+                    loading: 'lazy'
+                  },
+                  children: []
+                }
+              ];
+              return;
+            }
+            if (/\.(mp3|wav|ogg|m4a)$/i.test(cleanTarget)) {
+              const audioAsset = resolveVaultImage(cleanTarget, vaultAssets) || cleanTarget;
+              const srcUrl = audioAsset.startsWith('/') ? audioAsset : '/vault/' + audioAsset;
+              node.data.hName = 'figure';
+              node.data.hProperties = { className: ['audio-embed-wrapper'] };
+              node.data.hChildren = [
+                {
+                  type: 'element',
+                  tagName: 'audio',
+                  properties: { controls: true, src: srcUrl, className: ['audio-embed'], preload: 'metadata' },
+                  children: []
+                }
+              ];
+              return;
+            }
+            if (/\.(mp4|webm|ogv)$/i.test(cleanTarget)) {
+              const videoAsset = resolveVaultImage(cleanTarget, vaultAssets) || cleanTarget;
+              const srcUrl = videoAsset.startsWith('/') ? videoAsset : '/vault/' + videoAsset;
+              node.data.hName = 'figure';
+              node.data.hProperties = { className: ['video-embed-wrapper'] };
+              node.data.hChildren = [
+                {
+                  type: 'element',
+                  tagName: 'video',
+                  properties: { controls: true, src: srcUrl, className: ['video-embed'], style: 'max-width:100%;border-radius:0.5rem;', preload: 'metadata' },
+                  children: []
+                }
+              ];
+              return;
+            }
+            if (cleanTarget.endsWith('.canvas')) {
+              const canvasAsset = resolveVaultImage(cleanTarget, vaultAssets) || cleanTarget;
+              const srcUrl = canvasAsset.startsWith('/') ? canvasAsset : '/vault/' + canvasAsset;
+              node.data.hName = 'figure';
+              node.data.hProperties = {
+                className: ['canvas-diagram'],
+                'data-canvas-url': srcUrl,
+                'data-canvas-title': cleanTarget
+              };
+              node.data.hChildren = [
+                {
+                  type: 'element',
+                  tagName: 'div',
+                  properties: { className: ['canvas-placeholder'] },
+                  children: [{ type: 'text', value: `در حال بارگذاری بوم: ${cleanTarget}` }]
+                }
+              ];
+              return;
+            }
             const image=resolveVaultImage(cleanTarget,vaultAssets);
             if(image){
               const dimensions=String(node.data.alias ?? '').match(/^(\d+)(?:x(\d+))?$/);
@@ -162,12 +307,20 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
           }
         }
       });
-    }).use(remarkRehype).use(rehypeHeadingIds);
+    }).use(remarkRehype, { allowDangerousHtml: true }).use(rehypeHeadingIds);
   if (math) processor.use(rehypeKatex, { trust: false, strict: 'ignore' });
   processor.use(() => (/** @type {import('hast').Root} */ tree, file) => {
+      visit(tree, 'raw', (node, index, parent) => {
+        const sanitized = sanitizeRawHtml(node.value);
+        if (!sanitized) {
+          parent.children.splice(index, 1);
+          return index;
+        }
+        node.value = sanitized;
+      });
       visit(tree, 'element', (node, index, parent) => {
         const figure = node.children[0];
-        if (node.tagName === 'pre' && figure?.type === 'element' && figure.tagName === 'figure' && figure.properties['data-geogebra'] && parent && index !== undefined) {
+        if (node.tagName === 'pre' && figure?.type === 'element' && figure.tagName === 'figure' && (figure.properties['data-geogebra'] || figure.properties['data-mermaid'] !== undefined || figure.properties['data-canvas-url'] !== undefined) && parent && index !== undefined) {
           parent.children[index] = figure;
           return index;
         }
@@ -201,14 +354,14 @@ async function render(raw, names = new Map(), headings = new Map(), math = true,
         const snippet = structuredClone(paragraph);
         if (['li','td','th'].includes(snippet.tagName)) snippet.tagName = 'div';
         visit(snippet, 'element', node => { delete node.properties.id; });
-        const html = unified().use(rehypeStringify).stringify({type:'root',children:[snippet]});
+        const html = unified().use(rehypeStringify, { allowDangerousHtml: true }).stringify({type:'root',children:[snippet]});
         for (const slug of targets) referencePreviews[slug] ??= html;
       });
       const preview = structuredClone({ ...tree, children: tree.children.filter(node => node.type !== 'text' || node.value.trim()).slice(0,3) });
       visit(preview, 'element', (node) => { delete node.properties.id; });
-      file.data.previewHtml = unified().use(rehypeStringify).stringify(preview);
-    }).use(rehypeStringify);
-  const file = await processor.process(parseFrontmatter(raw).content);
+      file.data.previewHtml = unified().use(rehypeStringify, { allowDangerousHtml: true }).stringify(preview);
+    }).use(rehypeStringify, { allowDangerousHtml: true });
+  const file = await processor.process(stripObsidianComments(parseFrontmatter(raw).content));
   return { html: String(file), referencePreviews, previewHtml: String(file.data.previewHtml), blocks:blockIds, headings: file.data.astro?.headings ?? [], outgoing: [...new Set(outgoing)] };
 }
 

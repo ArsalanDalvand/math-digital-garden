@@ -43,8 +43,16 @@ const linkResolver = item?.notes && item.notes.length
   ? buildNoteLinkResolver(item.notes, '/library/', item.path || '')
   : null;
 
+const isCanvas = item?.kind === 'note' && item?.content && (
+  item.path?.endsWith('.canvas') ||
+  item.title?.endsWith('.canvas') ||
+  (item.content.trim().startsWith('{') && item.content.includes('"nodes"'))
+);
+
 let html = item?.kind === 'note' && item?.content
-  ? await renderMarkdown(item.content, { linkResolver })
+  ? (isCanvas
+      ? `<figure class="canvas-diagram" data-canvas-title="${item.title || 'بوم ابسیدین'}" data-canvas-data="${encodeURIComponent(item.content)}"></figure>`
+      : await renderMarkdown(item.content, { linkResolver }))
   : '';
 
 if (html && linkResolver) {

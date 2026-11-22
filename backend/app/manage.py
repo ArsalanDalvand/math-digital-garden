@@ -34,7 +34,7 @@ def scan_vault(root: Path, prefix: str, book: str) -> list[dict[str, str]]:
     root = root.resolve()
     notes = []
     for path in visible_files(root):
-        if path.suffix.lower() not in {".md", ".excalidraw"}:
+        if path.suffix.lower() not in {".md", ".excalidraw", ".canvas"}:
             continue
         data = path.read_bytes()
         if len(data) > 2_000_000:
@@ -64,7 +64,7 @@ def copy_assets(root: Path) -> int:
     public = Path(__file__).resolve().parents[2] / "frontend/public"
     count = 0
     for path in visible_files(root):
-        if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ggb"}:
+        if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ggb", ".pdf", ".canvas", ".mp3", ".wav", ".ogg", ".m4a", ".mp4", ".webm", ".ogv"}:
             continue
         destination = public / "vault" / root.name / path.relative_to(root)
         if any(p.is_symlink() for p in [destination, *destination.parents]):

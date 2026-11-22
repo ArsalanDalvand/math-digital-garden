@@ -538,6 +538,234 @@ starlight-menu-button button { min-inline-size: 44px; min-block-size: 44px; padd
   margin-bottom: 0.4rem;
 }
 
+/* Obsidian Callouts & Mathematical Styles */
+[data-callout] {
+  --callout-color: var(--accent);
+  --callout-bg: color-mix(in srgb, var(--callout-color) 7%, var(--surface));
+  margin-block: 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-inline-start: 4px solid var(--callout-color);
+  border-radius: .5rem;
+  background: var(--callout-bg);
+}
+[data-callout-title] {
+  font-weight: 700;
+  color: var(--callout-color);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-block-end: .5rem;
+}
+details[data-callout] summary[data-callout-title] {
+  cursor: pointer;
+  margin-block-end: 0;
+  user-select: none;
+}
+details[data-callout][open] summary[data-callout-title] {
+  margin-block-end: .75rem;
+}
+[data-callout-body] > :first-child { margin-block-start: 0; }
+[data-callout-body] > :last-child { margin-block-end: 0; }
+
+/* Callout Color Mappings */
+[data-callout-type='note'], [data-callout-type='seealso'] { --callout-color: #2563eb; }
+[data-callout-type='abstract'], [data-callout-type='summary'], [data-callout-type='tldr'] { --callout-color: #7c3aed; }
+[data-callout-type='info'], [data-callout-type='todo'] { --callout-color: #0891b2; }
+[data-callout-type='tip'], [data-callout-type='hint'], [data-callout-type='important'] { --callout-color: #d97706; }
+[data-callout-type='success'], [data-callout-type='check'], [data-callout-type='done'] { --callout-color: #16a34a; }
+[data-callout-type='question'], [data-callout-type='help'], [data-callout-type='faq'] { --callout-color: #ea580c; }
+[data-callout-type='warning'], [data-callout-type='caution'], [data-callout-type='attention'] { --callout-color: #d97706; }
+[data-callout-type='failure'], [data-callout-type='fail'], [data-callout-type='missing'] { --callout-color: #dc2626; }
+[data-callout-type='danger'], [data-callout-type='error'], [data-callout-type='bug'] { --callout-color: #e11d48; }
+[data-callout-type='example'] { --callout-color: #9333ea; }
+[data-callout-type='quote'], [data-callout-type='cite'] { --callout-color: #64748b; }
+
+/* Mathematical Callouts */
+[data-callout-type='theorem'] { --callout-color: #1d4ed8; }
+[data-callout-type='definition'] { --callout-color: #0d9488; }
+[data-callout-type='lemma'] { --callout-color: #059669; }
+[data-callout-type='corollary'] { --callout-color: #4f46e5; }
+[data-callout-type='proof'] { --callout-color: #64748b; }
+[data-callout-type='solution'] { --callout-color: #059669; }
+[data-callout-type='axiom'] { --callout-color: #0e7490; }
+[data-callout-type='property'] { --callout-color: #6366f1; }
+[data-callout-type='algorithm'] { --callout-color: #0284c7; }
+[data-callout-type='remark'] { --callout-color: #64748b; }
+[data-callout-type='pitfall'] { --callout-color: #b45309; }
+
+/* Obsidian Markdown Features */
+mark {
+  background: color-mix(in srgb, #eab308 30%, transparent);
+  color: inherit;
+  padding: 0.1em 0.3em;
+  border-radius: 0.25rem;
+}
+.tag {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.85em;
+  text-decoration: none;
+  color: var(--accent);
+  transition: all .15s ease;
+  margin-inline-end: 0.5rem;
+}
+.tag:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+/* Mermaid Diagrams */
+.mermaid-diagram {
+  margin-block: 2rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.mermaid-chart {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: auto;
+  min-height: 4rem;
+  padding: 1rem 0;
+  direction: ltr;
+}
+.mermaid-chart svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  font-family: 'Vazirmatn', sans-serif !important;
+}
+.mermaid-details {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.mermaid-details summary { cursor: pointer; }
+.mermaid-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+}
+
+/* Obsidian JSON Canvas */
+.canvas-diagram {
+  margin-block: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.canvas-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.875rem;
+}
+.canvas-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+.canvas-actions button {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  border-radius: 0.25rem;
+}
+.canvas-viewport {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  cursor: grab;
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
+  direction: ltr;
+}
+.canvas-stage {
+  position: absolute;
+  transform-origin: 0 0;
+}
+.canvas-edges-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.canvas-edge-path {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+}
+.canvas-edge-label {
+  fill: var(--fg);
+  font-size: 12px;
+  font-family: 'Vazirmatn', sans-serif;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+}
+.canvas-node {
+  position: absolute;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  box-sizing: border-box;
+  overflow: auto;
+  font-size: 0.9rem;
+  direction: rtl;
+}
+.canvas-node-group {
+  background: rgba(0,0,0,0.02);
+  border-style: dashed;
+  z-index: 0;
+}
+.canvas-node-file-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.canvas-open-link {
+  font-size: 0.85em;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Media & PDF Embeds */
+.pdf-embed-wrapper, .audio-embed-wrapper, .video-embed-wrapper {
+  margin-block: 1.5rem;
+}
+.pdf-embed {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+.audio-embed {
+  width: 100%;
+  max-width: 400px;
+}
+.video-embed {
+  width: 100%;
+  max-width: 100%;
+}
+
 /* Modern Scrollbars */
 * {
   scrollbar-width: thin;

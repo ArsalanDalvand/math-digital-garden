@@ -48,6 +48,7 @@
     "lz-string": "^1.5.0",
     "mathlive": "^0.111.0",
     "mdast-util-find-and-replace": "^3.0.3",
+    "mermaid": "^12.3.0",
     "micromark-util-sanitize-uri": "2.0.1",
     "micromatch": "4.0.8",
     "react": "^19.3.0",

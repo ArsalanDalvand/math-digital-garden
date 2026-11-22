@@ -27,6 +27,9 @@ ALLOWED_EXTENSIONS = {
     ".md",
     ".markdown",
     ".txt",
+    ".canvas",
+    ".pdf",
+    ".ggb",
     ".png",
     ".jpg",
     ".jpeg",
@@ -236,10 +239,10 @@ async def ingest_directory_to_library(
             stats["total"] += 1
             await walk_and_ingest(os.path.join(current_dir, subdir_name), folder_item.id)
 
-        # Process markdown and text files
+        # Process markdown, canvas, and text files
         for filename in files:
             ext = os.path.splitext(filename)[1].lower()
-            if ext not in (".md", ".markdown", ".txt"):
+            if ext not in (".md", ".markdown", ".txt", ".canvas"):
                 continue
             title = os.path.splitext(filename)[0].strip() or filename
             full_path = os.path.join(current_dir, filename)

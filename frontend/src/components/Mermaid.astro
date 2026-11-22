@@ -1,0 +1,67 @@
+<script>
+  let mermaidPromise: Promise<any> | null = null;
+  const rendered = new WeakSet<HTMLElement>();
+
+  async function getMermaid() {
+    if (!mermaidPromise) {
+      mermaidPromise = import('mermaid').then(m => {
+        const isDark = document.documentElement.dataset.theme === 'dark';
+        m.default.initialize({
+          startOnLoad: false,
+          theme: isDark ? 'dark' : 'default',
+          fontFamily: 'Vazirmatn, sans-serif',
+          securityLevel: 'loose',
+          flowchart: { htmlLabels: true, curve: 'basis' }
+        });
+        return m.default;
+      });
+    }
+    return mermaidPromise;
+  }
+
+  async function renderDiagram(figure: HTMLElement, force = false) {
+    if (rendered.has(figure) && !force) return;
+    const chart = figure.querySelector<HTMLElement>('.mermaid-chart');
+    if (!chart) return;
+    const rawSource = chart.dataset.mermaidSource;
+    if (!rawSource) return;
+    const code = decodeURIComponent(rawSource);
+    try {
+      const mermaid = await getMermaid();
+      const id = 'mermaid-' + Math.random().toString(36).slice(2, 9);
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: isDark ? 'dark' : 'default',
+        fontFamily: 'Vazirmatn, sans-serif',
+        securityLevel: 'loose',
+        flowchart: { htmlLabels: true, curve: 'basis' }
+      });
+      const { svg } = await mermaid.render(id, code);
+      chart.innerHTML = svg;
+      rendered.add(figure);
+      figure.dataset.mermaidLoaded = 'ready';
+    } catch {
+      chart.innerHTML = '<p class="mermaid-error" role="alert">خطا در ترسیم نمودار؛ کد منبع در بخش زیر در دسترس است.</p>';
+      figure.dataset.mermaidLoaded = 'error';
+    }
+  }
+
+  function bind() {
+    for (const figure of document.querySelectorAll<HTMLElement>('[data-mermaid]')) {
+      if (!rendered.has(figure)) {
+        void renderDiagram(figure);
+      }
+    }
+  }
+
+  document.addEventListener('garden:theme-setting', () => {
+    for (const figure of document.querySelectorAll<HTMLElement>('[data-mermaid]')) {
+      rendered.delete(figure);
+      void renderDiagram(figure, true);
+    }
+  });
+
+  bind();
+  new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
+</script>

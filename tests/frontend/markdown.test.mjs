@@ -115,3 +115,48 @@ test('renderMarkdown resolves relative markdown links and wiki links via options
   assert.match(html, /<a href="\/shared\/TOKEN\?note=111" class="wiki-link">مرور سریع<\/a>/);
   assert.match(html, /<a href="\/shared\/TOKEN\?note=111" class="wiki-link">overview#مقدمه<\/a>/);
 });
+
+test('Obsidian flavored markdown: comments, highlights, tags, mermaid, embeds, and safe HTML', async () => {
+  const md = `
+این متن دارای ==نکته بسیار مهم== و هایلایت است.
+
+این قبل از کامنت %%این کامنت مخفی است و نباید چاپ شود%% بعد از کامنت است.
+
+%%
+کامنت چندخطی
+که باید کاملاً
+حذف شود
+%%
+
+این نوت حاوی برچسب #جبر_خطی و تگ #math/basis در متن است.
+
+\`\`\`mermaid
+flowchart TD
+    A["شروع"] --> B["پایان"]
+\`\`\`
+
+![[axler.pdf#page=12&height=480]]
+![[podcast.mp3]]
+![[lecture.mp4]]
+![[concept-map.canvas]]
+
+<iframe src="https://example.org/embed" width="500" height="300"></iframe>
+کلید <kbd>Ctrl+S</kbd> برای ذخیره و متن با <u>زیرخط</u>.
+`;
+
+  const html = await renderMarkdown(md);
+  assert.match(html, /<mark>نکته بسیار مهم<\/mark>/);
+  assert.doesNotMatch(html, /این کامنت مخفی است/);
+  assert.doesNotMatch(html, /کامنت چندخطی/);
+  assert.match(html, /<a class="tag" href="\/search\?tag=%D8%AC%D8%A8%D8%B1_%D8%AE%D8%B7%DB%8C">#جبر_خطی<\/a>/);
+  assert.match(html, /<a class="tag" href="\/search\?tag=math%2Fbasis">#math\/basis<\/a>/);
+  assert.match(html, /<figure class="mermaid-diagram" data-mermaid=""/);
+  assert.match(html, /<div class="mermaid-chart"/);
+  assert.match(html, /<iframe src="\/vault\/axler\.pdf#page=12" class="pdf-embed" style="width:100%;height:480px;/);
+  assert.match(html, /<audio controls src="\/vault\/podcast\.mp3" class="audio-embed"/);
+  assert.match(html, /<video controls src="\/vault\/lecture\.mp4" class="video-embed"/);
+  assert.match(html, /<figure class="canvas-diagram" data-canvas-url="\/vault\/concept-map\.canvas"/);
+  assert.match(html, /<iframe src="https:\/\/example\.org\/embed"/);
+  assert.match(html, /<kbd>Ctrl\+S<\/kbd>/);
+  assert.match(html, /<u>زیرخط<\/u>/);
+});

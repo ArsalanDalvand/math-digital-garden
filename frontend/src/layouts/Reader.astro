@@ -1,5 +1,7 @@
 ---
 import Excalidraw from '../components/Excalidraw.astro';
+import Mermaid from '../components/Mermaid.astro';
+import CanvasViewer from '../components/CanvasViewer.astro';
 import Presentation from '../components/Presentation.astro';
 import MobileStudyTools from '../components/MobileStudyTools';
 import ReadingSettings from '../components/ReadingSettings.astro';
@@ -66,7 +68,7 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
   <div class="workspace-document"><h1>{title}</h1><slot/></div>
 </main>
 {tools&&<aside id="workspace-study-tools" class="workspace-tools" aria-label="ابزارهای مطالعه"><slot name="tools"/></aside>}
-</div><Excalidraw/><Presentation/>
+</div><Excalidraw/><Mermaid/><CanvasViewer/><Presentation/>
 <script>
  document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
  const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');

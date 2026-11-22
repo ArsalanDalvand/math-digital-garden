@@ -2,6 +2,7 @@
 
 import io
 import os
+import socket
 import tempfile
 import zipfile
 
@@ -46,7 +47,8 @@ def test_validate_git_url_rejects_private_ips():
     assert exc.value.status_code == 400
 
 
-def test_validate_git_url_accepts_valid_public_urls():
+def test_validate_git_url_accepts_valid_public_urls(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, **kw: [(socket.AF_INET, 0, 0, "", ("140.82.121.4", 0))])
     # Public domain names should validate safely
     validate_git_url("https://github.com/ArsalanDalvand/axler-linear-algebra-done-right.git")
     validate_git_url("https://gitlab.com/user/repo")
