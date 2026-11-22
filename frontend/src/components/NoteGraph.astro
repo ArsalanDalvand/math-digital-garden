@@ -6,11 +6,46 @@ import { graphSitemap } from '../lib/graph.mjs';
 import { noteHref, buildKnowledge } from '../lib/markdown.mjs';
 interface Props { garden: Awaited<ReturnType<typeof buildKnowledge>>; slug: string }
 const { garden, slug } = Astro.props;
-// Initial settings; the plugin supplies its own interactive controls.
-const config = { depth: 1, prefetchPages: false, renderExternal: false, labelFontSize: 14, linkDistance: 120, repelForce: 120, actions: ['reset-zoom','fullscreen','settings'] };
+// UMKO v1.1 Semantic Graph Configuration
+const config = {
+  depth: 1,
+  prefetchPages: false,
+  renderExternal: false,
+  labelFontSize: 13,
+  linkDistance: 130,
+  repelForce: 130,
+  centerForce: 0.15,
+  renderArrows: true,
+  tagRenderMode: 'same',
+  tagStyles: {
+    '#kind:assertion': { shape: 'circle', shapeSize: 9, shapeColor: '#1d4ed8', strokeColor: '#60a5fa', strokeWidth: 1.5 },
+    '#kind:concept': { shape: 'circle', shapeSize: 9, shapeColor: '#0d9488', strokeColor: '#2dd4bf', strokeWidth: 1.5 },
+    '#kind:proof': { shape: 'circle', shapeSize: 8, shapeColor: '#475569', strokeColor: '#94a3b8', strokeWidth: 1.5 },
+    '#kind:problem': { shape: 'circle', shapeSize: 9, shapeColor: '#ea580c', strokeColor: '#fb923c', strokeWidth: 1.5 },
+    '#kind:solution': { shape: 'circle', shapeSize: 8, shapeColor: '#059669', strokeColor: '#34d399', strokeWidth: 1.5 },
+    '#kind:technique': { shape: 'circle', shapeSize: 8, shapeColor: '#d97706', strokeColor: '#fbbf24', strokeWidth: 1.5 },
+    '#kind:hint_ladder': { shape: 'circle', shapeSize: 7, shapeColor: '#d97706', strokeColor: '#f59e0b', strokeWidth: 1.5 },
+    '#kind:problem_archetype': { shape: 'circle', shapeSize: 9, shapeColor: '#c026d3', strokeColor: '#e879f9', strokeWidth: 2 },
+    '#kind:pitfall': { shape: 'circle', shapeSize: 8, shapeColor: '#b45309', strokeColor: '#f59e0b', strokeWidth: 2 },
+    '#kind:visual_lab': { shape: 'circle', shapeSize: 9, shapeColor: '#0284c7', strokeColor: '#38bdf8', strokeWidth: 1.5 },
+    '#kind:collection': { shape: 'circle', shapeSize: 12, shapeColor: '#7c3aed', strokeColor: '#c084fc', strokeWidth: 2 },
+    '#kind:axiom': { shape: 'circle', shapeSize: 9, shapeColor: '#0e7490', strokeColor: '#22d3ee', strokeWidth: 1.5 },
+    '#kind:theory': { shape: 'circle', shapeSize: 11, shapeColor: '#4338ca', strokeColor: '#818cf8', strokeWidth: 2 },
+    '#kind:remark': { shape: 'circle', shapeSize: 7, shapeColor: '#64748b', strokeColor: '#cbd5e1', strokeWidth: 1 },
+  },
+  actions: ['reset-zoom', 'fullscreen', 'render-arrows', 'settings'],
+};
 ---
 <section data-note-graph class="note-graph" aria-label="گراف ارتباط یادداشت‌ها">
-  <h2>گراف ارتباط یادداشت‌ها</h2>
+  <div class="note-graph-header">
+    <h2>گراف ارتباط یادداشت‌ها</h2>
+    <div class="graph-depth-quickbar">
+      <span class="depth-label">شعاع:</span>
+      <button type="button" class="depth-chip active" data-depth="1" title="همسایگان مستقیم (عمق ۱)">۱ گام</button>
+      <button type="button" class="depth-chip" data-depth="2" title="دو لایه ارتباطی (عمق ۲)">۲ گام</button>
+      <button type="button" class="depth-chip" data-depth="5" title="کل پایگاه دانش">سراسری</button>
+    </div>
+  </div>
   <p>برای مطالعه، نودها را انتخاب کنید. <a href="/search">فهرست متنی همهٔ یادداشت‌ها</a></p>
   <button type="button" class="garden-secondary" data-load-graph>نمایش گراف ارتباطات</button>
   <p role="status" data-graph-status></p>
@@ -18,8 +53,29 @@ const config = { depth: 1, prefetchPages: false, renderExternal: false, labelFon
     <div class="slsg-graph-component slsg-graph-skeleton"><div class="slsg-graph-container"></div></div>
     <graph-component data-config={JSON.stringify(config)} data-sitemap={JSON.stringify(graphSitemap(garden))} data-slug={noteHref(slug).slice(1)} data-debug="false" data-trailing-slashes="false"></graph-component>
   </template>
+  <div class="graph-umko-legend" aria-label="راهنمای دسته‌بندی گره‌های گراف">
+    <span class="legend-badge" style="--badge-c: #1d4ed8">● قضیه</span>
+    <span class="legend-badge" style="--badge-c: #0d9488">● مفهوم</span>
+    <span class="legend-badge" style="--badge-c: #ea580c">● مسئله</span>
+    <span class="legend-badge" style="--badge-c: #059669">● راه‌حل</span>
+    <span class="legend-badge" style="--badge-c: #7c3aed">● نقشه راه</span>
+    <span class="legend-badge" style="--badge-c: #0284c7">● شبیه‌ساز</span>
+    <span class="legend-badge" style="--badge-c: #b45309">● دام</span>
+  </div>
   <noscript>برای گراف تعاملی جاوااسکریپت را فعال کنید؛ فهرست پیوندها در ادامه در دسترس است.</noscript>
 </section>
+
+<style>
+  .note-graph-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-block-end: var(--space-2); }
+  .note-graph-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+  .graph-depth-quickbar { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; }
+  .depth-label { color: var(--muted); }
+  .depth-chip { min-height: 24px; height: 24px; padding: 0 0.45rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor: pointer; transition: all 0.15s ease; }
+  .depth-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .depth-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .graph-umko-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.725rem; margin-block-start: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+  .legend-badge { color: var(--badge-c); display: inline-flex; align-items: center; gap: 0.15rem; background: color-mix(in srgb, var(--badge-c) 8%, var(--surface)); padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid color-mix(in srgb, var(--badge-c) 30%, var(--border)); }
+</style>
 <script>
   const labels: Record<string,string> = {
     fullscreen: 'تمام‌صفحه یا بازگشت', depth: 'تغییر عمق ارتباطات؛ سطح ۵ گراف سراسری',
@@ -93,6 +149,26 @@ const config = { depth: 1, prefetchPages: false, renderExternal: false, labelFon
       const button = host.querySelector<HTMLButtonElement>('[data-load-graph]')!;
       const status = host.querySelector<HTMLElement>('[data-graph-status]')!;
       let pending = false;
+
+      // Quick depth selector chips
+      if (typeof host.querySelectorAll === 'function') {
+        host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
+          chip.addEventListener('click', () => {
+            host.querySelectorAll('[data-depth]').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            const depth = Number(chip.dataset.depth);
+            const g = host.querySelector('graph-component') as any;
+            if (g && g.config) {
+              g.config.depth = depth;
+              g.full_refresh?.();
+              setTimeout(() => fitGraph(g), 800);
+            } else if (button && !button.hidden) {
+              button.click();
+            }
+          });
+        });
+      }
+
       button.addEventListener('click', async () => {
         if (pending) return;
         pending = true;
