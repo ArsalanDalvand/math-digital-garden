@@ -314,3 +314,6 @@ html, body, aside, nav, div, section, ul, ol, main, article, * {
   .mobile-only-action{display:flex!important}
   .note-extra-actions{display:none!important}
 }
+.workspace-tools .slsg-graph-container.slsg-is-fullscreen,.mobile-study-body .slsg-graph-container.slsg-is-fullscreen,.slsg-graph-container.slsg-is-fullscreen{position:fixed!important;inset:16px!important;width:calc(100vw - 32px)!important;height:calc(100dvh - 32px)!important;min-height:calc(100dvh - 32px)!important;z-index:9999!important;border:1px solid var(--workspace-border)!important;box-shadow:0 24px 60px rgba(0,0,0,.45)!important;border-radius:12px!important}
+.slsg-graph-container{border:1px solid var(--workspace-border,rgba(148,163,184,.2))!important;border-radius:8px!important;background:var(--sl-color-bg)!important}
+.slsg-graph-action-container{display:flex!important;align-items:center!important;gap:4px!important;padding:2px!important;border-radius:8px!important;background:color-mix(in srgb,var(--sl-color-bg) 82%,transparent)!important;backdrop-filter:blur(6px)!important}

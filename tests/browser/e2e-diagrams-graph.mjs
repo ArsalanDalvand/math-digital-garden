@@ -371,6 +371,53 @@ try {
   assert.ok(transformAfterFit.length > 0, 'Fit button must calculate and apply bounding scale transform');
   record('12. Tested Canvas Viewer controls: zoom-in, zoom-out, 100% reset, and auto-fit responses verified');
 
+  // 13. Verify Abstract Algebra Knowledge Graph (/notes/alg-232009403065653b) renders cleanly without blank canvas
+  browser('open', base + '/notes/alg-232009403065653b');
+  browser('wait', 'graph-component');
+  browser('wait', '1500');
+
+  const algGraphState = evaluate(`(() => {
+    const gc = document.querySelector('graph-component');
+    const canvas = document.querySelector('.note-graph canvas.graph-canvas-2d');
+    const rect = canvas ? canvas.getBoundingClientRect() : null;
+    let hasPaintedPixels = false;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        for (let i = 3; i < data.length; i += 16) {
+          if (data[i] > 0) { hasPaintedPixels = true; break; }
+        }
+      }
+    }
+    return {
+      has2DCanvas: !!canvas,
+      width: rect?.width || 0,
+      height: rect?.height || 0,
+      hasPaintedPixels,
+      nodesCount: gc?.simulator?.nodes?.length || 0,
+      hasSettingsBtn: !!document.querySelector('[data-graph-action="settings"]'),
+    };
+  })()`);
+
+  assert.equal(algGraphState.has2DCanvas, true, 'Abstract Algebra graph must use 2D Canvas engine');
+  assert.ok(algGraphState.width >= 150 && algGraphState.height >= 150, `Alg graph canvas must have non-zero size (${algGraphState.width}x${algGraphState.height})`);
+  assert.equal(algGraphState.hasPaintedPixels, true, 'Alg graph canvas must not be blank');
+  assert.ok(algGraphState.nodesCount >= 5, `Alg graph must render at least 5 nodes (got ${algGraphState.nodesCount})`);
+  assert.equal(algGraphState.hasSettingsBtn, true, 'Settings action button must be present');
+  record(`13. Abstract Algebra graph verified (${algGraphState.nodesCount} nodes, ${Math.round(algGraphState.width)}x${Math.round(algGraphState.height)}px, non-blank pixels)`);
+
+  // 14. Test settings popup open & Escape close
+  browser('click', '[data-graph-action="settings"]');
+  browser('wait', '200');
+  const popupOpen = evaluate('!!document.querySelector(".slsg-popup-menu input[type=range]")');
+  assert.equal(popupOpen, true, 'Settings popup with range sliders must open');
+  browser('press', 'Escape');
+  browser('wait', '200');
+  const popupClosed = evaluate('!document.querySelector(".slsg-popup-menu")');
+  assert.equal(popupClosed, true, 'Escape must close graph settings popup');
+  record('14. Verified graph settings popup open and Escape dismissal');
+
   // Final sanity check for any unhandled browser errors
   const pageErrors = browser('errors')?.errors || [];
   const criticalErrors = pageErrors.filter(e =>

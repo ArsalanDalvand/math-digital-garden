@@ -146,8 +146,18 @@ const config = {
     });
   }
 
-  // Universal 2D Canvas Knowledge Graph Engine (Resilient fallback when WebGL / Pixi is unavailable or blocked)
+  // Universal 2D Canvas Knowledge Graph Engine (Resilient, zero-race-condition renderer)
   function init2DGraphEngine(host: HTMLElement) {
+    if (typeof document.createElement !== 'function') return;
+    const probe = document.createElement('canvas');
+    let has2D = false;
+    try {
+      has2D = !!(typeof probe.getContext === 'function' && probe.getContext('2d'));
+    } catch {
+      has2D = false;
+    }
+    if (!has2D) return;
+
     const gc = host.querySelector<HTMLElement>('graph-component') || host;
     const template = host.querySelector<HTMLTemplateElement>('[data-graph-template]');
     const rawSitemap = gc.dataset.sitemap || template?.content.querySelector('graph-component')?.dataset.sitemap || '{}';
@@ -167,12 +177,13 @@ const config = {
       container.tabIndex = 0;
       gc.appendChild(container);
     }
+    // Remove any conflicting WebGL canvas so 2D context never returns null
+    container.querySelectorAll('canvas:not(.graph-canvas-2d)').forEach(c => c.remove());
     container.style.position = 'relative';
     container.style.width = '100%';
     container.style.height = '100%';
-    container.style.minHeight = '320px';
+    container.style.minHeight = '210px';
     container.style.overflow = 'hidden';
-    container.style.background = 'var(--sl-color-bg, #090d16)';
     container.style.borderRadius = '8px';
 
     gc.style.visibility = 'visible';
@@ -214,7 +225,20 @@ const config = {
       container.prepend(canvas);
     }
 
-    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    let ctx: CanvasRenderingContext2D | null = null;
+    try {
+      ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    } catch {
+      ctx = null;
+    }
+    if (!ctx) return;
+
+    const raf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number);
+    const caf = typeof cancelAnimationFrame === 'function'
+      ? cancelAnimationFrame
+      : clearTimeout;
     let scale = 1;
     let panX = 0;
     let panY = 0;
@@ -342,14 +366,17 @@ const config = {
       requestDraw();
     }
 
+    let repelStrength = 130;
+    let springDistance = 85;
+
     function updateSimulation() {
       if (alpha < 0.005) return false;
       const w = canvas?.clientWidth || 300;
       const h = canvas?.clientHeight || 300;
       const cx = w / 2;
       const cy = h / 2;
-      const repelForce = 130 * alpha;
-      const springLength = 85;
+      const repelForce = repelStrength * alpha;
+      const springLength = springDistance;
       const springK = 0.05 * alpha;
 
       for (let i = 0; i < nodes.length; i++) {
@@ -399,6 +426,7 @@ const config = {
 
     function draw() {
       if (!canvas || !ctx) return;
+      const isDark = document.documentElement.dataset.theme === 'dark';
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth || 300;
       const h = canvas.clientHeight || 300;
@@ -432,10 +460,10 @@ const config = {
         ctx.moveTo(l.source.x, l.source.y);
         ctx.lineTo(l.target.x, l.target.y);
         ctx.strokeStyle = isHoveredLink
-          ? '#38bdf8'
+          ? (isDark ? '#38bdf8' : '#0284c7')
           : isFaded
-          ? 'rgba(71, 85, 105, 0.2)'
-          : 'rgba(148, 163, 184, 0.35)';
+          ? (isDark ? 'rgba(71, 85, 105, 0.2)' : 'rgba(148, 163, 184, 0.2)')
+          : (isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.38)');
         ctx.lineWidth = isHoveredLink ? 2.2 : 1.2;
         ctx.stroke();
 
@@ -466,26 +494,34 @@ const config = {
         if (n.isCurrent) {
           ctx.beginPath();
           ctx.arc(n.x, n.y, n.radius + 5, 0, Math.PI * 2);
-          ctx.strokeStyle = '#06b6d4';
+          ctx.strokeStyle = isDark ? '#06b6d4' : '#0891b2';
           ctx.lineWidth = 2.5;
           ctx.stroke();
         }
 
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-        ctx.fillStyle = isFaded ? 'rgba(71, 85, 105, 0.4)' : n.color;
+        ctx.fillStyle = isFaded ? (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(148, 163, 184, 0.45)') : n.color;
         ctx.fill();
 
-        ctx.strokeStyle = isHovered ? '#ffffff' : (isFaded ? 'rgba(100, 116, 139, 0.3)' : n.stroke);
+        ctx.strokeStyle = isHovered
+          ? (isDark ? '#ffffff' : '#0f172a')
+          : (isFaded ? 'rgba(100, 116, 139, 0.3)' : n.stroke);
         ctx.lineWidth = isHovered ? 2.5 : 1.5;
         ctx.stroke();
 
         if (nodes.length <= 35 || scale > 0.6 || isHovered || n.isCurrent || (hoveredNode && connected.has(n))) {
-          ctx.font = '11px Vazirmatn, sans-serif';
-          ctx.fillStyle = isFaded ? 'rgba(148, 163, 184, 0.4)' : '#f1f5f9';
+          const shortTitle = n.title.length > 26 && !isHovered ? n.title.slice(0, 24) + '…' : n.title;
+          ctx.font = (n.isCurrent ? '600 ' : '') + '11px Vazirmatn, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
-          ctx.fillText(n.title, n.x, n.y + n.radius + 4);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.9)';
+          ctx.strokeText(shortTitle, n.x, n.y + n.radius + 4);
+          ctx.fillStyle = isFaded
+            ? (isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.5)')
+            : (isDark ? '#f1f5f9' : '#0f172a');
+          ctx.fillText(shortTitle, n.x, n.y + n.radius + 4);
         }
       }
 
@@ -530,20 +566,20 @@ const config = {
     }
 
     function requestDraw() {
-      if (animId) cancelAnimationFrame(animId);
-      animId = requestAnimationFrame(draw);
+      if (animId) caf(animId);
+      animId = raf(draw);
     }
 
     function simulateAndRender() {
-      if (animId) cancelAnimationFrame(animId);
+      if (animId) caf(animId);
       function loop() {
         const stillRunning = updateSimulation();
         draw();
         if (stillRunning) {
-          animId = requestAnimationFrame(loop);
+          animId = raf(loop);
         }
       }
-      animId = requestAnimationFrame(loop);
+      animId = raf(loop);
     }
 
     function getNodeAt(clientX: number, clientY: number) {
@@ -564,7 +600,14 @@ const config = {
       return null;
     }
 
+    let downX = 0;
+    let downY = 0;
+    let didDrag = false;
+
     canvas.addEventListener('mousedown', (e: MouseEvent) => {
+      downX = e.clientX;
+      downY = e.clientY;
+      didDrag = false;
       const hit = getNodeAt(e.clientX, e.clientY);
       if (hit) {
         draggedNode = hit;
@@ -580,6 +623,9 @@ const config = {
     });
 
     window.addEventListener('mousemove', (e: MouseEvent) => {
+      if ((draggedNode || isPanning) && Math.hypot(e.clientX - downX, e.clientY - downY) > 5) {
+        didDrag = true;
+      }
       if (draggedNode && canvas) {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
@@ -624,6 +670,10 @@ const config = {
     });
 
     canvas.addEventListener('click', (e: MouseEvent) => {
+      if (didDrag) {
+        didDrag = false;
+        return;
+      }
       const hit = getNodeAt(e.clientX, e.clientY);
       if (hit && hit.id && !hit.isCurrent) {
         window.location.href = '/' + hit.id;
@@ -666,19 +716,100 @@ const config = {
       <button class="slsg-graph-action-button" type="button" data-graph-action="render-arrows" aria-label="نمایش یا حذف جهت پیوندها" title="نمایش یا حذف جهت پیوندها">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="3"></circle><path d="M8 5h9a2 2 0 0 1 2 2v8"></path><path d="m12 8-3-3 3-3"></path><circle cx="19" cy="19" r="3"></circle></svg>
       </button>
+      <button class="slsg-graph-action-button" type="button" data-graph-action="settings" aria-label="تنظیمات گراف" title="تنظیمات گراف">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-horizontal"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>
+      </button>
     `;
 
+    const setDepth = (depth: number) => {
+      currentDepth = depth;
+      (gc as any).config.depth = depth;
+      host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(c => {
+        c.classList.toggle('active', Number(c.dataset.depth) === depth);
+      });
+      buildSubgraph(depth);
+    };
+
+    const toggleFullscreen = (force?: boolean) => {
+      const next = typeof force === 'boolean' ? force : !container!.classList.contains('slsg-is-fullscreen');
+      container!.classList.toggle('slsg-is-fullscreen', next);
+      (gc as any).isFullscreen = next;
+      document.body.dataset['graphBlur'] = next ? 'true' : '';
+      setTimeout(autoFit, 80);
+    };
+
     actionContainer.querySelector('[data-graph-action="reset-zoom"]')?.addEventListener('click', autoFit);
-    actionContainer.querySelector('[data-graph-action="fullscreen"]')?.addEventListener('click', () => {
-      container.classList.toggle('slsg-is-fullscreen');
-      document.body.dataset['graphBlur'] = container.classList.contains('slsg-is-fullscreen') ? 'true' : '';
-      setTimeout(autoFit, 100);
-    });
+    actionContainer.querySelector('[data-graph-action="fullscreen"]')?.addEventListener('click', () => toggleFullscreen());
     actionContainer.querySelector('[data-graph-action="render-arrows"]')?.addEventListener('click', () => {
       renderArrows = !renderArrows;
       if ((gc as any).config) (gc as any).config.renderArrows = renderArrows;
       requestDraw();
     });
+    actionContainer.querySelector('[data-graph-action="settings"]')?.addEventListener('click', () => {
+      const existing = gc.querySelector('.slsg-popup-menu');
+      if (existing) { existing.remove(); return; }
+      const popup = document.createElement('div');
+      popup.className = 'slsg-popup-menu';
+      popup.innerHTML = `
+        <div class="slsg-popup-menu-content">
+          <label>عمق ارتباطات
+            <select aria-label="عمق ارتباطات">
+              <option value="0">فقط این یادداشت</option>
+              <option value="1">همسایه‌ها (۱ گام)</option>
+              <option value="2">دو مرحله (۲ گام)</option>
+              <option value="5">همه یادداشت‌ها (سراسری)</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" ${renderArrows ? 'checked' : ''}/> نمایش جهت پیوندها
+          </label>
+          <div class="slsg-value-slider">
+            <span class="slsg-value-slider-label">نیروی دافعه</span>
+            <input type="range" min="40" max="320" value="${repelStrength}" aria-label="نیروی دافعه"/>
+          </div>
+          <div class="slsg-value-slider">
+            <span class="slsg-value-slider-label">طول پیوندها</span>
+            <input type="range" min="40" max="180" value="${springDistance}" aria-label="طول پیوندها"/>
+          </div>
+        </div>
+      `;
+      const select = popup.querySelector('select')!;
+      select.value = String((gc as any).config?.depth ?? currentDepth);
+      select.onchange = () => setDepth(Number(select.value));
+      const check = popup.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      check.onchange = () => {
+        renderArrows = check.checked;
+        if ((gc as any).config) (gc as any).config.renderArrows = renderArrows;
+        requestDraw();
+      };
+      const ranges = popup.querySelectorAll<HTMLInputElement>('input[type="range"]');
+      if (ranges[0]) ranges[0].oninput = () => { repelStrength = Number(ranges[0].value); alpha = 0.6; simulateAndRender(); };
+      if (ranges[1]) ranges[1].oninput = () => { springDistance = Number(ranges[1].value); alpha = 0.6; simulateAndRender(); };
+      gc.appendChild(popup);
+    });
+
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const popup = gc.querySelector('.slsg-popup-menu');
+      if (popup) {
+        popup.remove();
+        actionContainer?.querySelector<HTMLButtonElement>('[data-graph-action="settings"]')?.focus();
+        return;
+      }
+      if (container?.classList.contains('slsg-is-fullscreen')) {
+        toggleFullscreen(false);
+        actionContainer?.querySelector<HTMLButtonElement>('[data-graph-action="fullscreen"]')?.focus();
+      }
+    });
+
+    if (typeof MutationObserver !== 'undefined') {
+      const themeObs = new MutationObserver(() => requestDraw());
+      themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
+    if (typeof ResizeObserver !== 'undefined' && container) {
+      const resizeObs = new ResizeObserver(() => requestDraw());
+      resizeObs.observe(container);
+    }
 
     class Transform2D {
       x: number; y: number; k: number;
@@ -686,6 +817,7 @@ const config = {
       translate(dx = 0, dy = 0) { return new Transform2D(this.k, this.x + dx, this.y + dy); }
     }
 
+    (gc as any).isFullscreen = false;
     (gc as any).config = (gc as any).config || {};
     (gc as any).config.depth = currentDepth;
     (gc as any).config.renderArrows = renderArrows;
@@ -710,13 +842,7 @@ const config = {
     buildSubgraph(currentDepth);
 
     host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
-      chip.onclick = () => {
-        host.querySelectorAll('[data-depth]').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        const depth = Number(chip.dataset.depth);
-        (gc as any).config.depth = depth;
-        buildSubgraph(depth);
-      };
+      chip.onclick = () => setDepth(Number(chip.dataset.depth));
     });
   }
 
@@ -758,37 +884,25 @@ const config = {
           const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
           if (!host.isConnected) return;
           host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
-          if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
-          nameGraph(host.querySelector<HTMLElement>('graph-component')!);
+          init2DGraphEngine(host);
+          if (!host.querySelector('.graph-canvas-2d')) {
+            if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
+            nameGraph(host.querySelector<HTMLElement>('graph-component')!);
+          }
 
           button.hidden = true;
           status.textContent = '';
-
-          // If upstream renderer fails to produce a canvas (e.g. WebGL unavailable / CanvasRenderer unimplemented in Firefox/Linux),
-          // activate the universal 2D Canvas engine fallback!
-          setTimeout(() => {
-            if (!host.querySelector('canvas') || host.querySelector('graph-component')?.style.visibility === 'hidden') {
-              init2DGraphEngine(host);
-            }
-          }, 350);
         } catch {
-          // If import failed, try 2D fallback or show retry
-          try {
-            init2DGraphEngine(host);
-            button.hidden = true;
-            status.textContent = '';
-          } catch {
-            button.hidden = false;
-            button.textContent = 'تلاش مجدد';
-            status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
-          }
+          button.hidden = false;
+          button.textContent = 'تلاش مجدد';
+          status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
         } finally {
           pending = false;
           button.disabled = false;
           button.removeAttribute('aria-busy');
         }
       });
-      // Start the existing renderer automatically without blocking article rendering.
+      // Start the renderer automatically without blocking article rendering.
       button.hidden = true;
       setTimeout(() => button.click(), 0);
     }
