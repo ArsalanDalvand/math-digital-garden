@@ -651,6 +651,11 @@ const config = {
       actionContainer.className = 'slsg-graph-action-container';
       container.appendChild(actionContainer);
     }
+    actionContainer.style.position = 'absolute';
+    actionContainer.style.top = '8px';
+    actionContainer.style.left = '8px';
+    actionContainer.style.right = 'auto';
+    actionContainer.style.zIndex = '10';
     actionContainer.innerHTML = `
       <button class="slsg-graph-action-button" type="button" data-graph-action="reset-zoom" aria-label="بازنشانی زوم" title="بازنشانی زوم">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-focus"><circle cx="12" cy="12" r="3"></circle><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
@@ -675,6 +680,12 @@ const config = {
       requestDraw();
     });
 
+    class Transform2D {
+      x: number; y: number; k: number;
+      constructor(k = 1, x = 0, y = 0) { this.k = k; this.x = x; this.y = y; }
+      translate(dx = 0, dy = 0) { return new Transform2D(this.k, this.x + dx, this.y + dy); }
+    }
+
     (gc as any).config = (gc as any).config || {};
     (gc as any).config.depth = currentDepth;
     (gc as any).config.renderArrows = renderArrows;
@@ -684,8 +695,8 @@ const config = {
     (gc as any).simulator = {
       get nodes() { return nodes; },
       userZoomed: false,
-      centerTransform: { x: 0, y: 0, translate: () => ({ x: 0, y: 0 }) },
-      zoomTransform: { constructor: Object },
+      centerTransform: new Transform2D(1, 0, 0),
+      zoomTransform: new Transform2D(1, 0, 0),
       renderer: { resetZoom: () => autoFit() },
       updateZoom: (k: number, x: number, y: number) => {
         scale = k;

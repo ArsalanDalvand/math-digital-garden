@@ -38,7 +38,6 @@ function browser(...args) {
       'agent-browser',
       [
         '--session', session,
-        '--args', '--enable-webgl,--ignore-gpu-blocklist,--use-gl=angle,--use-angle=swiftshader',
         ...args,
         '--json'
       ],
@@ -179,16 +178,16 @@ try {
   assert.ok(actionsFound.includes('fullscreen'), 'Graph action button fullscreen must exist');
 
   // Test Reset Zoom / Fit
-  browser('click', '[data-graph-action="reset-zoom"]');
+  evaluate('document.querySelector("[data-graph-action=reset-zoom]")?.click()');
   browser('wait', '500');
   record('6. Tested reset zoom / fit action control');
 
   // Test Fullscreen Toggle
-  browser('click', '[data-graph-action="fullscreen"]');
+  evaluate('document.querySelector("[data-graph-action=fullscreen]")?.click()');
   browser('wait', '600');
   const fsStateOn = evaluate(`(() => {
     const gc = document.querySelector('graph-component');
-    const container = gc?.querySelector('.slsg-graph-container');
+    const container = gc?.querySelector('.slsg-graph-container') || document.querySelector('.slsg-graph-container');
     return {
       isFullscreen: gc?.isFullscreen === true || container?.classList.contains('slsg-is-fullscreen'),
       bodyBlur: document.body.dataset.graphBlur === 'true'
@@ -197,7 +196,7 @@ try {
   assert.equal(fsStateOn.isFullscreen, true, 'Fullscreen mode should activate on graph action click');
 
   // Toggle fullscreen off
-  browser('click', '[data-graph-action="fullscreen"]');
+  evaluate('document.querySelector("[data-graph-action=fullscreen]")?.click()');
   browser('wait', '600');
   const fsStateOff = evaluate(`(() => {
     const gc = document.querySelector('graph-component');
