@@ -145,6 +145,570 @@ const config = {
       }
     });
   }
+
+  // Universal 2D Canvas Knowledge Graph Engine (Resilient fallback when WebGL / Pixi is unavailable or blocked)
+  function init2DGraphEngine(host: HTMLElement) {
+    const gc = host.querySelector<HTMLElement>('graph-component') || host;
+    const template = host.querySelector<HTMLTemplateElement>('[data-graph-template]');
+    const rawSitemap = gc.dataset.sitemap || template?.content.querySelector('graph-component')?.dataset.sitemap || '{}';
+    const rawSlug = gc.dataset.slug || template?.content.querySelector('graph-component')?.dataset.slug || '';
+    let sitemap: Record<string, any> = {};
+    try { sitemap = JSON.parse(rawSitemap); } catch { return; }
+    const currentSlug = rawSlug;
+
+    const skeleton = host.querySelector<HTMLElement>('.slsg-graph-skeleton');
+    if (skeleton) skeleton.style.display = 'none';
+
+    let container = gc.querySelector<HTMLElement>('.slsg-graph-container');
+    if (!container) container = host.querySelector<HTMLElement>('.slsg-graph-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'slsg-graph-container';
+      container.tabIndex = 0;
+      gc.appendChild(container);
+    }
+    container.style.position = 'relative';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.minHeight = '320px';
+    container.style.overflow = 'hidden';
+    container.style.background = 'var(--sl-color-bg, #090d16)';
+    container.style.borderRadius = '8px';
+
+    gc.style.visibility = 'visible';
+    gc.style.display = 'block';
+    gc.style.opacity = '1';
+
+    const kindColors: Record<string, string> = {
+      assertion: '#1d4ed8', concept: '#0d9488', proof: '#64748b',
+      problem: '#ea580c', solution: '#059669', technique: '#d97706',
+      hint_ladder: '#d97706', problem_archetype: '#c026d3', pitfall: '#b45309',
+      visual_lab: '#0284c7', collection: '#7c3aed', axiom: '#0e7490',
+      theory: '#4338ca', remark: '#64748b'
+    };
+    const kindStrokes: Record<string, string> = {
+      assertion: '#60a5fa', concept: '#2dd4bf', proof: '#94a3b8',
+      problem: '#fb923c', solution: '#34d399', technique: '#fbbf24',
+      hint_ladder: '#f59e0b', problem_archetype: '#e879f9', pitfall: '#f59e0b',
+      visual_lab: '#38bdf8', collection: '#c084fc', axiom: '#22d3ee',
+      theory: '#818cf8', remark: '#cbd5e1'
+    };
+    const kindSizes: Record<string, number> = {
+      collection: 13, theory: 12, assertion: 10, concept: 10, problem: 10,
+      visual_lab: 10, axiom: 10, problem_archetype: 10, proof: 8,
+      solution: 8, technique: 8, pitfall: 8, hint_ladder: 7, remark: 7
+    };
+
+    let currentDepth = Number((gc as any).config?.depth ?? 1);
+    let renderArrows = (gc as any).config?.renderArrows !== false;
+
+    let canvas = container.querySelector<HTMLCanvasElement>('canvas');
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.className = 'graph-canvas-2d';
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', 'نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
+      container.prepend(canvas);
+    }
+
+    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let nodes: any[] = [];
+    let links: any[] = [];
+    let hoveredNode: any = null;
+    let draggedNode: any = null;
+    let isPanning = false;
+    let startMouseX = 0;
+    let startMouseY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+    let animId = 0;
+    let alpha = 1;
+
+    function buildSubgraph(depth: number) {
+      const visited = new Set<string>();
+      if (sitemap[currentSlug]) visited.add(currentSlug);
+      let frontier = [currentSlug];
+
+      if (depth >= 5) {
+        for (const k of Object.keys(sitemap)) visited.add(k);
+      } else {
+        for (let d = 0; d < depth; d++) {
+          const next: string[] = [];
+          for (const id of frontier) {
+            const item = sitemap[id];
+            if (!item) continue;
+            for (const n of [...(item.links || []), ...(item.backlinks || [])]) {
+              if (sitemap[n] && !visited.has(n)) {
+                visited.add(n);
+                next.push(n);
+              }
+            }
+          }
+          frontier = next;
+        }
+      }
+
+      const newNodes: any[] = [];
+      const nodeMap = new Map<string, any>();
+      const width = canvas?.clientWidth || 300;
+      const height = canvas?.clientHeight || 300;
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      let idx = 0;
+      const total = visited.size;
+      for (const id of visited) {
+        const item = sitemap[id];
+        if (!item) continue;
+        const isCurrent = id === currentSlug;
+        const radius = isCurrent ? 14 : (kindSizes[item.kind] || 9);
+        const color = isCurrent ? '#06b6d4' : (kindColors[item.kind] || '#64748b');
+        const stroke = isCurrent ? '#67e8f9' : (kindStrokes[item.kind] || '#94a3b8');
+
+        let x = centerX;
+        let y = centerY;
+        if (!isCurrent) {
+          const angle = idx * (Math.PI * 2 / Math.min(total, 16)) + (idx * 0.3);
+          const dist = 60 + Math.floor(idx / 12) * 55;
+          x = centerX + Math.cos(angle) * dist;
+          y = centerY + Math.sin(angle) * dist;
+        }
+
+        const node = {
+          id,
+          title: item.title || id.replace('notes/', ''),
+          kind: item.kind || '',
+          slogan: item.slogan || '',
+          isCurrent,
+          radius,
+          color,
+          stroke,
+          x,
+          y,
+          vx: 0,
+          vy: 0,
+        };
+        newNodes.push(node);
+        nodeMap.set(id, node);
+        idx++;
+      }
+
+      const newLinks: any[] = [];
+      for (const id of visited) {
+        const item = sitemap[id];
+        if (!item) continue;
+        const src = nodeMap.get(id);
+        if (!src) continue;
+        for (const tId of (item.links || [])) {
+          const tgt = nodeMap.get(tId);
+          if (tgt && tgt !== src) {
+            newLinks.push({ source: src, target: tgt });
+          }
+        }
+      }
+
+      nodes = newNodes;
+      links = newLinks;
+      alpha = 1;
+      simulateAndRender();
+      setTimeout(autoFit, 100);
+    }
+
+    function autoFit() {
+      if (!canvas || !nodes.length) return;
+      const validNodes = nodes.filter(n => Number.isFinite(n.x) && Number.isFinite(n.y));
+      if (!validNodes.length) return;
+      const xs = validNodes.map(n => n.x);
+      const ys = validNodes.map(n => n.y);
+      const left = Math.min(...xs);
+      const right = Math.max(...xs);
+      const top = Math.min(...ys);
+      const bottom = Math.max(...ys);
+
+      const w = canvas.clientWidth || 300;
+      const h = canvas.clientHeight || 300;
+      const pad = 50;
+      const spanX = Math.max(1, right - left);
+      const spanY = Math.max(1, bottom - top);
+      scale = Math.min(1.2, Math.max(0.15, Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY)));
+      panX = w / 2 - ((left + right) / 2) * scale;
+      panY = h / 2 - ((top + bottom) / 2) * scale;
+      requestDraw();
+    }
+
+    function updateSimulation() {
+      if (alpha < 0.005) return false;
+      const w = canvas?.clientWidth || 300;
+      const h = canvas?.clientHeight || 300;
+      const cx = w / 2;
+      const cy = h / 2;
+      const repelForce = 130 * alpha;
+      const springLength = 85;
+      const springK = 0.05 * alpha;
+
+      for (let i = 0; i < nodes.length; i++) {
+        const n1 = nodes[i];
+        for (let j = i + 1; j < nodes.length; j++) {
+          const n2 = nodes[j];
+          let dx = n1.x - n2.x;
+          let dy = n1.y - n2.y;
+          let d2 = dx * dx + dy * dy;
+          if (d2 < 1) { dx = (Math.random() - 0.5) * 2; dy = (Math.random() - 0.5) * 2; d2 = dx * dx + dy * dy; }
+          const dist = Math.sqrt(d2);
+          if (dist > 320) continue;
+          const f = repelForce / (dist * dist);
+          const fx = (dx / dist) * f;
+          const fy = (dy / dist) * f;
+          if (n1 !== draggedNode) { n1.vx += fx; n1.vy += fy; }
+          if (n2 !== draggedNode) { n2.vx -= fx; n2.vy -= fy; }
+        }
+      }
+
+      for (const link of links) {
+        const src = link.source;
+        const tgt = link.target;
+        const dx = tgt.x - src.x;
+        const dy = tgt.y - src.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const f = (dist - springLength) * springK;
+        const fx = (dx / dist) * f;
+        const fy = (dy / dist) * f;
+        if (src !== draggedNode) { src.vx += fx; src.vy += fy; }
+        if (tgt !== draggedNode) { tgt.vx -= fx; tgt.vy -= fy; }
+      }
+
+      for (const n of nodes) {
+        if (n === draggedNode) continue;
+        n.vx += (cx - n.x) * (0.015 * alpha);
+        n.vy += (cy - n.y) * (0.015 * alpha);
+        n.vx *= 0.82;
+        n.vy *= 0.82;
+        n.x += n.vx;
+        n.y += n.vy;
+      }
+
+      alpha *= 0.96;
+      return true;
+    }
+
+    function draw() {
+      if (!canvas || !ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth || 300;
+      const h = canvas.clientHeight || 300;
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.scale(scale, scale);
+
+      const connected = new Set<any>();
+      if (hoveredNode) {
+        connected.add(hoveredNode);
+        for (const l of links) {
+          if (l.source === hoveredNode) connected.add(l.target);
+          if (l.target === hoveredNode) connected.add(l.source);
+        }
+      }
+
+      for (const l of links) {
+        const isHoveredLink = hoveredNode && (l.source === hoveredNode || l.target === hoveredNode);
+        const isFaded = hoveredNode && !isHoveredLink;
+
+        ctx.beginPath();
+        ctx.moveTo(l.source.x, l.source.y);
+        ctx.lineTo(l.target.x, l.target.y);
+        ctx.strokeStyle = isHoveredLink
+          ? '#38bdf8'
+          : isFaded
+          ? 'rgba(71, 85, 105, 0.2)'
+          : 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = isHoveredLink ? 2.2 : 1.2;
+        ctx.stroke();
+
+        if (renderArrows) {
+          const dx = l.target.x - l.source.x;
+          const dy = l.target.y - l.source.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > l.target.radius + 10) {
+            const angle = Math.atan2(dy, dx);
+            const arrowX = l.target.x - Math.cos(angle) * (l.target.radius + 2);
+            const arrowY = l.target.y - Math.sin(angle) * (l.target.radius + 2);
+            const headlen = isHoveredLink ? 8 : 6;
+            ctx.beginPath();
+            ctx.moveTo(arrowX, arrowY);
+            ctx.lineTo(arrowX - headlen * Math.cos(angle - Math.PI / 6), arrowY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(arrowX - headlen * Math.cos(angle + Math.PI / 6), arrowY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.fill();
+          }
+        }
+      }
+
+      for (const n of nodes) {
+        const isFaded = hoveredNode && !connected.has(n);
+        const isHovered = hoveredNode === n;
+
+        if (n.isCurrent) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.radius + 5, 0, Math.PI * 2);
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        ctx.fillStyle = isFaded ? 'rgba(71, 85, 105, 0.4)' : n.color;
+        ctx.fill();
+
+        ctx.strokeStyle = isHovered ? '#ffffff' : (isFaded ? 'rgba(100, 116, 139, 0.3)' : n.stroke);
+        ctx.lineWidth = isHovered ? 2.5 : 1.5;
+        ctx.stroke();
+
+        if (nodes.length <= 35 || scale > 0.6 || isHovered || n.isCurrent || (hoveredNode && connected.has(n))) {
+          ctx.font = '11px Vazirmatn, sans-serif';
+          ctx.fillStyle = isFaded ? 'rgba(148, 163, 184, 0.4)' : '#f1f5f9';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(n.title, n.x, n.y + n.radius + 4);
+        }
+      }
+
+      ctx.restore();
+
+      if (hoveredNode) {
+        const sx = hoveredNode.x * scale + panX;
+        const sy = hoveredNode.y * scale + panY;
+        const title = hoveredNode.title;
+        const kindText = hoveredNode.kind ? `[${hoveredNode.kind}] ` : '';
+        const tipText = kindText + title;
+
+        ctx.font = '12px Vazirmatn, sans-serif';
+        const textWidth = ctx.measureText(tipText).width;
+        const boxW = Math.max(textWidth + 24, 100);
+        const boxH = 30;
+        let boxX = sx - boxW / 2;
+        let boxY = sy - hoveredNode.radius * scale - boxH - 10;
+        if (boxX < 10) boxX = 10;
+        if (boxX + boxW > w - 10) boxX = w - boxW - 10;
+        if (boxY < 10) boxY = sy + hoveredNode.radius * scale + 15;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = hoveredNode.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(boxX, boxY, boxW, boxH, 6);
+        } else {
+          ctx.rect(boxX, boxY, boxW, boxH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tipText, boxX + boxW / 2, boxY + boxH / 2);
+      }
+
+      ctx.restore();
+    }
+
+    function requestDraw() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = requestAnimationFrame(draw);
+    }
+
+    function simulateAndRender() {
+      if (animId) cancelAnimationFrame(animId);
+      function loop() {
+        const stillRunning = updateSimulation();
+        draw();
+        if (stillRunning) {
+          animId = requestAnimationFrame(loop);
+        }
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    function getNodeAt(clientX: number, clientY: number) {
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const mx = clientX - rect.left;
+      const my = clientY - rect.top;
+      const gx = (mx - panX) / scale;
+      const gy = (my - panY) / scale;
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i];
+        const dx = n.x - gx;
+        const dy = n.y - gy;
+        if (dx * dx + dy * dy <= (n.radius + 4) * (n.radius + 4)) {
+          return n;
+        }
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousedown', (e: MouseEvent) => {
+      const hit = getNodeAt(e.clientX, e.clientY);
+      if (hit) {
+        draggedNode = hit;
+        alpha = 0.5;
+        simulateAndRender();
+      } else {
+        isPanning = true;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        startPanX = panX;
+        startPanY = panY;
+      }
+    });
+
+    window.addEventListener('mousemove', (e: MouseEvent) => {
+      if (draggedNode && canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        draggedNode.x = (mx - panX) / scale;
+        draggedNode.y = (my - panY) / scale;
+        draggedNode.vx = 0;
+        draggedNode.vy = 0;
+        alpha = 0.3;
+        simulateAndRender();
+        return;
+      }
+      if (isPanning) {
+        panX = startPanX + (e.clientX - startMouseX);
+        panY = startPanY + (e.clientY - startMouseY);
+        requestDraw();
+        return;
+      }
+      if (canvas && canvas.isConnected) {
+        const rect = canvas.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          const hit = getNodeAt(e.clientX, e.clientY);
+          if (hit !== hoveredNode) {
+            hoveredNode = hit;
+            canvas.style.cursor = hit ? 'pointer' : 'default';
+            requestDraw();
+          }
+        } else if (hoveredNode) {
+          hoveredNode = null;
+          requestDraw();
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (draggedNode) {
+        draggedNode = null;
+        alpha = 0.2;
+        simulateAndRender();
+      }
+      isPanning = false;
+    });
+
+    canvas.addEventListener('click', (e: MouseEvent) => {
+      const hit = getNodeAt(e.clientX, e.clientY);
+      if (hit && hit.id && !hit.isCurrent) {
+        window.location.href = '/' + hit.id;
+      }
+    });
+
+    canvas.addEventListener('wheel', (e: WheelEvent) => {
+      e.preventDefault();
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+      const newScale = Math.min(2.5, Math.max(0.15, scale * zoomFactor));
+
+      panX = mx - (mx - panX) * (newScale / scale);
+      panY = my - (my - panY) * (newScale / scale);
+      scale = newScale;
+      requestDraw();
+    }, { passive: false });
+
+    let actionContainer = container.querySelector<HTMLElement>('.slsg-graph-action-container');
+    if (!actionContainer) {
+      actionContainer = document.createElement('div');
+      actionContainer.className = 'slsg-graph-action-container';
+      container.appendChild(actionContainer);
+    }
+    actionContainer.innerHTML = `
+      <button class="slsg-graph-action-button" type="button" data-graph-action="reset-zoom" aria-label="بازنشانی زوم" title="بازنشانی زوم">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-focus"><circle cx="12" cy="12" r="3"></circle><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
+      </button>
+      <button class="slsg-graph-action-button" type="button" data-graph-action="fullscreen" aria-label="تمام‌صفحه یا بازگشت" title="تمام‌صفحه یا بازگشت">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize-2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" x2="14" y1="3" y2="10"></line><line x1="3" x2="10" y1="21" y2="14"></line></svg>
+      </button>
+      <button class="slsg-graph-action-button" type="button" data-graph-action="render-arrows" aria-label="نمایش یا حذف جهت پیوندها" title="نمایش یا حذف جهت پیوندها">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="3"></circle><path d="M8 5h9a2 2 0 0 1 2 2v8"></path><path d="m12 8-3-3 3-3"></path><circle cx="19" cy="19" r="3"></circle></svg>
+      </button>
+    `;
+
+    actionContainer.querySelector('[data-graph-action="reset-zoom"]')?.addEventListener('click', autoFit);
+    actionContainer.querySelector('[data-graph-action="fullscreen"]')?.addEventListener('click', () => {
+      container.classList.toggle('slsg-is-fullscreen');
+      document.body.dataset['graphBlur'] = container.classList.contains('slsg-is-fullscreen') ? 'true' : '';
+      setTimeout(autoFit, 100);
+    });
+    actionContainer.querySelector('[data-graph-action="render-arrows"]')?.addEventListener('click', () => {
+      renderArrows = !renderArrows;
+      if ((gc as any).config) (gc as any).config.renderArrows = renderArrows;
+      requestDraw();
+    });
+
+    (gc as any).config = (gc as any).config || {};
+    (gc as any).config.depth = currentDepth;
+    (gc as any).config.renderArrows = renderArrows;
+    (gc as any).full_refresh = () => {
+      buildSubgraph((gc as any).config.depth);
+    };
+    (gc as any).simulator = {
+      get nodes() { return nodes; },
+      userZoomed: false,
+      centerTransform: { x: 0, y: 0, translate: () => ({ x: 0, y: 0 }) },
+      zoomTransform: { constructor: Object },
+      renderer: { resetZoom: () => autoFit() },
+      updateZoom: (k: number, x: number, y: number) => {
+        scale = k;
+        if (Number.isFinite(x)) panX = x;
+        if (Number.isFinite(y)) panY = y;
+        requestDraw();
+      },
+      requestRender: true,
+    };
+
+    buildSubgraph(currentDepth);
+
+    host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
+      chip.onclick = () => {
+        host.querySelectorAll('[data-depth]').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const depth = Number(chip.dataset.depth);
+        (gc as any).config.depth = depth;
+        buildSubgraph(depth);
+      };
+    });
+  }
+
   const bound = new WeakSet<HTMLElement>();
   function bindGraphs() {
     for (const host of document.querySelectorAll<HTMLElement>('[data-note-graph]')) {
@@ -180,19 +744,33 @@ const config = {
         button.setAttribute('aria-busy', 'true');
         status.textContent = 'در حال بارگذاری گراف…';
         try {
-          // The package exports its Astro wrapper but not its custom element.
-          // Load the existing renderer, rather than rebuilding a graph engine.
           const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
           if (!host.isConnected) return;
           host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
           if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
           nameGraph(host.querySelector<HTMLElement>('graph-component')!);
+
           button.hidden = true;
           status.textContent = '';
+
+          // If upstream renderer fails to produce a canvas (e.g. WebGL unavailable / CanvasRenderer unimplemented in Firefox/Linux),
+          // activate the universal 2D Canvas engine fallback!
+          setTimeout(() => {
+            if (!host.querySelector('canvas') || host.querySelector('graph-component')?.style.visibility === 'hidden') {
+              init2DGraphEngine(host);
+            }
+          }, 350);
         } catch {
-          button.hidden = false;
-          button.textContent = 'تلاش مجدد';
-          status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
+          // If import failed, try 2D fallback or show retry
+          try {
+            init2DGraphEngine(host);
+            button.hidden = true;
+            status.textContent = '';
+          } catch {
+            button.hidden = false;
+            button.textContent = 'تلاش مجدد';
+            status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
+          }
         } finally {
           pending = false;
           button.disabled = false;
