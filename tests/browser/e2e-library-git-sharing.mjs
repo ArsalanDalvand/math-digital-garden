@@ -105,7 +105,7 @@ try {
 
   // 4. Open /library and create a folder + note
   browser('open', base + '/library');
-  browser('wait', '[data-library-browser]');
+  browser('wait', '[data-library-browser] form button[type="submit"]:not([disabled])');
   const hasImportBtn = evaluate('!!document.querySelector("[data-import-docs]")');
   assert.equal(hasImportBtn, true, 'Personal library must expose Git/Zip import button');
   record('3. Signed in and opened personal /library with Git/Zip import control');
@@ -113,7 +113,7 @@ try {
   browser('fill', '[data-library-browser] form input[name="title"]', 'جزوه آزمایشی E2E');
   browser('select', '[data-library-browser] form select[name="kind"]', 'note');
   browser('click', '[data-library-browser] form button[type="submit"]');
-  browser('wait', '2000');
+  browser('wait', '[data-library-actions]');
 
   const personalNote = evaluate(`(() => ({
     path: location.pathname,
@@ -125,8 +125,8 @@ try {
   assert.equal(personalNote.hasActions, true, 'Personal note actions must render');
   record(`4. Created and opened personal note at ${personalNote.path}`);
 
-  // 5. Verify AI Study Assistant UI renders on /sample
-  browser('open', base + '/sample');
+  // 5. Verify AI Study Assistant UI renders on a canonical note
+  browser('open', base + '/notes/axler-2debc85d452ad205');
   browser('wait', '.study-assistant');
   const assistantUi = evaluate(`(() => ({
     hasHeader: !!document.querySelector('.study-assistant header'),

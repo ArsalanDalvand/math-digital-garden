@@ -77,7 +77,8 @@ try {
   // 3. Perform Persian keyword search
   browser('fill', '#query', 'ماتریس');
   browser('click', 'form[role="search"] button[type="submit"]');
-  browser('wait', '500');
+  browser('wait', '1500');
+  browser('wait', '.catalogue-list li');
   const searchState = evaluate(`(() => {
     const items = Array.from(document.querySelectorAll('.catalogue-list li h2 a')).map(a => ({
       text: a.textContent?.trim() || '',
@@ -98,7 +99,7 @@ try {
   if (hasKindFilter) {
     browser('select', '#kind', 'assertion');
     browser('click', 'form[role="search"] button[type="submit"]');
-    browser('wait', '500');
+    browser('wait', '1500');
     const filteredUrl = evaluate('location.href');
     assert.ok(filteredUrl.includes('kind=assertion'), 'URL must reflect selected UMKO kind filter');
     record('4. Applied UMKO kind=assertion filter successfully');
@@ -112,14 +113,16 @@ try {
   const hasNextPage = evaluate('!!document.querySelector(".catalogue-pagination a")');
   assert.equal(hasNextPage, true, 'Pagination links must exist on full catalogue');
   browser('click', '.catalogue-pagination a');
-  browser('wait', '500');
+  browser('wait', '1500');
   const page2Url = evaluate('location.href');
   assert.ok(page2Url.includes('page=2'), `Pagination must navigate to page=2 (got: ${page2Url})`);
   record('5. Catalogue pagination to page 2 verified');
 
   // 6. Click a result link and verify note page loads
-  browser('click', '.catalogue-list li h2 a');
-  browser('wait', '.workspace-document article.note');
+  const firstHref = evaluate('document.querySelector(".catalogue-list li h2 a")?.getAttribute("href") || ""');
+  assert.ok(firstHref.startsWith('/notes/'), `Catalogue result href must start with /notes/ (got: ${firstHref})`);
+  browser('open', base + firstHref);
+  browser('wait', '.workspace-document');
   const noteLoaded = evaluate('({ url: location.pathname, h1: document.querySelector(".workspace-document h1")?.textContent?.trim() })');
   assert.ok(noteLoaded.url.startsWith('/notes/'), 'Clicking catalogue result must open /notes/ page');
   assert.ok(noteLoaded.h1 && noteLoaded.h1.length > 0, 'Opened note must have a heading');

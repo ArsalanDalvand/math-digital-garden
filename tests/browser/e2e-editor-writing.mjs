@@ -174,7 +174,7 @@ try {
   if (hasResetBtn) {
     evaluate('window.confirm = () => true');
     evaluate('document.querySelector("[data-reset]").click()');
-    wait('!document.querySelector("article.note:not([data-live-preview])")?.textContent?.includes(' + JSON.stringify(marker) + ')');
+    wait('document.querySelector("article.note:not([data-live-preview])")?.dataset?.aiScope === "canonical" && !document.querySelector("article.note:not([data-live-preview])")?.textContent?.includes(' + JSON.stringify(marker) + ')');
     assert.equal(evaluate('document.querySelector("article.note:not([data-live-preview])").dataset.aiScope'), 'canonical');
     record('11c. Reset personal fork to canonical version via [data-reset]');
   }

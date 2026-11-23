@@ -167,10 +167,9 @@ const config = {
     const currentSlug = rawSlug;
 
     const skeleton = host.querySelector<HTMLElement>('.slsg-graph-skeleton');
-    if (skeleton) skeleton.style.display = 'none';
+    if (skeleton) skeleton.remove();
 
     let container = gc.querySelector<HTMLElement>('.slsg-graph-container');
-    if (!container) container = host.querySelector<HTMLElement>('.slsg-graph-container');
     if (!container) {
       container = document.createElement('div');
       container.className = 'slsg-graph-container';
@@ -181,7 +180,7 @@ const config = {
     container.querySelectorAll('canvas:not(.graph-canvas-2d)').forEach(c => c.remove());
     container.style.position = 'relative';
     container.style.width = '100%';
-    container.style.height = '100%';
+    container.style.height = '210px';
     container.style.minHeight = '210px';
     container.style.overflow = 'hidden';
     container.style.borderRadius = '8px';
@@ -189,6 +188,8 @@ const config = {
     gc.style.visibility = 'visible';
     gc.style.display = 'block';
     gc.style.opacity = '1';
+    gc.style.width = '100%';
+    gc.style.minHeight = '210px';
 
     const kindColors: Record<string, string> = {
       assertion: '#1d4ed8', concept: '#0d9488', proof: '#64748b',
@@ -881,11 +882,17 @@ const config = {
         button.setAttribute('aria-busy', 'true');
         status.textContent = 'در حال بارگذاری گراف…';
         try {
-          const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
-          if (!host.isConnected) return;
-          host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
-          init2DGraphEngine(host);
-          if (!host.querySelector('.graph-canvas-2d')) {
+          const probe = typeof document.createElement === 'function' ? document.createElement('canvas') : null;
+          let has2D = false;
+          try { has2D = !!(probe && typeof probe.getContext === 'function' && probe.getContext('2d')); } catch {}
+          if (has2D) {
+            if (!host.isConnected) return;
+            host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
+            init2DGraphEngine(host);
+          } else {
+            const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
+            if (!host.isConnected) return;
+            host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
             if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
             nameGraph(host.querySelector<HTMLElement>('graph-component')!);
           }
