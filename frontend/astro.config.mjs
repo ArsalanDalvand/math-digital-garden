@@ -16,11 +16,15 @@ const siteDir = process.env.PUBLIC_SITE_DIR || (['fa', 'ar', 'he', 'ur'].include
 
 export default defineConfig({
   site,
-  security: { allowedDomains: [
-    {hostname:"127.0.0.1",protocol:"http"},
-    {hostname:"localhost",protocol:"http"},
-    {hostname:siteUrl.hostname,protocol:siteUrl.protocol.slice(0,-1),...(siteUrl.port ? {port:siteUrl.port} : {})},
-  ] },
+  security: {
+    checkOrigin: false,
+    allowedDomains: [
+      {hostname:"127.0.0.1",protocol:"http"},
+      {hostname:"localhost",protocol:"http"},
+      {hostname:"test.atomathix.ir",protocol:"https"},
+      {hostname:siteUrl.hostname,protocol:siteUrl.protocol.slice(0,-1),...(siteUrl.port ? {port:siteUrl.port} : {})},
+    ]
+  },
   devToolbar: {enabled:false},
   output: 'server',
   prefetch: true,
