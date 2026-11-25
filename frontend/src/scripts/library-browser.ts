@@ -297,7 +297,9 @@ if(root){
     li.append(button('بازیابی',async()=>{await api('/library/items/'+item.id+'/restore',{});await load();document.dispatchEvent(new Event('garden:library'));}));
    }else if(item.kind==='folder'){
     if(item.has_git){
-     li.append(button('🔄 بروزرسانی از گیت',async()=>{
+     const syncBtn=button('🔄 بروزرسانی از گیت',async()=>{
+      syncBtn.disabled=true;
+      syncBtn.textContent='⏳ در حال بروزرسانی...';
       status.textContent=`در حال دریافت تغییرات مخزن «${item.title}»...`;
       try{
        const res=await api(`/library/items/${item.id}/git-sync`,{},'POST');
@@ -306,8 +308,12 @@ if(root){
        document.dispatchEvent(new Event('garden:library'));
       }catch(err){
        status.textContent=message(err);
+      }finally{
+       syncBtn.disabled=false;
+       syncBtn.textContent='🔄 بروزرسانی از گیت';
       }
-     }));
+     });
+     li.append(syncBtn);
     }
 
     li.append(
