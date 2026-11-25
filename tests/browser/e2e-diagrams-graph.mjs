@@ -188,12 +188,18 @@ try {
   const fsStateOn = evaluate(`(() => {
     const gc = document.querySelector('graph-component');
     const container = gc?.querySelector('.slsg-graph-container') || document.querySelector('.slsg-graph-container');
+    const rect = container?.getBoundingClientRect();
     return {
       isFullscreen: gc?.isFullscreen === true || container?.classList.contains('slsg-is-fullscreen'),
-      bodyBlur: document.body.dataset.graphBlur === 'true'
+      bodyBlur: document.body.dataset.graphBlur === 'true',
+      width: Math.round(rect?.width || 0),
+      height: Math.round(rect?.height || 0),
+      hasFsHud: !!container?.querySelector('.kg-fs-hud:not([hidden])')
     };
   })()`);
   assert.equal(fsStateOn.isFullscreen, true, 'Fullscreen mode should activate on graph action click');
+  assert.ok(fsStateOn.width >= 600 && fsStateOn.height >= 400, `Fullscreen container must expand to viewport (got ${fsStateOn.width}x${fsStateOn.height})`);
+  assert.equal(fsStateOn.hasFsHud, true, 'Fullscreen HUD (search & depth controls) must be visible');
 
   // Toggle fullscreen off
   evaluate('document.querySelector("[data-graph-action=fullscreen]")?.click()');
@@ -204,7 +210,7 @@ try {
     return gc?.isFullscreen === false && !container?.classList.contains('slsg-is-fullscreen');
   })()`);
   assert.equal(fsStateOff, true, 'Fullscreen mode should deactivate on second click');
-  record('7. Tested fullscreen toggle (activated and restored cleanly)');
+  record(`7. Tested fullscreen toggle (${fsStateOn.width}x${fsStateOn.height}px modal activated with HUD and restored cleanly)`);
 
   // Verify visual taxonomy legend
   const legendInfo = evaluate(`(() => {
@@ -418,13 +424,41 @@ try {
   assert.equal(popupClosed, true, 'Escape must close graph settings popup');
   record('14. Verified graph settings popup open and Escape dismissal');
 
+  // 15. Verify Axler MOC (/notes/axler-2debc85d452ad205) semantic coloring, legend below canvas, and interactive legend filter
+  browser('open', base + '/notes/axler-2debc85d452ad205');
+  browser('wait', 'graph-component[data-graph-ready="true"]');
+  browser('wait', '1200');
+  const axlerState = evaluate(`(() => {
+    const gc = document.querySelector('graph-component');
+    const canvas = document.querySelector('.note-graph canvas.graph-canvas-2d');
+    const legend = document.querySelector('.graph-umko-legend');
+    const cRect = canvas?.getBoundingClientRect();
+    const lRect = legend?.getBoundingClientRect();
+    const kinds = [...new Set((gc?.simulator?.nodes || []).map(n => n.kind).filter(Boolean))];
+    return {
+      nodesCount: gc?.simulator?.nodes?.length || 0,
+      kinds,
+      legendBelowCanvas: !!cRect && !!lRect && lRect.top >= cRect.bottom - 2,
+    };
+  })()`);
+  assert.ok(axlerState.nodesCount >= 5, `Axler graph must render nodes (got ${axlerState.nodesCount})`);
+  assert.ok(axlerState.kinds.length >= 1, `Axler graph must infer semantic UMKO kinds from tags (got ${JSON.stringify(axlerState.kinds)})`);
+  assert.equal(axlerState.legendBelowCanvas, true, 'UMKO legend must render cleanly below the graph canvas');
+
+  // Toggle interactive legend filter on and off
+  browser('click', '[data-legend-kind="collection"]');
+  browser('wait', '200');
+  const filterOn = evaluate('document.querySelector("[data-legend-kind=collection]")?.classList.contains("is-active")');
+  assert.equal(filterOn, true, 'Clicking legend badge must activate kind filter');
+  browser('click', '[data-legend-kind="collection"]');
+  browser('wait', '200');
+  const filterOff = evaluate('!document.querySelector("[data-legend-kind=collection]")?.classList.contains("is-active")');
+  assert.equal(filterOff, true, 'Clicking active legend badge again must clear kind filter');
+  record(`15. Axler graph verified (${axlerState.nodesCount} nodes, semantic kinds: ${axlerState.kinds.join(', ')}, legend below canvas & interactive filter)`);
+
   // Final sanity check for any unhandled browser errors
   const pageErrors = browser('errors')?.errors || [];
-  const criticalErrors = pageErrors.filter(e =>
-    !e.text?.includes('CanvasRenderer is not yet implemented') &&
-    !e.text?.includes('interpolatedValue')
-  );
-  assert.equal(criticalErrors.length, 0, `No critical page errors allowed: ${JSON.stringify(criticalErrors)}`);
+  assert.equal(pageErrors.length, 0, `No browser page errors allowed: ${JSON.stringify(pageErrors)}`);
 
   console.log(`\nAll ${checks.length} checks passed successfully!`);
 

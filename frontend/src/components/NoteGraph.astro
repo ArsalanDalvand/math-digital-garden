@@ -11,10 +11,11 @@ const config = {
   depth: 1,
   prefetchPages: false,
   renderExternal: false,
-  labelFontSize: 13,
-  linkDistance: 130,
-  repelForce: 130,
-  centerForce: 0.15,
+  labelFontSize: 12,
+  linkDistance: 120,
+  repelForce: 150,
+  centerForce: 0.12,
+  colliderPadding: 24,
   renderArrows: true,
   tagRenderMode: 'same',
   tagStyles: {
@@ -49,67 +50,649 @@ const config = {
   <p>برای مطالعه، نودها را انتخاب کنید. <a href="/search">فهرست متنی همهٔ یادداشت‌ها</a></p>
   <button type="button" class="garden-secondary" data-load-graph>نمایش گراف ارتباطات</button>
   <p role="status" data-graph-status></p>
+  <div class="graph-stage-slot" data-graph-slot></div>
   <template data-graph-template>
     <div class="slsg-graph-component slsg-graph-skeleton"><div class="slsg-graph-container"></div></div>
     <graph-component data-config={JSON.stringify(config)} data-sitemap={JSON.stringify(graphSitemap(garden))} data-slug={noteHref(slug).slice(1)} data-debug="false" data-trailing-slashes="false"></graph-component>
   </template>
   <div class="graph-umko-legend" aria-label="راهنمای دسته‌بندی گره‌های گراف">
-    <span class="legend-badge" style="--badge-c: #1d4ed8">● قضیه</span>
-    <span class="legend-badge" style="--badge-c: #0d9488">● مفهوم</span>
-    <span class="legend-badge" style="--badge-c: #ea580c">● مسئله</span>
-    <span class="legend-badge" style="--badge-c: #059669">● راه‌حل</span>
-    <span class="legend-badge" style="--badge-c: #7c3aed">● نقشه راه</span>
-    <span class="legend-badge" style="--badge-c: #0284c7">● شبیه‌ساز</span>
-    <span class="legend-badge" style="--badge-c: #b45309">● دام</span>
+    <span class="legend-badge" data-legend-kind="assertion" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #1d4ed8">قضیه</span>
+    <span class="legend-badge" data-legend-kind="concept" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #0d9488">مفهوم</span>
+    <span class="legend-badge" data-legend-kind="problem" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #ea580c">مسئله</span>
+    <span class="legend-badge" data-legend-kind="solution" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #059669">راه‌حل</span>
+    <span class="legend-badge" data-legend-kind="collection" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #7c3aed">نقشه راه</span>
+    <span class="legend-badge" data-legend-kind="visual_lab" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #0284c7">شبیه‌ساز</span>
+    <span class="legend-badge" data-legend-kind="pitfall" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #b45309">دام</span>
   </div>
   <noscript>برای گراف تعاملی جاوااسکریپت را فعال کنید؛ فهرست پیوندها در ادامه در دسترس است.</noscript>
 </section>
 
 <style>
-  .note-graph-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-block-end: var(--space-2); }
-  .note-graph-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
-  .graph-depth-quickbar { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; }
-  .depth-label { color: var(--muted); }
-  .depth-chip { min-height: 24px; height: 24px; padding: 0 0.45rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor: pointer; transition: all 0.15s ease; }
-  .depth-chip:hover { border-color: var(--accent); color: var(--accent); }
-  .depth-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
-  .graph-umko-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.725rem; margin-block-start: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
-  .legend-badge { color: var(--badge-c); display: inline-flex; align-items: center; gap: 0.15rem; background: color-mix(in srgb, var(--badge-c) 8%, var(--surface)); padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid color-mix(in srgb, var(--badge-c) 30%, var(--border)); }
-</style>
-<script>
-  const labels: Record<string,string> = {
-    fullscreen: 'تمام‌صفحه یا بازگشت', depth: 'تغییر عمق ارتباطات؛ سطح ۵ گراف سراسری',
-    'reset-zoom': 'بازنشانی زوم', 'render-arrows': 'نمایش یا حذف جهت پیوندها', settings: 'تنظیمات گراف',
-    'Repel Force': 'نیروی دافعه', 'Center Force': 'نیروی مرکز', 'Collider Padding': 'فاصلهٔ نودها',
-    'Link Distance': 'طول پیوندها', 'Alpha Decay': 'سرعت آرام‌شدن حرکت',
-  };
-  // The upstream controls have no accessible names; keep names after they regenerate.
-  function fitGraph(graph:any){
-    const sim=graph.simulator;const canvas=graph.querySelector('canvas');if(!sim?.nodes?.length||!canvas)return;
-    const nodes=sim.nodes.filter((n:any)=>Number.isFinite(n.x)&&Number.isFinite(n.y));if(!nodes.length)return;
-    const xs=nodes.map((n:any)=>n.x),ys=nodes.map((n:any)=>n.y);const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
-    const w=canvas.clientWidth,h=canvas.clientHeight;if(!w||!h)return;
-    const k=Math.min(1,(w-100)/Math.max(1,right-left),(h-70)/Math.max(1,bottom-top));
-    const x=w/2-(left+right)/2*k,y=h/2-(top+bottom)/2*k;
-    sim.userZoomed=true;sim.centerTransform=sim.centerTransform.translate(-sim.centerTransform.x,-sim.centerTransform.y);sim.zoomTransform=sim.zoomTransform.constructor===Object?sim.zoomTransform:new sim.zoomTransform.constructor(k,x,y);sim.transform=sim.zoomTransform;sim.renderer.resetZoom(sim.zoomTransform);sim.updateZoom(k,x,y,true);sim.requestRender=true;
+  .note-graph-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    margin-block-end: 0.6rem;
   }
+  .note-graph-header h2 {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--sl-color-text);
+  }
+  .graph-depth-quickbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 7px;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--workspace-border);
+    font-size: 0.74rem;
+  }
+  .depth-label {
+    color: var(--sl-color-gray-2);
+    padding-inline: 5px 3px;
+    font-size: 0.7rem;
+  }
+  .depth-chip {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 0.48rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border-radius: 5px;
+    border: 0;
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .depth-chip:hover {
+    color: var(--sl-color-text);
+    background: color-mix(in srgb, var(--sl-color-text) 6%, transparent);
+  }
+  .depth-chip.active {
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  }
+  .graph-stage-slot {
+    width: 100%;
+  }
+  .graph-umko-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.28rem;
+    font-size: 0.69rem;
+    margin-block-start: 0.55rem;
+  }
+  .legend-badge {
+    color: var(--sl-color-gray-2);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.32rem;
+    background: transparent;
+    padding: 0.14rem 0.48rem;
+    border-radius: 999px;
+    border: 1px solid var(--workspace-border);
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.45;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+  }
+  .legend-badge::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--badge-c);
+    flex-shrink: 0;
+  }
+  .legend-badge:hover {
+    color: var(--sl-color-text);
+    border-color: color-mix(in srgb, var(--badge-c) 55%, var(--workspace-border));
+    background: color-mix(in srgb, var(--badge-c) 10%, transparent);
+  }
+  .legend-badge.is-active {
+    color: var(--sl-color-text);
+    font-weight: 600;
+    border-color: var(--badge-c);
+    background: color-mix(in srgb, var(--badge-c) 18%, transparent);
+  }
+</style>
+
+<style is:global>
+  .note-graph .kg-container {
+    position: relative;
+    width: 100%;
+    height: 256px;
+    min-height: 256px;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid var(--workspace-border);
+    background: var(--sl-color-bg-sidebar, var(--sl-color-bg));
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: border-color 0.2s ease;
+  }
+  :root[data-theme='dark'] .note-graph .kg-container {
+    background: #1b1b1e;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+  }
+  .note-graph .kg-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* Glassmorphic compact action bar */
+  .note-graph .kg-actions.slsg-graph-action-container {
+    position: absolute !important;
+    top: 8px !important;
+    left: 8px !important;
+    right: auto !important;
+    z-index: 12;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 2px !important;
+    padding: 3px !important;
+    direction: ltr;
+    border-radius: 8px !important;
+    border: 1px solid color-mix(in srgb, var(--workspace-border) 85%, transparent);
+    background: color-mix(in srgb, var(--sl-color-bg) 82%, transparent) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  .note-graph .kg-action-btn.slsg-graph-action-button {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: transparent !important;
+    color: var(--sl-color-gray-2) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    cursor: pointer;
+    transition: background-color 0.14s ease, color 0.14s ease !important;
+  }
+  .note-graph .kg-action-btn.slsg-graph-action-button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .note-graph .kg-action-btn.slsg-graph-action-button:hover {
+    background: color-mix(in srgb, var(--sl-color-text) 10%, transparent) !important;
+    color: var(--sl-color-text) !important;
+  }
+  .note-graph .kg-action-btn.slsg-graph-action-button.is-active {
+    color: var(--sl-color-accent) !important;
+    background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent) !important;
+  }
+
+  /* Floating Glassmorphic Hover Inspector Card */
+  .kg-tooltip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    pointer-events: none;
+    max-width: min(260px, calc(100% - 20px));
+    padding: 7px 10px;
+    border-radius: 9px;
+    direction: rtl;
+    text-align: right;
+    background: color-mix(in srgb, var(--sl-color-bg) 94%, transparent);
+    border: 1px solid var(--workspace-border);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--sl-color-text);
+    font-family: Vazirmatn, sans-serif;
+    will-change: transform;
+  }
+  :root[data-theme='dark'] .kg-tooltip {
+    background: rgba(28, 28, 32, 0.94);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  .kg-tooltip-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 3px;
+    font-size: 0.68rem;
+  }
+  .kg-tooltip-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--kind-c, var(--sl-color-accent));
+  }
+  .kg-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .kg-tooltip-meta {
+    color: var(--sl-color-gray-2);
+    font-size: 0.66rem;
+    white-space: nowrap;
+  }
+  .kg-tooltip-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--sl-color-text);
+    word-break: break-word;
+  }
+  .kg-tooltip-slogan {
+    margin-top: 3px;
+    font-size: 0.7rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+  }
+
+  /* Fullscreen Modal Experience */
+  body[data-graph-blur='true'] .workspace-tools {
+    z-index: 9999 !important;
+  }
+  body[data-graph-blur='true'] .workspace-header,
+  body[data-graph-blur='true'] .document-toolbar-stack,
+  body[data-graph-blur='true'] .workspace-nav {
+    z-index: 1 !important;
+  }
+  .kg-backdrop.slsg-background-blur {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    z-index: 9990 !important;
+    background: rgba(10, 12, 18, 0.48) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+  }
+  .note-graph .kg-container.slsg-is-fullscreen {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    inset: auto !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: min(92vw, 1360px) !important;
+    height: min(88dvh, 860px) !important;
+    min-height: min(88dvh, 860px) !important;
+    z-index: 9999 !important;
+    border-radius: 14px !important;
+    border: 1px solid var(--workspace-border) !important;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42) !important;
+  }
+  .note-graph .kg-container.slsg-is-fullscreen .kg-actions.slsg-graph-action-container {
+    top: 12px !important;
+    left: 12px !important;
+    padding: 4px !important;
+    gap: 3px !important;
+  }
+  .note-graph .kg-container.slsg-is-fullscreen .kg-action-btn.slsg-graph-action-button {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+  }
+  .note-graph .kg-container.slsg-is-fullscreen .kg-action-btn.slsg-graph-action-button svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Fullscreen HUD */
+  .kg-fs-hud {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 10px;
+    direction: rtl;
+    background: color-mix(in srgb, var(--sl-color-bg) 86%, transparent);
+    border: 1px solid var(--workspace-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+  .kg-fs-hud[hidden],
+  .kg-fs-legend[hidden] {
+    display: none !important;
+  }
+  .kg-fs-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .kg-fs-search-icon {
+    position: absolute;
+    right: 8px;
+    width: 14px;
+    height: 14px;
+    color: var(--sl-color-gray-2);
+    pointer-events: none;
+  }
+  .kg-fs-search {
+    width: 195px;
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0 28px 0 8px !important;
+    font-size: 0.78rem !important;
+    border-radius: 6px !important;
+    border: 1px solid var(--workspace-border) !important;
+    background: var(--sl-color-gray-6) !important;
+    color: var(--sl-color-text) !important;
+  }
+  .kg-fs-depths {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 7px;
+    background: var(--sl-color-gray-6);
+  }
+  .kg-fs-chip {
+    min-height: 24px !important;
+    height: 24px !important;
+    padding: 0 8px !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    font-size: 0.74rem !important;
+    background: transparent !important;
+    color: var(--sl-color-gray-2) !important;
+  }
+  .kg-fs-chip.active {
+    background: var(--sl-color-bg) !important;
+    color: var(--sl-color-text) !important;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  }
+  .kg-fs-stats {
+    font-size: 0.72rem;
+    color: var(--sl-color-gray-2);
+    padding-inline: 4px;
+    white-space: nowrap;
+  }
+
+  /* Fullscreen Bottom Interactive Legend */
+  .kg-fs-legend {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    max-width: calc(100% - 24px);
+    padding: 5px 10px;
+    border-radius: 999px;
+    direction: rtl;
+    background: color-mix(in srgb, var(--sl-color-bg) 86%, transparent);
+    border: 1px solid var(--workspace-border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+  .kg-fs-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 24px !important;
+    height: 24px !important;
+    padding: 0 8px !important;
+    font-size: 0.73rem !important;
+    border-radius: 999px !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    color: var(--sl-color-gray-2) !important;
+  }
+  .kg-fs-legend-chip .kg-dot {
+    background: var(--chip-c);
+  }
+  .kg-fs-legend-chip:hover,
+  .kg-fs-legend-chip.is-active {
+    color: var(--sl-color-text) !important;
+    border-color: color-mix(in srgb, var(--chip-c) 55%, var(--workspace-border)) !important;
+    background: color-mix(in srgb, var(--chip-c) 14%, transparent) !important;
+  }
+
+  /* Settings Popover */
+  .kg-settings-popup.slsg-popup-menu {
+    position: fixed !important;
+    left: 16px !important;
+    right: auto !important;
+    top: 112px !important;
+    z-index: 10010 !important;
+    width: 268px !important;
+    padding: 14px !important;
+    border-radius: 12px !important;
+    border: 1px solid var(--workspace-border) !important;
+    background: color-mix(in srgb, var(--sl-color-bg) 96%, transparent) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.24) !important;
+    direction: rtl;
+  }
+  .kg-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--workspace-border);
+    font-size: 0.82rem;
+  }
+  .kg-popup-reset {
+    min-height: 24px !important;
+    height: 24px !important;
+    padding: 0 8px !important;
+    font-size: 0.72rem !important;
+    border-radius: 5px !important;
+    border: 1px solid var(--workspace-border) !important;
+    background: transparent !important;
+    color: var(--sl-color-gray-2) !important;
+  }
+  .kg-popup-reset:hover {
+    color: var(--sl-color-text) !important;
+    background: var(--sl-color-gray-6) !important;
+  }
+  .kg-field-label {
+    display: flex !important;
+    flex-direction: column;
+    gap: 5px;
+    margin: 6px 0 !important;
+    font-size: 0.76rem !important;
+    color: var(--sl-color-gray-2);
+  }
+  .kg-field-label select {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 0.78rem !important;
+    border-radius: 6px !important;
+    border: 1px solid var(--workspace-border) !important;
+    background: var(--sl-color-gray-6) !important;
+    color: var(--sl-color-text) !important;
+  }
+  .kg-toggle-row {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    margin: 5px 0 !important;
+    font-size: 0.78rem !important;
+    cursor: pointer;
+    color: var(--sl-color-text);
+  }
+  .kg-toggle-row input[type='checkbox'] {
+    min-height: 0 !important;
+    width: 15px;
+    height: 15px;
+    padding: 0 !important;
+    margin: 0 !important;
+    accent-color: var(--sl-color-accent);
+  }
+  .kg-slider-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.74rem;
+    color: var(--sl-color-gray-2);
+  }
+  .kg-settings-popup .slsg-value-slider {
+    margin: 4px 0 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .kg-settings-popup .slsg-value-slider-label {
+    font-weight: 500 !important;
+    color: var(--sl-color-text);
+  }
+  .kg-settings-popup input[type='range'] {
+    min-height: 0 !important;
+    height: 4px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    width: 100%;
+    accent-color: var(--sl-color-accent);
+    cursor: pointer;
+  }
+
+  @media (max-width: 720px) {
+    .kg-fs-hud {
+      left: 12px;
+      right: 12px;
+      top: 52px;
+    }
+    .kg-fs-search {
+      width: 140px;
+    }
+    .kg-fs-stats {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  const labels: Record<string, string> = {
+    fullscreen: 'تمام‌صفحه یا بازگشت',
+    depth: 'تغییر عمق ارتباطات؛ سطح ۵ گراف سراسری',
+    'reset-zoom': 'بازنشانی زوم',
+    'render-arrows': 'نمایش یا حذف جهت پیوندها',
+    settings: 'تنظیمات گراف',
+    'Repel Force': 'نیروی دافعه',
+    'Center Force': 'نیروی مرکز',
+    'Collider Padding': 'فاصلهٔ نودها',
+    'Link Distance': 'طول پیوندها',
+    'Alpha Decay': 'سرعت آرام‌شدن حرکت',
+  };
+
+  // Fit all graph nodes cleanly within the canvas bounds with division-by-zero protection.
+  function fitGraph(graph: any) {
+    const sim = graph.simulator;
+    const canvas = graph.querySelector('canvas');
+    if (!sim?.nodes?.length || !canvas) return;
+    const nodes = sim.nodes.filter((n: any) => Number.isFinite(n.x) && Number.isFinite(n.y));
+    if (!nodes.length) return;
+    const xs = nodes.map((n: any) => n.x);
+    const ys = nodes.map((n: any) => n.y);
+    const left = Math.min(...xs);
+    const right = Math.max(...xs);
+    const top = Math.min(...ys);
+    const bottom = Math.max(...ys);
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+    const k = Math.min(1, (w - 100) / Math.max(1, right - left), (h - 70) / Math.max(1, bottom - top));
+    const x = w / 2 - ((left + right) / 2) * k;
+    const y = h / 2 - ((top + bottom) / 2) * k;
+    sim.userZoomed = true;
+    sim.centerTransform = sim.centerTransform.translate(-sim.centerTransform.x, -sim.centerTransform.y);
+    sim.zoomTransform =
+      sim.zoomTransform.constructor === Object
+        ? sim.zoomTransform
+        : new sim.zoomTransform.constructor(k, x, y);
+    sim.transform = sim.zoomTransform;
+    sim.renderer.resetZoom(sim.zoomTransform);
+    sim.updateZoom(k, x, y, true);
+    sim.requestRender = true;
+  }
+
   function nameGraph(graph: HTMLElement) {
-    graph.style.opacity='0';setTimeout(()=>{if(graph.isConnected){fitGraph(graph);graph.style.opacity='1';}},1800);
+    if (graph.dataset.graphReady !== 'true') {
+      graph.style.opacity = '0';
+      setTimeout(() => {
+        if (graph.isConnected) {
+          fitGraph(graph);
+          graph.style.opacity = '1';
+        }
+      }, 1800);
+    }
+
     const nameControls = () => {
-      let actions: string[] = ['fullscreen','depth','reset-zoom','render-arrows','settings'];
+      let actions: string[] = ['fullscreen', 'depth', 'reset-zoom', 'render-arrows', 'settings'];
       try {
         const parsed = JSON.parse(graph.dataset.config ?? '{}');
         if (Array.isArray(parsed.actions)) actions = parsed.actions;
       } catch {}
-      graph.querySelectorAll<HTMLButtonElement>('.slsg-graph-action-button').forEach((button,index) => {
-        const action = actions[index];
+      graph.querySelectorAll<HTMLButtonElement>('.slsg-graph-action-button').forEach((button, index) => {
+        const action = button.dataset.graphAction || actions[index];
         button.type = 'button';
         button.dataset.graphAction = action;
         button.setAttribute('aria-label', labels[action] ?? action);
         button.title = labels[action] ?? action;
       });
-      const popup=graph.querySelector('.slsg-popup-menu');
-      if(popup&&!popup.querySelector('[data-extra-settings]')){const extra=document.createElement('div');extra.dataset.extraSettings='';extra.innerHTML='<label>عمق ارتباطات <select aria-label="عمق ارتباطات"><option value="0">فقط این یادداشت</option><option value="1">همسایه‌ها</option><option value="2">دو مرحله</option><option value="3">سه مرحله</option><option value="4">چهار مرحله</option><option value="5">همه یادداشت‌ها</option></select></label><label><input type="checkbox"/> جهت پیوندها</label>';const g=graph as any;const select=extra.querySelector('select')!;select.value=String(g.config.depth);select.onchange=()=>{g.config.depth=Number(select.value);g.full_refresh();setTimeout(()=>fitGraph(g),1000)};const check=extra.querySelector('input')!;check.checked=g.config.renderArrows;check.onchange=()=>{g.config.renderArrows=check.checked;g.simulator.requestRender=true};popup.prepend(extra);}
+      const popup = graph.querySelector('.slsg-popup-menu');
+      if (popup && !popup.querySelector('[data-extra-settings]')) {
+        const extra = document.createElement('div');
+        extra.dataset.extraSettings = '';
+        extra.innerHTML =
+          '<label>عمق ارتباطات <select aria-label="عمق ارتباطات"><option value="0">فقط این یادداشت</option><option value="1">همسایه‌ها</option><option value="2">دو مرحله</option><option value="3">سه مرحله</option><option value="4">چهار مرحله</option><option value="5">همه یادداشت‌ها</option></select></label><label><input type="checkbox"/> جهت پیوندها</label>';
+        const g = graph as any;
+        const select = extra.querySelector('select')!;
+        select.value = String(g.config.depth);
+        select.onchange = () => {
+          g.config.depth = Number(select.value);
+          g.full_refresh();
+          setTimeout(() => fitGraph(g), 1000);
+        };
+        const check = extra.querySelector('input')!;
+        check.checked = g.config.renderArrows;
+        check.onchange = () => {
+          g.config.renderArrows = check.checked;
+          g.simulator.requestRender = true;
+        };
+        popup.prepend(extra);
+      }
       graph.querySelectorAll<HTMLElement>('.slsg-value-slider').forEach(slider => {
         const label = slider.querySelector<HTMLElement>('.slsg-value-slider-label');
         const input = slider.querySelector('input');
@@ -120,730 +703,39 @@ const config = {
         }
       });
       const canvas = graph.querySelector('canvas');
-      canvas?.setAttribute('role','img');
-      canvas?.setAttribute('aria-label','نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
+      canvas?.setAttribute('role', 'img');
+      canvas?.setAttribute('aria-label', 'نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
     };
+
     const observer = new MutationObserver(nameControls);
-    observer.observe(graph, {childList:true,subtree:true});
-    document.addEventListener('astro:before-swap', () => observer.disconnect(), {once:true});
+    observer.observe(graph, { childList: true, subtree: true });
+    document.addEventListener('astro:before-swap', () => observer.disconnect(), { once: true });
     nameControls();
-    graph.addEventListener('click',event => {
-      const button = (event.target as Element).closest<HTMLButtonElement>('[data-graph-action]');
-      if(button?.dataset.graphAction==='reset-zoom')setTimeout(()=>fitGraph(graph),30);
-      if (button && document.activeElement === button) {
-        // Upstream data-config observers may regenerate actions again in a later microtask.
-        setTimeout(() => {
-          nameControls();
-          if (!button.isConnected) graph.querySelector<HTMLButtonElement>(`[data-graph-action="${button.dataset.graphAction}"]`)?.focus();
-        });
-      }
-    },true);
-    graph.addEventListener('keydown',event => {
+
+    graph.addEventListener(
+      'click',
+      event => {
+        const button = (event.target as Element).closest<HTMLButtonElement>('[data-graph-action]');
+        if (button?.dataset.graphAction === 'reset-zoom' && graph.dataset.graphReady !== 'true') {
+          setTimeout(() => fitGraph(graph), 30);
+        }
+        if (button && document.activeElement === button) {
+          setTimeout(() => {
+            nameControls();
+            if (!button.isConnected) {
+              graph.querySelector<HTMLButtonElement>(`[data-graph-action="${button.dataset.graphAction}"]`)?.focus();
+            }
+          });
+        }
+      },
+      true
+    );
+
+    graph.addEventListener('keydown', event => {
       if (event.key === 'Escape' && graph.querySelector('.slsg-popup-menu')) {
         graph.querySelector('.slsg-popup-menu')?.remove();
         graph.querySelector<HTMLButtonElement>('[data-graph-action="settings"]')?.focus();
       }
-    });
-  }
-
-  // Universal 2D Canvas Knowledge Graph Engine (Resilient, zero-race-condition renderer)
-  function init2DGraphEngine(host: HTMLElement) {
-    if (typeof document.createElement !== 'function') return;
-    const probe = document.createElement('canvas');
-    let has2D = false;
-    try {
-      has2D = !!(typeof probe.getContext === 'function' && probe.getContext('2d'));
-    } catch {
-      has2D = false;
-    }
-    if (!has2D) return;
-
-    const gc = host.querySelector<HTMLElement>('graph-component') || host;
-    const template = host.querySelector<HTMLTemplateElement>('[data-graph-template]');
-    const rawSitemap = gc.dataset.sitemap || template?.content.querySelector('graph-component')?.dataset.sitemap || '{}';
-    const rawSlug = gc.dataset.slug || template?.content.querySelector('graph-component')?.dataset.slug || '';
-    let sitemap: Record<string, any> = {};
-    try { sitemap = JSON.parse(rawSitemap); } catch { return; }
-    const currentSlug = rawSlug;
-
-    const skeleton = host.querySelector<HTMLElement>('.slsg-graph-skeleton');
-    if (skeleton) skeleton.remove();
-
-    let container = gc.querySelector<HTMLElement>('.slsg-graph-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.className = 'slsg-graph-container';
-      container.tabIndex = 0;
-      gc.appendChild(container);
-    }
-    // Remove any conflicting WebGL canvas so 2D context never returns null
-    container.querySelectorAll('canvas:not(.graph-canvas-2d)').forEach(c => c.remove());
-    container.style.position = 'relative';
-    container.style.width = '100%';
-    container.style.height = '210px';
-    container.style.minHeight = '210px';
-    container.style.overflow = 'hidden';
-    container.style.borderRadius = '8px';
-
-    gc.style.visibility = 'visible';
-    gc.style.display = 'block';
-    gc.style.opacity = '1';
-    gc.style.width = '100%';
-    gc.style.minHeight = '210px';
-
-    const kindColors: Record<string, string> = {
-      assertion: '#1d4ed8', concept: '#0d9488', proof: '#64748b',
-      problem: '#ea580c', solution: '#059669', technique: '#d97706',
-      hint_ladder: '#d97706', problem_archetype: '#c026d3', pitfall: '#b45309',
-      visual_lab: '#0284c7', collection: '#7c3aed', axiom: '#0e7490',
-      theory: '#4338ca', remark: '#64748b'
-    };
-    const kindStrokes: Record<string, string> = {
-      assertion: '#60a5fa', concept: '#2dd4bf', proof: '#94a3b8',
-      problem: '#fb923c', solution: '#34d399', technique: '#fbbf24',
-      hint_ladder: '#f59e0b', problem_archetype: '#e879f9', pitfall: '#f59e0b',
-      visual_lab: '#38bdf8', collection: '#c084fc', axiom: '#22d3ee',
-      theory: '#818cf8', remark: '#cbd5e1'
-    };
-    const kindSizes: Record<string, number> = {
-      collection: 13, theory: 12, assertion: 10, concept: 10, problem: 10,
-      visual_lab: 10, axiom: 10, problem_archetype: 10, proof: 8,
-      solution: 8, technique: 8, pitfall: 8, hint_ladder: 7, remark: 7
-    };
-
-    let currentDepth = Number((gc as any).config?.depth ?? 1);
-    let renderArrows = (gc as any).config?.renderArrows !== false;
-
-    let canvas = container.querySelector<HTMLCanvasElement>('canvas');
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      canvas.className = 'graph-canvas-2d';
-      canvas.setAttribute('role', 'img');
-      canvas.setAttribute('aria-label', 'نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.display = 'block';
-      container.prepend(canvas);
-    }
-
-    let ctx: CanvasRenderingContext2D | null = null;
-    try {
-      ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
-    } catch {
-      ctx = null;
-    }
-    if (!ctx) return;
-
-    const raf = typeof requestAnimationFrame === 'function'
-      ? requestAnimationFrame
-      : ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number);
-    const caf = typeof cancelAnimationFrame === 'function'
-      ? cancelAnimationFrame
-      : clearTimeout;
-    let scale = 1;
-    let panX = 0;
-    let panY = 0;
-    let nodes: any[] = [];
-    let links: any[] = [];
-    let hoveredNode: any = null;
-    let draggedNode: any = null;
-    let isPanning = false;
-    let startMouseX = 0;
-    let startMouseY = 0;
-    let startPanX = 0;
-    let startPanY = 0;
-    let animId = 0;
-    let alpha = 1;
-
-    function buildSubgraph(depth: number) {
-      const visited = new Set<string>();
-      if (sitemap[currentSlug]) visited.add(currentSlug);
-      let frontier = [currentSlug];
-
-      if (depth >= 5) {
-        for (const k of Object.keys(sitemap)) visited.add(k);
-      } else {
-        for (let d = 0; d < depth; d++) {
-          const next: string[] = [];
-          for (const id of frontier) {
-            const item = sitemap[id];
-            if (!item) continue;
-            for (const n of [...(item.links || []), ...(item.backlinks || [])]) {
-              if (sitemap[n] && !visited.has(n)) {
-                visited.add(n);
-                next.push(n);
-              }
-            }
-          }
-          frontier = next;
-        }
-      }
-
-      const newNodes: any[] = [];
-      const nodeMap = new Map<string, any>();
-      const width = canvas?.clientWidth || 300;
-      const height = canvas?.clientHeight || 300;
-      const centerX = width / 2;
-      const centerY = height / 2;
-
-      let idx = 0;
-      const total = visited.size;
-      for (const id of visited) {
-        const item = sitemap[id];
-        if (!item) continue;
-        const isCurrent = id === currentSlug;
-        const radius = isCurrent ? 14 : (kindSizes[item.kind] || 9);
-        const color = isCurrent ? '#06b6d4' : (kindColors[item.kind] || '#64748b');
-        const stroke = isCurrent ? '#67e8f9' : (kindStrokes[item.kind] || '#94a3b8');
-
-        let x = centerX;
-        let y = centerY;
-        if (!isCurrent) {
-          const angle = idx * (Math.PI * 2 / Math.min(total, 16)) + (idx * 0.3);
-          const dist = 60 + Math.floor(idx / 12) * 55;
-          x = centerX + Math.cos(angle) * dist;
-          y = centerY + Math.sin(angle) * dist;
-        }
-
-        const node = {
-          id,
-          title: item.title || id.replace('notes/', ''),
-          kind: item.kind || '',
-          slogan: item.slogan || '',
-          isCurrent,
-          radius,
-          color,
-          stroke,
-          x,
-          y,
-          vx: 0,
-          vy: 0,
-        };
-        newNodes.push(node);
-        nodeMap.set(id, node);
-        idx++;
-      }
-
-      const newLinks: any[] = [];
-      for (const id of visited) {
-        const item = sitemap[id];
-        if (!item) continue;
-        const src = nodeMap.get(id);
-        if (!src) continue;
-        for (const tId of (item.links || [])) {
-          const tgt = nodeMap.get(tId);
-          if (tgt && tgt !== src) {
-            newLinks.push({ source: src, target: tgt });
-          }
-        }
-      }
-
-      nodes = newNodes;
-      links = newLinks;
-      alpha = 1;
-      simulateAndRender();
-      setTimeout(autoFit, 100);
-    }
-
-    function autoFit() {
-      if (!canvas || !nodes.length) return;
-      const validNodes = nodes.filter(n => Number.isFinite(n.x) && Number.isFinite(n.y));
-      if (!validNodes.length) return;
-      const xs = validNodes.map(n => n.x);
-      const ys = validNodes.map(n => n.y);
-      const left = Math.min(...xs);
-      const right = Math.max(...xs);
-      const top = Math.min(...ys);
-      const bottom = Math.max(...ys);
-
-      const w = canvas.clientWidth || 300;
-      const h = canvas.clientHeight || 300;
-      const pad = 50;
-      const spanX = Math.max(1, right - left);
-      const spanY = Math.max(1, bottom - top);
-      scale = Math.min(1.2, Math.max(0.15, Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY)));
-      panX = w / 2 - ((left + right) / 2) * scale;
-      panY = h / 2 - ((top + bottom) / 2) * scale;
-      requestDraw();
-    }
-
-    let repelStrength = 130;
-    let springDistance = 85;
-
-    function updateSimulation() {
-      if (alpha < 0.005) return false;
-      const w = canvas?.clientWidth || 300;
-      const h = canvas?.clientHeight || 300;
-      const cx = w / 2;
-      const cy = h / 2;
-      const repelForce = repelStrength * alpha;
-      const springLength = springDistance;
-      const springK = 0.05 * alpha;
-
-      for (let i = 0; i < nodes.length; i++) {
-        const n1 = nodes[i];
-        for (let j = i + 1; j < nodes.length; j++) {
-          const n2 = nodes[j];
-          let dx = n1.x - n2.x;
-          let dy = n1.y - n2.y;
-          let d2 = dx * dx + dy * dy;
-          if (d2 < 1) { dx = (Math.random() - 0.5) * 2; dy = (Math.random() - 0.5) * 2; d2 = dx * dx + dy * dy; }
-          const dist = Math.sqrt(d2);
-          if (dist > 320) continue;
-          const f = repelForce / (dist * dist);
-          const fx = (dx / dist) * f;
-          const fy = (dy / dist) * f;
-          if (n1 !== draggedNode) { n1.vx += fx; n1.vy += fy; }
-          if (n2 !== draggedNode) { n2.vx -= fx; n2.vy -= fy; }
-        }
-      }
-
-      for (const link of links) {
-        const src = link.source;
-        const tgt = link.target;
-        const dx = tgt.x - src.x;
-        const dy = tgt.y - src.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const f = (dist - springLength) * springK;
-        const fx = (dx / dist) * f;
-        const fy = (dy / dist) * f;
-        if (src !== draggedNode) { src.vx += fx; src.vy += fy; }
-        if (tgt !== draggedNode) { tgt.vx -= fx; tgt.vy -= fy; }
-      }
-
-      for (const n of nodes) {
-        if (n === draggedNode) continue;
-        n.vx += (cx - n.x) * (0.015 * alpha);
-        n.vy += (cy - n.y) * (0.015 * alpha);
-        n.vx *= 0.82;
-        n.vy *= 0.82;
-        n.x += n.vx;
-        n.y += n.vy;
-      }
-
-      alpha *= 0.96;
-      return true;
-    }
-
-    function draw() {
-      if (!canvas || !ctx) return;
-      const isDark = document.documentElement.dataset.theme === 'dark';
-      const dpr = window.devicePixelRatio || 1;
-      const w = canvas.clientWidth || 300;
-      const h = canvas.clientHeight || 300;
-      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
-      }
-
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.clearRect(0, 0, w, h);
-
-      ctx.save();
-      ctx.translate(panX, panY);
-      ctx.scale(scale, scale);
-
-      const connected = new Set<any>();
-      if (hoveredNode) {
-        connected.add(hoveredNode);
-        for (const l of links) {
-          if (l.source === hoveredNode) connected.add(l.target);
-          if (l.target === hoveredNode) connected.add(l.source);
-        }
-      }
-
-      for (const l of links) {
-        const isHoveredLink = hoveredNode && (l.source === hoveredNode || l.target === hoveredNode);
-        const isFaded = hoveredNode && !isHoveredLink;
-
-        ctx.beginPath();
-        ctx.moveTo(l.source.x, l.source.y);
-        ctx.lineTo(l.target.x, l.target.y);
-        ctx.strokeStyle = isHoveredLink
-          ? (isDark ? '#38bdf8' : '#0284c7')
-          : isFaded
-          ? (isDark ? 'rgba(71, 85, 105, 0.2)' : 'rgba(148, 163, 184, 0.2)')
-          : (isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(100, 116, 139, 0.38)');
-        ctx.lineWidth = isHoveredLink ? 2.2 : 1.2;
-        ctx.stroke();
-
-        if (renderArrows) {
-          const dx = l.target.x - l.source.x;
-          const dy = l.target.y - l.source.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist > l.target.radius + 10) {
-            const angle = Math.atan2(dy, dx);
-            const arrowX = l.target.x - Math.cos(angle) * (l.target.radius + 2);
-            const arrowY = l.target.y - Math.sin(angle) * (l.target.radius + 2);
-            const headlen = isHoveredLink ? 8 : 6;
-            ctx.beginPath();
-            ctx.moveTo(arrowX, arrowY);
-            ctx.lineTo(arrowX - headlen * Math.cos(angle - Math.PI / 6), arrowY - headlen * Math.sin(angle - Math.PI / 6));
-            ctx.lineTo(arrowX - headlen * Math.cos(angle + Math.PI / 6), arrowY - headlen * Math.sin(angle + Math.PI / 6));
-            ctx.closePath();
-            ctx.fillStyle = ctx.strokeStyle;
-            ctx.fill();
-          }
-        }
-      }
-
-      for (const n of nodes) {
-        const isFaded = hoveredNode && !connected.has(n);
-        const isHovered = hoveredNode === n;
-
-        if (n.isCurrent) {
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, n.radius + 5, 0, Math.PI * 2);
-          ctx.strokeStyle = isDark ? '#06b6d4' : '#0891b2';
-          ctx.lineWidth = 2.5;
-          ctx.stroke();
-        }
-
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-        ctx.fillStyle = isFaded ? (isDark ? 'rgba(71, 85, 105, 0.4)' : 'rgba(148, 163, 184, 0.45)') : n.color;
-        ctx.fill();
-
-        ctx.strokeStyle = isHovered
-          ? (isDark ? '#ffffff' : '#0f172a')
-          : (isFaded ? 'rgba(100, 116, 139, 0.3)' : n.stroke);
-        ctx.lineWidth = isHovered ? 2.5 : 1.5;
-        ctx.stroke();
-
-        if (nodes.length <= 35 || scale > 0.6 || isHovered || n.isCurrent || (hoveredNode && connected.has(n))) {
-          const shortTitle = n.title.length > 26 && !isHovered ? n.title.slice(0, 24) + '…' : n.title;
-          ctx.font = (n.isCurrent ? '600 ' : '') + '11px Vazirmatn, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'top';
-          ctx.lineWidth = 3;
-          ctx.strokeStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(255, 255, 255, 0.9)';
-          ctx.strokeText(shortTitle, n.x, n.y + n.radius + 4);
-          ctx.fillStyle = isFaded
-            ? (isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.5)')
-            : (isDark ? '#f1f5f9' : '#0f172a');
-          ctx.fillText(shortTitle, n.x, n.y + n.radius + 4);
-        }
-      }
-
-      ctx.restore();
-
-      if (hoveredNode) {
-        const sx = hoveredNode.x * scale + panX;
-        const sy = hoveredNode.y * scale + panY;
-        const title = hoveredNode.title;
-        const kindText = hoveredNode.kind ? `[${hoveredNode.kind}] ` : '';
-        const tipText = kindText + title;
-
-        ctx.font = '12px Vazirmatn, sans-serif';
-        const textWidth = ctx.measureText(tipText).width;
-        const boxW = Math.max(textWidth + 24, 100);
-        const boxH = 30;
-        let boxX = sx - boxW / 2;
-        let boxY = sy - hoveredNode.radius * scale - boxH - 10;
-        if (boxX < 10) boxX = 10;
-        if (boxX + boxW > w - 10) boxX = w - boxW - 10;
-        if (boxY < 10) boxY = sy + hoveredNode.radius * scale + 15;
-
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-        ctx.strokeStyle = hoveredNode.color;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        if (typeof (ctx as any).roundRect === 'function') {
-          (ctx as any).roundRect(boxX, boxY, boxW, boxH, 6);
-        } else {
-          ctx.rect(boxX, boxY, boxW, boxH);
-        }
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#f8fafc';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(tipText, boxX + boxW / 2, boxY + boxH / 2);
-      }
-
-      ctx.restore();
-    }
-
-    function requestDraw() {
-      if (animId) caf(animId);
-      animId = raf(draw);
-    }
-
-    function simulateAndRender() {
-      if (animId) caf(animId);
-      function loop() {
-        const stillRunning = updateSimulation();
-        draw();
-        if (stillRunning) {
-          animId = raf(loop);
-        }
-      }
-      animId = raf(loop);
-    }
-
-    function getNodeAt(clientX: number, clientY: number) {
-      if (!canvas) return null;
-      const rect = canvas.getBoundingClientRect();
-      const mx = clientX - rect.left;
-      const my = clientY - rect.top;
-      const gx = (mx - panX) / scale;
-      const gy = (my - panY) / scale;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
-        const dx = n.x - gx;
-        const dy = n.y - gy;
-        if (dx * dx + dy * dy <= (n.radius + 4) * (n.radius + 4)) {
-          return n;
-        }
-      }
-      return null;
-    }
-
-    let downX = 0;
-    let downY = 0;
-    let didDrag = false;
-
-    canvas.addEventListener('mousedown', (e: MouseEvent) => {
-      downX = e.clientX;
-      downY = e.clientY;
-      didDrag = false;
-      const hit = getNodeAt(e.clientX, e.clientY);
-      if (hit) {
-        draggedNode = hit;
-        alpha = 0.5;
-        simulateAndRender();
-      } else {
-        isPanning = true;
-        startMouseX = e.clientX;
-        startMouseY = e.clientY;
-        startPanX = panX;
-        startPanY = panY;
-      }
-    });
-
-    window.addEventListener('mousemove', (e: MouseEvent) => {
-      if ((draggedNode || isPanning) && Math.hypot(e.clientX - downX, e.clientY - downY) > 5) {
-        didDrag = true;
-      }
-      if (draggedNode && canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        draggedNode.x = (mx - panX) / scale;
-        draggedNode.y = (my - panY) / scale;
-        draggedNode.vx = 0;
-        draggedNode.vy = 0;
-        alpha = 0.3;
-        simulateAndRender();
-        return;
-      }
-      if (isPanning) {
-        panX = startPanX + (e.clientX - startMouseX);
-        panY = startPanY + (e.clientY - startMouseY);
-        requestDraw();
-        return;
-      }
-      if (canvas && canvas.isConnected) {
-        const rect = canvas.getBoundingClientRect();
-        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-          const hit = getNodeAt(e.clientX, e.clientY);
-          if (hit !== hoveredNode) {
-            hoveredNode = hit;
-            canvas.style.cursor = hit ? 'pointer' : 'default';
-            requestDraw();
-          }
-        } else if (hoveredNode) {
-          hoveredNode = null;
-          requestDraw();
-        }
-      }
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (draggedNode) {
-        draggedNode = null;
-        alpha = 0.2;
-        simulateAndRender();
-      }
-      isPanning = false;
-    });
-
-    canvas.addEventListener('click', (e: MouseEvent) => {
-      if (didDrag) {
-        didDrag = false;
-        return;
-      }
-      const hit = getNodeAt(e.clientX, e.clientY);
-      if (hit && hit.id && !hit.isCurrent) {
-        window.location.href = '/' + hit.id;
-      }
-    });
-
-    canvas.addEventListener('wheel', (e: WheelEvent) => {
-      e.preventDefault();
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-      const newScale = Math.min(2.5, Math.max(0.15, scale * zoomFactor));
-
-      panX = mx - (mx - panX) * (newScale / scale);
-      panY = my - (my - panY) * (newScale / scale);
-      scale = newScale;
-      requestDraw();
-    }, { passive: false });
-
-    let actionContainer = container.querySelector<HTMLElement>('.slsg-graph-action-container');
-    if (!actionContainer) {
-      actionContainer = document.createElement('div');
-      actionContainer.className = 'slsg-graph-action-container';
-      container.appendChild(actionContainer);
-    }
-    actionContainer.style.position = 'absolute';
-    actionContainer.style.top = '8px';
-    actionContainer.style.left = '8px';
-    actionContainer.style.right = 'auto';
-    actionContainer.style.zIndex = '10';
-    actionContainer.innerHTML = `
-      <button class="slsg-graph-action-button" type="button" data-graph-action="reset-zoom" aria-label="بازنشانی زوم" title="بازنشانی زوم">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-focus"><circle cx="12" cy="12" r="3"></circle><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
-      </button>
-      <button class="slsg-graph-action-button" type="button" data-graph-action="fullscreen" aria-label="تمام‌صفحه یا بازگشت" title="تمام‌صفحه یا بازگشت">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize-2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" x2="14" y1="3" y2="10"></line><line x1="3" x2="10" y1="21" y2="14"></line></svg>
-      </button>
-      <button class="slsg-graph-action-button" type="button" data-graph-action="render-arrows" aria-label="نمایش یا حذف جهت پیوندها" title="نمایش یا حذف جهت پیوندها">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="3"></circle><path d="M8 5h9a2 2 0 0 1 2 2v8"></path><path d="m12 8-3-3 3-3"></path><circle cx="19" cy="19" r="3"></circle></svg>
-      </button>
-      <button class="slsg-graph-action-button" type="button" data-graph-action="settings" aria-label="تنظیمات گراف" title="تنظیمات گراف">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sliders-horizontal"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>
-      </button>
-    `;
-
-    const setDepth = (depth: number) => {
-      currentDepth = depth;
-      (gc as any).config.depth = depth;
-      host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(c => {
-        c.classList.toggle('active', Number(c.dataset.depth) === depth);
-      });
-      buildSubgraph(depth);
-    };
-
-    const toggleFullscreen = (force?: boolean) => {
-      const next = typeof force === 'boolean' ? force : !container!.classList.contains('slsg-is-fullscreen');
-      container!.classList.toggle('slsg-is-fullscreen', next);
-      (gc as any).isFullscreen = next;
-      document.body.dataset['graphBlur'] = next ? 'true' : '';
-      setTimeout(autoFit, 80);
-    };
-
-    actionContainer.querySelector('[data-graph-action="reset-zoom"]')?.addEventListener('click', autoFit);
-    actionContainer.querySelector('[data-graph-action="fullscreen"]')?.addEventListener('click', () => toggleFullscreen());
-    actionContainer.querySelector('[data-graph-action="render-arrows"]')?.addEventListener('click', () => {
-      renderArrows = !renderArrows;
-      if ((gc as any).config) (gc as any).config.renderArrows = renderArrows;
-      requestDraw();
-    });
-    actionContainer.querySelector('[data-graph-action="settings"]')?.addEventListener('click', () => {
-      const existing = gc.querySelector('.slsg-popup-menu');
-      if (existing) { existing.remove(); return; }
-      const popup = document.createElement('div');
-      popup.className = 'slsg-popup-menu';
-      popup.innerHTML = `
-        <div class="slsg-popup-menu-content">
-          <label>عمق ارتباطات
-            <select aria-label="عمق ارتباطات">
-              <option value="0">فقط این یادداشت</option>
-              <option value="1">همسایه‌ها (۱ گام)</option>
-              <option value="2">دو مرحله (۲ گام)</option>
-              <option value="5">همه یادداشت‌ها (سراسری)</option>
-            </select>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" ${renderArrows ? 'checked' : ''}/> نمایش جهت پیوندها
-          </label>
-          <div class="slsg-value-slider">
-            <span class="slsg-value-slider-label">نیروی دافعه</span>
-            <input type="range" min="40" max="320" value="${repelStrength}" aria-label="نیروی دافعه"/>
-          </div>
-          <div class="slsg-value-slider">
-            <span class="slsg-value-slider-label">طول پیوندها</span>
-            <input type="range" min="40" max="180" value="${springDistance}" aria-label="طول پیوندها"/>
-          </div>
-        </div>
-      `;
-      const select = popup.querySelector('select')!;
-      select.value = String((gc as any).config?.depth ?? currentDepth);
-      select.onchange = () => setDepth(Number(select.value));
-      const check = popup.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
-      check.onchange = () => {
-        renderArrows = check.checked;
-        if ((gc as any).config) (gc as any).config.renderArrows = renderArrows;
-        requestDraw();
-      };
-      const ranges = popup.querySelectorAll<HTMLInputElement>('input[type="range"]');
-      if (ranges[0]) ranges[0].oninput = () => { repelStrength = Number(ranges[0].value); alpha = 0.6; simulateAndRender(); };
-      if (ranges[1]) ranges[1].oninput = () => { springDistance = Number(ranges[1].value); alpha = 0.6; simulateAndRender(); };
-      gc.appendChild(popup);
-    });
-
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const popup = gc.querySelector('.slsg-popup-menu');
-      if (popup) {
-        popup.remove();
-        actionContainer?.querySelector<HTMLButtonElement>('[data-graph-action="settings"]')?.focus();
-        return;
-      }
-      if (container?.classList.contains('slsg-is-fullscreen')) {
-        toggleFullscreen(false);
-        actionContainer?.querySelector<HTMLButtonElement>('[data-graph-action="fullscreen"]')?.focus();
-      }
-    });
-
-    if (typeof MutationObserver !== 'undefined') {
-      const themeObs = new MutationObserver(() => requestDraw());
-      themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    }
-    if (typeof ResizeObserver !== 'undefined' && container) {
-      const resizeObs = new ResizeObserver(() => requestDraw());
-      resizeObs.observe(container);
-    }
-
-    class Transform2D {
-      x: number; y: number; k: number;
-      constructor(k = 1, x = 0, y = 0) { this.k = k; this.x = x; this.y = y; }
-      translate(dx = 0, dy = 0) { return new Transform2D(this.k, this.x + dx, this.y + dy); }
-    }
-
-    (gc as any).isFullscreen = false;
-    (gc as any).config = (gc as any).config || {};
-    (gc as any).config.depth = currentDepth;
-    (gc as any).config.renderArrows = renderArrows;
-    (gc as any).full_refresh = () => {
-      buildSubgraph((gc as any).config.depth);
-    };
-    (gc as any).simulator = {
-      get nodes() { return nodes; },
-      userZoomed: false,
-      centerTransform: new Transform2D(1, 0, 0),
-      zoomTransform: new Transform2D(1, 0, 0),
-      renderer: { resetZoom: () => autoFit() },
-      updateZoom: (k: number, x: number, y: number) => {
-        scale = k;
-        if (Number.isFinite(x)) panX = x;
-        if (Number.isFinite(y)) panY = y;
-        requestDraw();
-      },
-      requestRender: true,
-    };
-
-    buildSubgraph(currentDepth);
-
-    host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
-      chip.onclick = () => setDepth(Number(chip.dataset.depth));
     });
   }
 
@@ -867,9 +759,27 @@ const config = {
             if (g && g.config) {
               g.config.depth = depth;
               g.full_refresh?.();
-              setTimeout(() => fitGraph(g), 800);
+              if (g.dataset?.graphReady !== 'true') setTimeout(() => fitGraph(g), 800);
             } else if (button && !button.hidden) {
               button.click();
+            }
+          });
+        });
+
+        // Interactive UMKO taxonomy legend filter
+        host.querySelectorAll<HTMLElement>('[data-legend-kind]').forEach(badge => {
+          const toggle = () => {
+            const g = host.querySelector('graph-component') as any;
+            if (!g || typeof g.setKindFilter !== 'function') return;
+            const kind = badge.dataset.legendKind || '';
+            const isAlready = badge.classList.contains('is-active');
+            g.setKindFilter(isAlready ? null : kind);
+          };
+          badge.addEventListener('click', toggle);
+          badge.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggle();
             }
           });
         });
@@ -882,21 +792,13 @@ const config = {
         button.setAttribute('aria-busy', 'true');
         status.textContent = 'در حال بارگذاری گراف…';
         try {
-          const probe = typeof document.createElement === 'function' ? document.createElement('canvas') : null;
-          let has2D = false;
-          try { has2D = !!(probe && typeof probe.getContext === 'function' && probe.getContext('2d')); } catch {}
-          if (has2D) {
-            if (!host.isConnected) return;
-            host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
-            init2DGraphEngine(host);
-          } else {
-            const { GraphComponent } = await import('../../node_modules/starlight-site-graph/components/graph/graph-component');
-            if (!host.isConnected) return;
-            host.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
-            if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
-            nameGraph(host.querySelector<HTMLElement>('graph-component')!);
-          }
-
+          const { GraphComponent } = await import('../scripts/graph-component');
+          if (!host.isConnected) return;
+          const slot = host.querySelector<HTMLElement>('[data-graph-slot]');
+          const mountTarget = slot && typeof slot.append === 'function' ? slot : host;
+          mountTarget.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
+          if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
+          nameGraph(host.querySelector<HTMLElement>('graph-component')!);
           button.hidden = true;
           status.textContent = '';
         } catch {
@@ -909,6 +811,7 @@ const config = {
           button.removeAttribute('aria-busy');
         }
       });
+
       // Start the renderer automatically without blocking article rendering.
       button.hidden = true;
       setTimeout(() => button.click(), 0);

@@ -690,3 +690,31 @@ test('graph lifecycle: initial inert state, accessible noscript/text fallbacks, 
   dom.window.close();
   detachedDom.window.close();
 });
+
+// =============================================================================
+// Specification 3: D3 Force Graph Engine & Visual Craft Guarantees
+// =============================================================================
+
+test('graph architecture: mounts graph slot above legend and binds interactive UMKO legend filters', () => {
+  const source = astroSource();
+  const slotPos = source.indexOf('data-graph-slot');
+  const legendPos = source.indexOf('class="graph-umko-legend"');
+  assert.ok(slotPos > 0 && legendPos > 0, 'Both graph mount slot and legend must exist');
+  assert.ok(slotPos < legendPos, 'Graph canvas slot must appear before UMKO legend in DOM order');
+
+  for (const kind of ['assertion', 'concept', 'problem', 'solution', 'collection', 'visual_lab', 'pitfall']) {
+    assert.match(source, new RegExp(`data-legend-kind="${kind}"`), `Legend must support interactive filter for ${kind}`);
+  }
+});
+
+test('graph engine module: uses D3 force simulation with collision, zoom, drag, bidirectional edge deduplication, and zero-overlap labels', () => {
+  const engineSource = readFileSync(new URL('../../frontend/src/scripts/graph-component.ts', import.meta.url), 'utf8');
+  assert.match(engineSource, /forceSimulation/, 'Must use D3 forceSimulation');
+  assert.match(engineSource, /forceCollide/, 'Must use D3 forceCollide to prevent node overlap');
+  assert.match(engineSource, /forceManyBody/, 'Must use D3 Barnes-Hut forceManyBody');
+  assert.match(engineSource, /zoom</, 'Must use D3 smooth zoom/pan');
+  assert.match(engineSource, /drag</, 'Must use D3 elastic node dragging');
+  assert.match(engineSource, /bidirectional/, 'Must deduplicate bidirectional links cleanly');
+  assert.match(engineSource, /rectsOverlap/, 'Must run screen-space AABB collision check on labels');
+  assert.match(engineSource, /inferSemanticKind/, 'Must infer semantic kinds for Persian-tagged notes like Axler');
+});
