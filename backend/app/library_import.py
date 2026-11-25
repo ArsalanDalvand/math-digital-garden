@@ -43,6 +43,43 @@ MAX_FILE_COUNT = 1500
 CLONE_TIMEOUT = 60  # seconds
 
 
+def _is_forbidden_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return bool(
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_unspecified
+        or (hasattr(ip, "is_multicast") and ip.is_multicast)
+    )
+
+
+def _has_git_proxy(url: str) -> bool:
+    for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        if os.environ.get(var):
+            return True
+    parsed = urlsplit(url)
+    origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+    keys = [f"http.{origin}.proxy"] if origin else []
+    keys.append("http.proxy")
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    env = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "HOME": home}
+    for key in keys:
+        try:
+            res = subprocess.run(
+                ["git", "config", "--get", key],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def validate_git_url(url: str) -> None:
     """SSRF-safe git url validation: allow HTTP/HTTPS only, prevent access to private IP ranges."""
     parsed = urlsplit(url.strip())
@@ -50,29 +87,42 @@ def validate_git_url(url: str) -> None:
         raise HTTPException(
             400, "تنها نشانی‌های مخزن مبتنی بر پروتکل HTTP یا HTTPS پشتیبانی می‌شوند."
         )
-    hostname = parsed.hostname
+    hostname = (parsed.hostname or "").strip().lower()
     if not hostname:
         raise HTTPException(400, "نشانی مخزن واردشده نامعتبر است.")
+
+    if hostname in ("localhost", "localhost.localdomain") or hostname.endswith((".local", ".internal", ".localhost")):
+        raise HTTPException(
+            400,
+            f"دسترسی به آدرس‌های شبکه داخلی ({hostname}) به دلایل امنیتی مجاز نیست.",
+        )
+
+    try:
+        literal_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal_ip = None
+
+    if literal_ip is not None:
+        if _is_forbidden_ip(literal_ip):
+            raise HTTPException(
+                400,
+                f"دسترسی به آدرس‌های شبکه داخلی ({hostname}) به دلایل امنیتی مجاز نیست.",
+            )
+        return
 
     try:
         addr_info = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
         for _, _, _, _, sockaddr in addr_info:
             ip_str = sockaddr[0]
             ip = ipaddress.ip_address(ip_str)
-            if (
-                ip.is_loopback
-                or ip.is_private
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_unspecified
-                or (hasattr(ip, "is_multicast") and ip.is_multicast)
-            ):
+            if _is_forbidden_ip(ip):
                 raise HTTPException(
                     400,
                     f"دسترسی به آدرس‌های شبکه داخلی ({ip_str}) به دلایل امنیتی مجاز نیست.",
                 )
     except socket.gaierror:
-        raise HTTPException(400, "دامنهٔ آدرس مخزن قابل دسترسی یا تحلیل DNS نیست.") from None
+        if not _has_git_proxy(url.strip()):
+            raise HTTPException(400, "دامنهٔ آدرس مخزن قابل دسترسی یا تحلیل DNS نیست.") from None
 
 
 def clone_git_repo(repo_url: str, branch: str = "main", target_dir: str = "") -> str:
@@ -81,7 +131,11 @@ def clone_git_repo(repo_url: str, branch: str = "main", target_dir: str = "") ->
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME") or os.path.expanduser("~"),
     }
+    for key in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"):
+        if os.environ.get(key):
+            env[key] = os.environ[key]
     # First attempt: clone the specified branch
     clone_cmd = [
         "git",
