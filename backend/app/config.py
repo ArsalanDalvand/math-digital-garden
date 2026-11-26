@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     extra_allowed_origins: str = ""
     cookie_secure: bool = False
     content_git_repo: str = ""
+    attachments_dir: str = ""
+    vault_assets_dir: str = ""
     ai_enabled: bool = False
     ai_base_url: str = "https://api.openai.com/v1"
     ai_api_key: str = Field(default="", repr=False)
