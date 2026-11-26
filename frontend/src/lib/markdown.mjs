@@ -15,7 +15,7 @@ import { LRUCache } from 'lru-cache';
 import { parseGeoGebra, resolveVaultImage } from './obsidian-plugins.mjs';
 import { findAndReplace } from 'mdast-util-find-and-replace';
 import rehypeParse from 'rehype-parse';
-import vaultAssets from './vault-assets.json' with { type: 'json' };
+import { getVaultAssets } from './vault-assets.mjs';
 import { UMKO_RELATIONS } from './umko.mjs';
 
 export const RENDERER_VERSION = 'v2-per-note-cache';
@@ -187,7 +187,7 @@ function isMediaEmbed(cleanTarget) {
     /\.(mp3|wav|ogg|m4a)$/i.test(cleanTarget) ||
     /\.(mp4|webm|ogv)$/i.test(cleanTarget) ||
     cleanTarget.endsWith('.canvas') ||
-    Boolean(resolveVaultImage(cleanTarget, vaultAssets))
+    Boolean(resolveVaultImage(cleanTarget, getVaultAssets()))
   );
 }
 
@@ -283,6 +283,7 @@ async function render(
   metadata = [],
   options = {}
 ) {
+  const vaultAssets = getVaultAssets();
   if (parseFrontmatter(raw).frontmatter['excalidraw-plugin'] || raw.trimStart().startsWith('{')) {
     try {
       const scene = await parseExcalidraw(raw, vaultAssets);
