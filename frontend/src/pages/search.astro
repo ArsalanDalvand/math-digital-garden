@@ -89,10 +89,10 @@ const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toStri
   .search-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
   .catalogue-list { display: grid; gap: var(--space-4); padding: 0; list-style: none; }
   .catalogue-list h2 { margin: 0; font-size: 1.125rem; }
-  .note-slogan-search { margin-block: var(--space-1) var(--space-2); font-size: 0.9rem; color: var(--sl-color-text-accent, var(--accent)); font-style: italic; }
+  .note-slogan-search { margin-block: var(--space-1) var(--space-2); font-size: 0.9rem; color: var(--primary-text); font-style: italic; }
   .note-result-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: var(--space-1); }
   .badge-mini { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); }
-  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted); overflow-wrap: anywhere; font-size: 0.85rem; }
+  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted-foreground); overflow-wrap: anywhere; font-size: 0.85rem; }
   form select { inline-size: 100%; }
   .catalogue-pagination { justify-content: space-between; margin-block: var(--space-6); }
   .catalogue-pagination a { min-block-size: var(--control-height); display: inline-flex; align-items: center; }

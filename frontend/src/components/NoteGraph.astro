@@ -68,7 +68,7 @@ const config = {
     font-size: 0.92rem;
     font-weight: 700;
     letter-spacing: -0.01em;
-    color: var(--sl-color-text);
+    color: var(--foreground);
   }
   .graph-depth-quickbar {
     display: inline-flex;
@@ -76,12 +76,12 @@ const config = {
     gap: 2px;
     padding: 2px;
     border-radius: 7px;
-    background: var(--sl-color-gray-6);
-    border: 1px solid var(--workspace-border);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
     font-size: 0.74rem;
   }
   .depth-label {
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     padding-inline: 5px 3px;
     font-size: 0.7rem;
   }
@@ -94,17 +94,17 @@ const config = {
     border-radius: 5px;
     border: 0;
     background: transparent;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     cursor: pointer;
     transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
   .depth-chip:hover {
-    color: var(--sl-color-text);
-    background: color-mix(in srgb, var(--sl-color-text) 6%, transparent);
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--foreground) 6%, transparent);
   }
   .depth-chip.active {
-    background: var(--sl-color-bg);
-    color: var(--sl-color-text);
+    background: var(--background);
+    color: var(--foreground);
     font-weight: 600;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   }
@@ -120,14 +120,14 @@ const config = {
     margin-block-start: 0.55rem;
   }
   .legend-badge {
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     display: inline-flex;
     align-items: center;
     gap: 0.32rem;
     background: transparent;
     padding: 0.14rem 0.48rem;
     border-radius: 999px;
-    border: 1px solid var(--workspace-border);
+    border: 1px solid var(--border);
     cursor: pointer;
     user-select: none;
     line-height: 1.45;
@@ -142,12 +142,12 @@ const config = {
     flex-shrink: 0;
   }
   .legend-badge:hover {
-    color: var(--sl-color-text);
-    border-color: color-mix(in srgb, var(--badge-c) 55%, var(--workspace-border));
+    color: var(--foreground);
+    border-color: color-mix(in srgb, var(--badge-c) 55%, var(--border));
     background: color-mix(in srgb, var(--badge-c) 10%, transparent);
   }
   .legend-badge.is-active {
-    color: var(--sl-color-text);
+    color: var(--foreground);
     font-weight: 600;
     border-color: var(--badge-c);
     background: color-mix(in srgb, var(--badge-c) 18%, transparent);
@@ -166,8 +166,8 @@ const config = {
     min-height: 256px;
     overflow: hidden;
     border-radius: 10px;
-    border: 1px solid var(--workspace-border);
-    background: var(--sl-color-bg-sidebar, var(--sl-color-bg));
+    border: 1px solid var(--border);
+    background: var(--surface-sidebar);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
     transition: border-color 0.2s ease;
   }
@@ -197,8 +197,8 @@ const config = {
     padding: 3px !important;
     direction: ltr;
     border-radius: 8px !important;
-    border: 1px solid color-mix(in srgb, var(--workspace-border) 85%, transparent);
-    background: color-mix(in srgb, var(--sl-color-bg) 82%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+    background: color-mix(in srgb, var(--background) 82%, transparent) !important;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -213,7 +213,7 @@ const config = {
     border: 0 !important;
     border-radius: 5px !important;
     background: transparent !important;
-    color: var(--sl-color-gray-2) !important;
+    color: var(--muted-foreground) !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -226,12 +226,12 @@ const config = {
     height: 14px !important;
   }
   .note-graph .kg-action-btn.slsg-graph-action-button:hover {
-    background: color-mix(in srgb, var(--sl-color-text) 10%, transparent) !important;
-    color: var(--sl-color-text) !important;
+    background: color-mix(in srgb, var(--foreground) 10%, transparent) !important;
+    color: var(--foreground) !important;
   }
   .note-graph .kg-action-btn.slsg-graph-action-button.is-active {
-    color: var(--sl-color-accent) !important;
-    background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent) !important;
+    color: var(--primary) !important;
+    background: color-mix(in srgb, var(--primary) 14%, transparent) !important;
   }
 
   /* Floating Glassmorphic Hover Inspector Card (Node & Semantic Edge) */
@@ -246,13 +246,13 @@ const config = {
     border-radius: 10px;
     direction: rtl;
     text-align: right;
-    background: color-mix(in srgb, var(--sl-color-bg) 95%, transparent);
-    border: 1px solid var(--workspace-border);
+    background: color-mix(in srgb, var(--background) 95%, transparent);
+    border: 1px solid var(--border);
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: var(--sl-color-text);
-    font-family: Vazirmatn, sans-serif;
+    color: var(--foreground);
+    font-family: var(--font-reading);
     will-change: transform;
   }
   :root[data-theme='dark'] .kg-tooltip {
@@ -272,7 +272,7 @@ const config = {
     align-items: center;
     gap: 5px;
     font-weight: 600;
-    color: var(--kind-c, var(--sl-color-accent));
+    color: var(--kind-c, var(--primary));
   }
   .kg-dot {
     width: 7px;
@@ -283,7 +283,7 @@ const config = {
     flex-shrink: 0;
   }
   .kg-tooltip-meta {
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     font-size: 0.66rem;
     white-space: nowrap;
   }
@@ -291,7 +291,7 @@ const config = {
     font-size: 0.78rem;
     font-weight: 600;
     line-height: 1.45;
-    color: var(--sl-color-text);
+    color: var(--foreground);
     word-break: break-word;
   }
   .kg-tooltip-rel {
@@ -303,14 +303,14 @@ const config = {
     border-radius: 999px;
     font-size: 0.67rem;
     font-weight: 500;
-    background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent);
-    color: var(--sl-color-accent-high, var(--sl-color-accent));
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary-text);
   }
   .kg-tooltip-slogan {
     margin-top: 4px;
     font-size: 0.7rem;
     line-height: 1.5;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
   }
   .kg-edge-pills {
     display: flex;
@@ -326,9 +326,9 @@ const config = {
     border-radius: 999px;
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--edge-c, var(--sl-color-accent));
-    background: color-mix(in srgb, var(--edge-c, var(--sl-color-accent)) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--edge-c, var(--sl-color-accent)) 35%, transparent);
+    color: var(--edge-c, var(--primary));
+    background: color-mix(in srgb, var(--edge-c, var(--primary)) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--edge-c, var(--primary)) 35%, transparent);
   }
   .kg-edge-endpoints {
     display: flex;
@@ -337,10 +337,10 @@ const config = {
     gap: 5px;
     font-size: 0.72rem;
     line-height: 1.5;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
   }
   .kg-edge-arrow {
-    color: var(--sl-color-text);
+    color: var(--foreground);
     font-weight: 700;
   }
 
@@ -388,7 +388,7 @@ const config = {
     min-height: min(88dvh, 880px) !important;
     z-index: 9999 !important;
     border-radius: 14px !important;
-    border: 1px solid var(--workspace-border) !important;
+    border: 1px solid var(--border) !important;
     box-shadow: 0 28px 80px rgba(0, 0, 0, 0.42) !important;
   }
   .note-graph .kg-container.slsg-is-fullscreen .kg-actions.slsg-graph-action-container {
@@ -421,8 +421,8 @@ const config = {
     padding: 5px 8px;
     border-radius: 10px;
     direction: rtl;
-    background: color-mix(in srgb, var(--sl-color-bg) 88%, transparent);
-    border: 1px solid var(--workspace-border);
+    background: color-mix(in srgb, var(--background) 88%, transparent);
+    border: 1px solid var(--border);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -441,7 +441,7 @@ const config = {
     right: 8px;
     width: 14px;
     height: 14px;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     pointer-events: none;
   }
   .kg-fs-search {
@@ -451,16 +451,16 @@ const config = {
     padding: 0 28px 0 8px !important;
     font-size: 0.76rem !important;
     border-radius: 6px !important;
-    border: 1px solid var(--workspace-border) !important;
-    background: var(--sl-color-gray-6) !important;
-    color: var(--sl-color-text) !important;
+    border: 1px solid var(--border) !important;
+    background: var(--surface-subtle) !important;
+    color: var(--foreground) !important;
   }
   .kg-fs-group {
     display: inline-flex;
     gap: 2px;
     padding: 2px;
     border-radius: 7px;
-    background: var(--sl-color-gray-6);
+    background: var(--surface-subtle);
   }
   .kg-fs-chip {
     min-height: 24px !important;
@@ -470,14 +470,14 @@ const config = {
     border-radius: 5px !important;
     font-size: 0.73rem !important;
     background: transparent !important;
-    color: var(--sl-color-gray-2) !important;
+    color: var(--muted-foreground) !important;
   }
   .kg-fs-chip:hover {
-    color: var(--sl-color-text) !important;
+    color: var(--foreground) !important;
   }
   .kg-fs-chip.active {
-    background: var(--sl-color-bg) !important;
-    color: var(--sl-color-text) !important;
+    background: var(--background) !important;
+    color: var(--foreground) !important;
     font-weight: 600;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
   }
@@ -488,14 +488,14 @@ const config = {
     border-radius: 6px !important;
     font-size: 0.73rem !important;
     font-weight: 500;
-    border: 1px solid var(--workspace-border) !important;
+    border: 1px solid var(--border) !important;
     background: transparent !important;
-    color: var(--sl-color-gray-2) !important;
+    color: var(--muted-foreground) !important;
   }
   .kg-fs-toggle.active {
-    border-color: var(--sl-color-accent) !important;
-    background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent) !important;
-    color: var(--sl-color-text) !important;
+    border-color: var(--primary) !important;
+    background: color-mix(in srgb, var(--primary) 16%, transparent) !important;
+    color: var(--foreground) !important;
     font-weight: 600;
   }
   .kg-fs-toggle:disabled {
@@ -504,7 +504,7 @@ const config = {
   }
   .kg-fs-stats {
     font-size: 0.71rem;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
     padding-inline: 4px;
     white-space: nowrap;
   }
@@ -525,8 +525,8 @@ const config = {
     padding: 5px 12px;
     border-radius: 999px;
     direction: rtl;
-    background: color-mix(in srgb, var(--sl-color-bg) 88%, transparent);
-    border: 1px solid var(--workspace-border);
+    background: color-mix(in srgb, var(--background) 88%, transparent);
+    border: 1px solid var(--border);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -540,7 +540,7 @@ const config = {
   .kg-dock-sep {
     width: 1px;
     height: 16px;
-    background: var(--workspace-border);
+    background: var(--border);
     margin-inline: 4px;
   }
   .kg-fs-legend-chip,
@@ -555,21 +555,21 @@ const config = {
     border-radius: 999px !important;
     border: 1px solid transparent !important;
     background: transparent !important;
-    color: var(--sl-color-gray-2) !important;
+    color: var(--muted-foreground) !important;
   }
   .kg-fs-legend-chip .kg-dot {
     background: var(--chip-c);
   }
   .kg-fs-legend-chip:hover,
   .kg-fs-legend-chip.is-active {
-    color: var(--sl-color-text) !important;
-    border-color: color-mix(in srgb, var(--chip-c) 55%, var(--workspace-border)) !important;
+    color: var(--foreground) !important;
+    border-color: color-mix(in srgb, var(--chip-c) 55%, var(--border)) !important;
     background: color-mix(in srgb, var(--chip-c) 14%, transparent) !important;
   }
   .kg-fs-plane-chip:hover,
   .kg-fs-plane-chip.is-active {
-    color: var(--sl-color-text) !important;
-    border-color: color-mix(in srgb, var(--plane-c) 55%, var(--workspace-border)) !important;
+    color: var(--foreground) !important;
+    border-color: color-mix(in srgb, var(--plane-c) 55%, var(--border)) !important;
     background: color-mix(in srgb, var(--plane-c) 14%, transparent) !important;
   }
 
@@ -585,8 +585,8 @@ const config = {
     overflow: auto;
     padding: 14px !important;
     border-radius: 12px !important;
-    border: 1px solid var(--workspace-border) !important;
-    background: color-mix(in srgb, var(--sl-color-bg) 96%, transparent) !important;
+    border: 1px solid var(--border) !important;
+    background: color-mix(in srgb, var(--background) 96%, transparent) !important;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 16px 42px rgba(0, 0, 0, 0.24) !important;
@@ -597,7 +597,7 @@ const config = {
     align-items: center;
     justify-content: space-between;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--workspace-border);
+    border-bottom: 1px solid var(--border);
     font-size: 0.82rem;
   }
   .kg-popup-reset {
@@ -606,13 +606,13 @@ const config = {
     padding: 0 8px !important;
     font-size: 0.72rem !important;
     border-radius: 5px !important;
-    border: 1px solid var(--workspace-border) !important;
+    border: 1px solid var(--border) !important;
     background: transparent !important;
-    color: var(--sl-color-gray-2) !important;
+    color: var(--muted-foreground) !important;
   }
   .kg-popup-reset:hover {
-    color: var(--sl-color-text) !important;
-    background: var(--sl-color-gray-6) !important;
+    color: var(--foreground) !important;
+    background: var(--surface-subtle) !important;
   }
   .kg-field-label {
     display: flex !important;
@@ -620,7 +620,7 @@ const config = {
     gap: 5px;
     margin: 6px 0 !important;
     font-size: 0.75rem !important;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
   }
   .kg-field-label select {
     min-height: 30px !important;
@@ -628,9 +628,9 @@ const config = {
     padding: 0 8px !important;
     font-size: 0.77rem !important;
     border-radius: 6px !important;
-    border: 1px solid var(--workspace-border) !important;
-    background: var(--sl-color-gray-6) !important;
-    color: var(--sl-color-text) !important;
+    border: 1px solid var(--border) !important;
+    background: var(--surface-subtle) !important;
+    color: var(--foreground) !important;
   }
   .kg-toggle-row {
     display: flex !important;
@@ -639,7 +639,7 @@ const config = {
     margin: 5px 0 !important;
     font-size: 0.77rem !important;
     cursor: pointer;
-    color: var(--sl-color-text);
+    color: var(--foreground);
   }
   .kg-toggle-row input[type='checkbox'] {
     min-height: 0 !important;
@@ -647,7 +647,7 @@ const config = {
     height: 15px;
     padding: 0 !important;
     margin: 0 !important;
-    accent-color: var(--sl-color-accent);
+    accent-color: var(--primary);
   }
   .kg-slider-top {
     display: flex;
@@ -655,7 +655,7 @@ const config = {
     justify-content: space-between;
     width: 100%;
     font-size: 0.74rem;
-    color: var(--sl-color-gray-2);
+    color: var(--muted-foreground);
   }
   .kg-settings-popup .slsg-value-slider {
     margin: 4px 0 !important;
@@ -665,7 +665,7 @@ const config = {
   }
   .kg-settings-popup .slsg-value-slider-label {
     font-weight: 500 !important;
-    color: var(--sl-color-text);
+    color: var(--foreground);
   }
   .kg-settings-popup input[type='range'] {
     min-height: 0 !important;
@@ -673,7 +673,7 @@ const config = {
     padding: 0 !important;
     border: 0 !important;
     width: 100%;
-    accent-color: var(--sl-color-accent);
+    accent-color: var(--primary);
     cursor: pointer;
   }
 

@@ -3,26 +3,33 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const root = new URL('../../', import.meta.url);
-test('shared component system is bound to reader CSS with paired semantic themes and reduced motion', () => {
-  const css = readFileSync(new URL('frontend/src/styles/custom.css', root), 'utf8');
-  assert.match(css, /@import ['"]\.\/garden-system\.css['"]/);
-  const system = readFileSync(new URL('frontend/src/styles/garden-system.css', root), 'utf8');
+test('shared component system is bound to unified token/base/workspace CSS with paired semantic themes and zero --sl-* leakage', () => {
+  const app = readFileSync(new URL('frontend/src/styles/app.css', root), 'utf8');
+  assert.match(app, /@import ['"]\.\/tokens\.css['"]/);
+  assert.match(app, /@import ['"]\.\/base\.css['"]/);
+  assert.match(app, /@import ['"]\.\/prose\.css['"]/);
+  assert.match(app, /@import ['"]\.\/workspace-shell\.css['"]/);
+
+  const tokens = readFileSync(new URL('frontend/src/styles/tokens.css', root), 'utf8');
+  const base = readFileSync(new URL('frontend/src/styles/base.css', root), 'utf8');
+  const shell = readFileSync(new URL('frontend/src/styles/workspace-shell.css', root), 'utf8');
   for (const token of ['control-border', 'success', 'success-surface', 'danger', 'danger-surface', 'warning', 'warning-surface', 'space-4', 'radius-control', 'reading-width']) {
-    assert.match(system, new RegExp('--' + token + ':'));
+    assert.match(tokens, new RegExp('--' + token + ':'));
   }
-  assert.match(system, /data-theme='dark'/);
-  assert.match(system, /prefers-reduced-motion/);
-  assert.match(system, /\.garden-button-primary:hover/);
-  assert.match(system, /:focus-visible/);
-  assert.match(system, /aria-invalid='true'/);
+  assert.doesNotMatch(tokens + base + shell, /--sl-/);
+  assert.match(tokens, /data-theme='dark'/);
+  assert.match(base, /prefers-reduced-motion/);
+  assert.match(shell, /\.garden-button-primary:hover/);
+  assert.match(base, /:focus-visible/);
+  assert.match(shell, /aria-invalid='true'/);
 });
 
 test('Persian tables keep table layout, RTL column order and direction-aware alignment', () => {
-  const css = readFileSync(new URL('frontend/src/styles/custom.css', root), 'utf8');
-  const table = css.slice(css.indexOf('Tables: RTL-correct'));
+  const prose = readFileSync(new URL('frontend/src/styles/prose.css', root), 'utf8');
+  const table = prose.slice(prose.indexOf('Tables: RTL-correct'));
   assert.ok(table.length > 0, 'table styling section must exist');
   // Regression: `display:block` on a table collapses column assignment and
-  // transposes columns in RTL, which is what broke the live site.
+  // transposes columns in RTL.
   assert.doesNotMatch(table, /\.note table[^{}]*\{[^}]*display:\s*block/);
   assert.match(table, /\.note table\s*\{[^}]*display:\s*table/);
   assert.match(table, /\.note table\s*\{[^}]*direction:\s*rtl/);
@@ -30,10 +37,10 @@ test('Persian tables keep table layout, RTL column order and direction-aware ali
   assert.match(table, /\[align='right'\][^{}]*\{[^}]*text-align:\s*end/);
   assert.match(table, /\[align='left'\][^{}]*\{[^}]*text-align:\s*start/);
   assert.match(table, /\[align='center'\][^{}]*\{[^}]*text-align:\s*center/);
-  // The scroll wrapper is the only thing allowed to scroll wide tables.
-  assert.match(table, /\.note \.table-scroll\s*\{[^}]*overflow-x:\s*auto/);
+  // The scroll wrapper scrolls wide tables cleanly.
+  assert.match(table, /\.note \.table-scroll[\s\S]*overflow-x:\s*auto/);
   // Persian-first typography.
-  assert.match(table, /\.note th, \.note td\s*\{[^}]*padding:/);
+  assert.match(table, /\.note th,\s*\.note td\s*\{[^}]*padding:/);
   assert.match(table, /var\(--font-reading\)/);
 });
 

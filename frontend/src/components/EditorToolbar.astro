@@ -115,14 +115,14 @@ import {
   inset-block-start: var(--editor-toolbar-top, 4rem);
   z-index: 25;
   min-inline-size: 0;
-  background: var(--sl-color-bg-nav, rgba(24, 24, 27, 0.85));
+  background: var(--surface-elevated);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 6px 20px -3px rgba(0, 0, 0, 0.35), 0 2px 6px -1px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px -3px oklch(0 0 0 / 0.16), 0 2px 6px -1px oklch(0 0 0 / 0.08);
   margin-block-end: 12px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .markdown-toolbar-host[hidden] {
   display: none !important;
@@ -153,11 +153,11 @@ import {
 .markdown-toolbar select {
   font-family: inherit;
   font-size: 13px;
-  color: var(--sl-color-text, #f4f4f5);
+  color: var(--foreground);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   user-select: none;
 }
 .markdown-toolbar button {
@@ -171,18 +171,18 @@ import {
   cursor: pointer;
 }
 .markdown-toolbar button:hover {
-  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.08));
-  color: #fff;
+  background: var(--surface-hover);
+  color: var(--foreground);
 }
 .markdown-toolbar button:active,
 .markdown-toolbar button[aria-pressed="true"] {
-  background: var(--sl-color-gray-5, rgba(255, 255, 255, 0.16)) !important;
-  color: var(--sl-color-accent, #c4b5fd) !important;
-  border-color: rgba(167, 139, 250, 0.3) !important;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  border-color: color-mix(in oklch, var(--primary) 35%, transparent);
 }
 .markdown-toolbar button:focus-visible,
 .markdown-toolbar select:focus-visible {
-  outline: 2px solid var(--sl-color-accent, #a78bfa);
+  outline: 2px solid var(--ring);
   outline-offset: -1px;
 }
 
@@ -192,44 +192,44 @@ import {
   height: 32px;
   padding: 0 10px 0 24px;
   max-inline-size: 8.5rem;
-  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.05));
-  border-color: var(--workspace-border, rgba(255, 255, 255, 0.1));
-  font-family: Vazirmatn, sans-serif;
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  font-family: var(--font-reading);
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: left 6px center;
 }
 .markdown-toolbar select:hover {
-  background-color: var(--sl-color-gray-5, rgba(255, 255, 255, 0.1));
-  border-color: var(--workspace-border, rgba(255, 255, 255, 0.2));
+  background-color: var(--surface-hover);
+  border-color: var(--border-strong);
 }
 
 /* Math badges & buttons */
 .toolbar-math-badge {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.5px;
 }
 .toolbar-mathlive-btn {
-  gap: 5px !important;
-  padding: 0 8px !important;
-  font-size: 12px !important;
+  gap: 5px;
+  padding: 0 8px;
+  font-size: 12px;
   font-weight: 600;
-  background: rgba(167, 139, 250, 0.1) !important;
-  color: #c4b5fd !important;
-  border-color: rgba(167, 139, 250, 0.25) !important;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  border-color: color-mix(in oklch, var(--primary) 30%, transparent);
 }
 .toolbar-mathlive-btn:hover {
-  background: rgba(167, 139, 250, 0.2) !important;
-  border-color: rgba(167, 139, 250, 0.4) !important;
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  border-color: color-mix(in oklch, var(--primary) 45%, transparent);
 }
 .toolbar-mathlive-btn[aria-pressed="true"] {
-  background: rgba(167, 139, 250, 0.3) !important;
-  border-color: var(--sl-color-accent, #a78bfa) !important;
-  color: #fff !important;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 
 /* Divider */
@@ -237,7 +237,7 @@ import {
   inline-size: 1px;
   block-size: 18px;
   margin-inline: 4px;
-  background: var(--workspace-border, rgba(255, 255, 255, 0.12));
+  background: var(--border);
 }
 
 /* Status message */
@@ -245,7 +245,7 @@ import {
   margin: 0;
   padding-inline: var(--space-3);
   font-size: .8125rem;
-  color: var(--muted, #a1a1aa);
+  color: var(--muted-foreground);
   padding-block: 4px;
 }
 .toolbar-status:empty {
@@ -258,14 +258,14 @@ import {
   max-block-size: calc(100dvh - 2rem);
   overflow: auto;
   padding: var(--space-5, 1.25rem);
-  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--surface, #18181b);
-  color: var(--fg, #f4f4f5);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 20px 40px oklch(0 0 0 / 0.35);
 }
 [data-toolbar-link]::backdrop {
-  background: rgba(0, 0, 0, 0.6);
+  background: oklch(0 0 0 / 0.55);
   backdrop-filter: blur(4px);
 }
 [data-toolbar-link-form] {
@@ -282,17 +282,17 @@ import {
   min-block-size: 38px;
   border-radius: 6px;
   padding: 8px 12px;
-  border: 1px solid var(--workspace-border, rgba(255, 255, 255, 0.15));
-  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
   color: inherit;
 }
 [data-toolbar-link-form] p {
   margin: 0;
   font-size: .8125rem;
-  color: var(--muted, #a1a1aa);
+  color: var(--muted-foreground);
 }
 [data-link-error] {
-  color: var(--danger, #ef4444);
+  color: var(--destructive);
 }
 [data-link-error]:empty {
   display: none;
