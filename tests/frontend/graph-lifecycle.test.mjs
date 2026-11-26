@@ -49,8 +49,9 @@ test('graph load is deferred, deduplicated while pending, and retryable after im
   assert.equal(button.hidden, true);
 });
 
-test('graph restores regenerated action focus after upstream mutation observers finish', () => {
-  assert.match(source(), /setTimeout\(\(\) => \{/);
+test('graph lazy-loads dedicated D3 graph-component module on demand', () => {
+  assert.match(source(), /import\(['"][^'"]+graph-component['"]\)/);
+  assert.doesNotMatch(source(), /starlight-site-graph/);
 });
 
 test('a reader removed during graph import does not activate a detached renderer', async () => {

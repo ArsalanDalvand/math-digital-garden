@@ -456,6 +456,99 @@ try {
   assert.equal(filterOff, true, 'Clicking active legend badge again must clear kind filter');
   record(`15. Axler graph verified (${axlerState.nodesCount} nodes, semantic kinds: ${axlerState.kinds.join(', ')}, legend below canvas & interactive filter)`);
 
+  // 16. Verify UMKO Typed Semantic Edges, Plane Filters, Typed-Only Toggle, DAG Layout & Edge Hover Tooltip
+  browser('open', base + '/notes/alg-232009403065653b');
+  browser('wait', 'graph-component[data-graph-ready="true"]');
+  browser('wait', '1000');
+  browser('click', '[data-graph-action="fullscreen"]');
+  browser('wait', '600');
+  browser('click', '[data-fs-depth="2"]');
+  browser('wait', '900');
+
+  const typedStats = evaluate(`(() => {
+    const gc = document.querySelector('graph-component');
+    const links = gc?.simulator?.links || [];
+    const typed = links.filter(l => l.isTyped);
+    const planes = [...new Set(typed.map(l => l.plane))];
+    return {
+      totalLinks: links.length,
+      typedCount: typed.length,
+      planes,
+      sampleLabel: typed[0]?.shortLabel || ''
+    };
+  })()`);
+  assert.ok(typedStats.typedCount >= 5, `Depth 2 Algebra graph must contain typed UMKO edges (found ${typedStats.typedCount})`);
+  assert.ok(typedStats.planes.length >= 2, `Typed edges must span multiple orthogonal UMKO planes (found ${JSON.stringify(typedStats.planes)})`);
+
+  // Switch to Hierarchical DAG Layout
+  browser('click', '[data-fs-layout="dag"]');
+  browser('wait', '600');
+  const dagActive = evaluate(`(() => {
+    const gc = document.querySelector('graph-component');
+    const ranks = new Set((gc?.simulator?.nodes || []).map(n => n.dagRank).filter(r => typeof r === 'number'));
+    return {
+      mode: gc?.config?.layoutMode,
+      rankLevels: ranks.size,
+      btnActive: document.querySelector('[data-fs-layout="dag"]')?.classList.contains('active')
+    };
+  })()`);
+  assert.equal(dagActive.mode, 'dag', 'DAG layout mode must activate');
+  assert.equal(dagActive.btnActive, true, 'DAG button must show active state');
+  assert.ok(dagActive.rankLevels >= 2, `DAG layout must stratify nodes into >=2 topological ranks (found ${dagActive.rankLevels})`);
+
+  // Toggle UMKO Typed-Only filter & Plane filter
+  browser('click', '[data-fs-typed-only]');
+  browser('wait', '300');
+  const typedOnlyOn = evaluate('document.querySelector("graph-component")?.config?.typedOnly === true');
+  assert.equal(typedOnlyOn, true, 'Typed-only toggle must activate');
+  browser('click', '[data-fs-plane="deduction"]');
+  browser('wait', '250');
+  const planeActive = evaluate('document.querySelector("[data-fs-plane=deduction]")?.classList.contains("is-active")');
+  assert.equal(planeActive, true, 'Semantic edge plane filter chip must activate');
+  browser('click', '[data-fs-plane="deduction"]');
+  browser('click', '[data-fs-typed-only]');
+  browser('click', '[data-fs-layout="force"]');
+  browser('wait', '500');
+
+  // Hover directly over a typed edge midpoint and verify semantic edge inspector tooltip appears
+  const edgeMid = evaluate(`(() => {
+    const gc = document.querySelector('graph-component');
+    const c = gc.querySelector('canvas');
+    const r = c.getBoundingClientRect();
+    const t = gc.simulator.transform;
+    const typed = (gc.simulator.links || []).filter(l => l.isTyped && !l.curveOffset);
+    // Find a typed edge whose midpoint is well separated from all node centers
+    for (const l of typed) {
+      const mx = (l.source.x + l.target.x) / 2;
+      const my = (l.source.y + l.target.y) / 2;
+      const sx = mx * t.k + t.x;
+      const sy = my * t.k + t.y;
+      if (sx < 60 || sx > r.width - 60 || sy < 70 || sy > r.height - 70) continue;
+      const farFromNodes = gc.simulator.nodes.every(n => Math.hypot((n.x * t.k + t.x) - sx, (n.y * t.k + t.y) - sy) > (n.radius * t.k + 16));
+      if (farFromNodes) {
+        return { x: Math.round(r.left + sx), y: Math.round(r.top + sy), rel: l.primaryRel };
+      }
+    }
+    return null;
+  })()`);
+  if (edgeMid) {
+    browser('mouse', 'move', String(edgeMid.x), String(edgeMid.y));
+    browser('wait', '300');
+    const edgeTip = evaluate(`(() => {
+      const tip = document.querySelector('.kg-tooltip:not([hidden])');
+      return {
+        visible: !!tip,
+        hasEdgePill: !!tip?.querySelector('.kg-edge-pill'),
+        text: tip?.textContent?.trim() || ''
+      };
+    })()`);
+    assert.equal(edgeTip.visible, true, 'Hovering over a typed edge must show the semantic edge tooltip');
+    assert.equal(edgeTip.hasEdgePill, true, 'Semantic edge tooltip must display relation pill');
+  }
+  browser('press', 'Escape');
+  browser('wait', '300');
+  record(`16. Typed UMKO edges (${typedStats.typedCount} typed across ${typedStats.planes.join(', ')}), DAG layout (${dagActive.rankLevels} ranks), plane filter & edge hover verified`);
+
   // Final sanity check for any unhandled browser errors
   const pageErrors = browser('errors')?.errors || [];
   assert.equal(pageErrors.length, 0, `No browser page errors allowed: ${JSON.stringify(pageErrors)}`);

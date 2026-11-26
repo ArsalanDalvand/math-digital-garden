@@ -1,6 +1,6 @@
 import { noteHref } from './markdown.mjs';
 
-/** The graph plugin normalizes node IDs to paths without a leading slash. @param {string} slug */
+/** The graph engine normalizes node IDs to paths without a leading slash. @param {string} slug */
 const graphPath = slug => noteHref(slug).slice(1);
 
 /** @param {Awaited<ReturnType<typeof import('./markdown.mjs').buildKnowledge>>} garden */
@@ -13,7 +13,18 @@ export function graphSitemap(garden) {
     const normalTags = (note.tags || []).map(t => t.startsWith('#') ? t : `#${t}`);
     const allTags = [...new Set([...normalTags, ...kindTag, ...subtypeTag, ...levelTag, ...trackTags])];
 
-    return [graphPath(note.slug), {
+    /** @type {Record<string, string[]>} */
+    const rels = {};
+    for (const [relKey, targets] of Object.entries(note.resolvedRelations || {})) {
+      for (const targetSlug of targets || []) {
+        const targetPath = graphPath(targetSlug);
+        if (!rels[targetPath]) rels[targetPath] = [];
+        if (!rels[targetPath].includes(relKey)) rels[targetPath].push(relKey);
+      }
+    }
+
+    /** @type {Record<string, any>} */
+    const entry = {
       title: note.title,
       exists: true,
       external: false,
@@ -25,6 +36,11 @@ export function graphSitemap(garden) {
       level: note.level || '',
       slogan: note.slogan_fa || '',
       uid: note.uid || '',
-    }];
+    };
+    if (Object.keys(rels).length > 0) {
+      entry.rels = rels;
+    }
+
+    return [graphPath(note.slug), entry];
   }));
 }

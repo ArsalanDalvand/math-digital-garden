@@ -1,40 +1,23 @@
 ---
-import 'starlight-site-graph/styles/common.css';
-import 'starlight-site-graph/styles/variables.css';
-import 'starlight-site-graph/styles/starlight.css';
 import { graphSitemap } from '../lib/graph.mjs';
 import { noteHref, buildKnowledge } from '../lib/markdown.mjs';
 interface Props { garden: Awaited<ReturnType<typeof buildKnowledge>>; slug: string }
 const { garden, slug } = Astro.props;
-// UMKO v1.1 Semantic Graph Configuration
+// UMKO v1.1 Semantic Knowledge Graph Configuration
 const config = {
   depth: 1,
   prefetchPages: false,
   renderExternal: false,
+  renderLabels: true,
+  renderArrows: true,
+  typedOnly: false,
+  layoutMode: 'force',
   labelFontSize: 12,
   linkDistance: 120,
   repelForce: 150,
   centerForce: 0.12,
   colliderPadding: 24,
-  renderArrows: true,
-  tagRenderMode: 'same',
-  tagStyles: {
-    '#kind:assertion': { shape: 'circle', shapeSize: 9, shapeColor: '#1d4ed8', strokeColor: '#60a5fa', strokeWidth: 1.5 },
-    '#kind:concept': { shape: 'circle', shapeSize: 9, shapeColor: '#0d9488', strokeColor: '#2dd4bf', strokeWidth: 1.5 },
-    '#kind:proof': { shape: 'circle', shapeSize: 8, shapeColor: '#64748b', strokeColor: '#94a3b8', strokeWidth: 1.5 },
-    '#kind:problem': { shape: 'circle', shapeSize: 9, shapeColor: '#ea580c', strokeColor: '#fb923c', strokeWidth: 1.5 },
-    '#kind:solution': { shape: 'circle', shapeSize: 8, shapeColor: '#059669', strokeColor: '#34d399', strokeWidth: 1.5 },
-    '#kind:technique': { shape: 'circle', shapeSize: 8, shapeColor: '#d97706', strokeColor: '#fbbf24', strokeWidth: 1.5 },
-    '#kind:hint_ladder': { shape: 'circle', shapeSize: 7, shapeColor: '#d97706', strokeColor: '#f59e0b', strokeWidth: 1.5 },
-    '#kind:problem_archetype': { shape: 'circle', shapeSize: 9, shapeColor: '#c026d3', strokeColor: '#e879f9', strokeWidth: 2 },
-    '#kind:pitfall': { shape: 'circle', shapeSize: 8, shapeColor: '#b45309', strokeColor: '#f59e0b', strokeWidth: 2 },
-    '#kind:visual_lab': { shape: 'circle', shapeSize: 9, shapeColor: '#0284c7', strokeColor: '#38bdf8', strokeWidth: 1.5 },
-    '#kind:collection': { shape: 'circle', shapeSize: 12, shapeColor: '#7c3aed', strokeColor: '#c084fc', strokeWidth: 2 },
-    '#kind:axiom': { shape: 'circle', shapeSize: 9, shapeColor: '#0e7490', strokeColor: '#22d3ee', strokeWidth: 1.5 },
-    '#kind:theory': { shape: 'circle', shapeSize: 11, shapeColor: '#4338ca', strokeColor: '#818cf8', strokeWidth: 2 },
-    '#kind:remark': { shape: 'circle', shapeSize: 7, shapeColor: '#64748b', strokeColor: '#cbd5e1', strokeWidth: 1 },
-  },
-  actions: ['reset-zoom', 'fullscreen', 'render-arrows', 'settings'],
+  actions: ['reset-zoom', 'fullscreen', 'typed-only', 'render-arrows', 'settings'],
 };
 ---
 <section data-note-graph class="note-graph" aria-label="گراف ارتباط یادداشت‌ها">
@@ -52,8 +35,13 @@ const config = {
   <p role="status" data-graph-status></p>
   <div class="graph-stage-slot" data-graph-slot></div>
   <template data-graph-template>
-    <div class="slsg-graph-component slsg-graph-skeleton"><div class="slsg-graph-container"></div></div>
-    <graph-component data-config={JSON.stringify(config)} data-sitemap={JSON.stringify(graphSitemap(garden))} data-slug={noteHref(slug).slice(1)} data-debug="false" data-trailing-slashes="false"></graph-component>
+    <graph-component
+      data-config={JSON.stringify(config)}
+      data-sitemap={JSON.stringify(graphSitemap(garden))}
+      data-slug={noteHref(slug).slice(1)}
+      data-debug="false"
+      data-trailing-slashes="false"
+    ></graph-component>
   </template>
   <div class="graph-umko-legend" aria-label="راهنمای دسته‌بندی گره‌های گراف">
     <span class="legend-badge" data-legend-kind="assertion" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #1d4ed8">قضیه</span>
@@ -144,7 +132,7 @@ const config = {
     cursor: pointer;
     user-select: none;
     line-height: 1.45;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
   .legend-badge::before {
     content: '';
@@ -168,6 +156,10 @@ const config = {
 </style>
 
 <style is:global>
+  .note-graph graph-component {
+    display: block;
+    width: 100%;
+  }
   .note-graph .kg-container {
     position: relative;
     width: 100%;
@@ -240,24 +232,24 @@ const config = {
   }
   .note-graph .kg-action-btn.slsg-graph-action-button.is-active {
     color: var(--sl-color-accent) !important;
-    background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent) !important;
+    background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent) !important;
   }
 
-  /* Floating Glassmorphic Hover Inspector Card */
+  /* Floating Glassmorphic Hover Inspector Card (Node & Semantic Edge) */
   .kg-tooltip {
     position: absolute;
     top: 0;
     left: 0;
     z-index: 20;
     pointer-events: none;
-    max-width: min(260px, calc(100% - 20px));
-    padding: 7px 10px;
-    border-radius: 9px;
+    max-width: min(290px, calc(100% - 20px));
+    padding: 8px 11px;
+    border-radius: 10px;
     direction: rtl;
     text-align: right;
-    background: color-mix(in srgb, var(--sl-color-bg) 94%, transparent);
+    background: color-mix(in srgb, var(--sl-color-bg) 95%, transparent);
     border: 1px solid var(--workspace-border);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     color: var(--sl-color-text);
@@ -265,8 +257,8 @@ const config = {
     will-change: transform;
   }
   :root[data-theme='dark'] .kg-tooltip {
-    background: rgba(28, 28, 32, 0.94);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    background: rgba(26, 26, 30, 0.95);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.52);
   }
   .kg-tooltip-top {
     display: flex;
@@ -279,7 +271,7 @@ const config = {
   .kg-tooltip-kind {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     font-weight: 600;
     color: var(--kind-c, var(--sl-color-accent));
   }
@@ -303,12 +295,68 @@ const config = {
     color: var(--sl-color-text);
     word-break: break-word;
   }
+  .kg-tooltip-rel {
+    margin-top: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.67rem;
+    font-weight: 500;
+    background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent);
+    color: var(--sl-color-accent-high, var(--sl-color-accent));
+  }
   .kg-tooltip-slogan {
-    margin-top: 3px;
+    margin-top: 4px;
     font-size: 0.7rem;
     line-height: 1.5;
     color: var(--sl-color-gray-2);
   }
+  .kg-edge-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0 5px;
+  }
+  .kg-edge-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--edge-c, var(--sl-color-accent));
+    background: color-mix(in srgb, var(--edge-c, var(--sl-color-accent)) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--edge-c, var(--sl-color-accent)) 35%, transparent);
+  }
+  .kg-edge-endpoints {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--sl-color-gray-2);
+  }
+  .kg-edge-arrow {
+    color: var(--sl-color-text);
+    font-weight: 700;
+  }
+
+  /* Line Pattern Swatch (solid / dashed / dotted) */
+  .kg-line-sample {
+    display: inline-block;
+    width: 14px;
+    height: 0;
+    border-top-width: 2px;
+    border-top-color: var(--plane-c, currentColor);
+    flex-shrink: 0;
+  }
+  .kg-line-solid { border-top-style: solid; }
+  .kg-line-dashed { border-top-style: dashed; }
+  .kg-line-dotted { border-top-style: dotted; }
 
   /* Fullscreen Modal Experience */
   body[data-graph-blur='true'] .workspace-tools {
@@ -325,7 +373,7 @@ const config = {
     width: 100vw !important;
     height: 100dvh !important;
     z-index: 9990 !important;
-    background: rgba(10, 12, 18, 0.48) !important;
+    background: rgba(10, 12, 18, 0.5) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
   }
@@ -335,13 +383,10 @@ const config = {
     left: 50% !important;
     right: auto !important;
     bottom: auto !important;
-    inset: auto !important;
-    top: 50% !important;
-    left: 50% !important;
     transform: translate(-50%, -50%) !important;
-    width: min(92vw, 1360px) !important;
-    height: min(88dvh, 860px) !important;
-    min-height: min(88dvh, 860px) !important;
+    width: min(92vw, 1380px) !important;
+    height: min(88dvh, 880px) !important;
+    min-height: min(88dvh, 880px) !important;
     z-index: 9999 !important;
     border-radius: 14px !important;
     border: 1px solid var(--workspace-border) !important;
@@ -364,7 +409,7 @@ const config = {
     height: 16px !important;
   }
 
-  /* Fullscreen HUD */
+  /* Fullscreen Top-Right HUD */
   .kg-fs-hud {
     position: absolute;
     top: 12px;
@@ -373,11 +418,11 @@ const config = {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 5px 8px;
     border-radius: 10px;
     direction: rtl;
-    background: color-mix(in srgb, var(--sl-color-bg) 86%, transparent);
+    background: color-mix(in srgb, var(--sl-color-bg) 88%, transparent);
     border: 1px solid var(--workspace-border);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -401,17 +446,17 @@ const config = {
     pointer-events: none;
   }
   .kg-fs-search {
-    width: 195px;
+    width: 175px;
     height: 28px !important;
     min-height: 28px !important;
     padding: 0 28px 0 8px !important;
-    font-size: 0.78rem !important;
+    font-size: 0.76rem !important;
     border-radius: 6px !important;
     border: 1px solid var(--workspace-border) !important;
     background: var(--sl-color-gray-6) !important;
     color: var(--sl-color-text) !important;
   }
-  .kg-fs-depths {
+  .kg-fs-group {
     display: inline-flex;
     gap: 2px;
     padding: 2px;
@@ -424,9 +469,12 @@ const config = {
     padding: 0 8px !important;
     border: 0 !important;
     border-radius: 5px !important;
-    font-size: 0.74rem !important;
+    font-size: 0.73rem !important;
     background: transparent !important;
     color: var(--sl-color-gray-2) !important;
+  }
+  .kg-fs-chip:hover {
+    color: var(--sl-color-text) !important;
   }
   .kg-fs-chip.active {
     background: var(--sl-color-bg) !important;
@@ -434,14 +482,35 @@ const config = {
     font-weight: 600;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
   }
+  .kg-fs-toggle {
+    min-height: 26px !important;
+    height: 26px !important;
+    padding: 0 9px !important;
+    border-radius: 6px !important;
+    font-size: 0.73rem !important;
+    font-weight: 500;
+    border: 1px solid var(--workspace-border) !important;
+    background: transparent !important;
+    color: var(--sl-color-gray-2) !important;
+  }
+  .kg-fs-toggle.active {
+    border-color: var(--sl-color-accent) !important;
+    background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent) !important;
+    color: var(--sl-color-text) !important;
+    font-weight: 600;
+  }
+  .kg-fs-toggle:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
   .kg-fs-stats {
-    font-size: 0.72rem;
+    font-size: 0.71rem;
     color: var(--sl-color-gray-2);
     padding-inline: 4px;
     white-space: nowrap;
   }
 
-  /* Fullscreen Bottom Interactive Legend */
+  /* Fullscreen Bottom Unified Dock: Node Kinds + Semantic Edge Planes */
   .kg-fs-legend {
     position: absolute;
     bottom: 12px;
@@ -450,26 +519,40 @@ const config = {
     z-index: 15;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 6px;
     max-width: calc(100% - 24px);
-    padding: 5px 10px;
+    padding: 5px 12px;
     border-radius: 999px;
     direction: rtl;
-    background: color-mix(in srgb, var(--sl-color-bg) 86%, transparent);
+    background: color-mix(in srgb, var(--sl-color-bg) 88%, transparent);
     border: 1px solid var(--workspace-border);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   }
-  .kg-fs-legend-chip {
+  .kg-dock-section {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+  }
+  .kg-dock-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--workspace-border);
+    margin-inline: 4px;
+  }
+  .kg-fs-legend-chip,
+  .kg-fs-plane-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     min-height: 24px !important;
     height: 24px !important;
     padding: 0 8px !important;
-    font-size: 0.73rem !important;
+    font-size: 0.72rem !important;
     border-radius: 999px !important;
     border: 1px solid transparent !important;
     background: transparent !important;
@@ -484,6 +567,12 @@ const config = {
     border-color: color-mix(in srgb, var(--chip-c) 55%, var(--workspace-border)) !important;
     background: color-mix(in srgb, var(--chip-c) 14%, transparent) !important;
   }
+  .kg-fs-plane-chip:hover,
+  .kg-fs-plane-chip.is-active {
+    color: var(--sl-color-text) !important;
+    border-color: color-mix(in srgb, var(--plane-c) 55%, var(--workspace-border)) !important;
+    background: color-mix(in srgb, var(--plane-c) 14%, transparent) !important;
+  }
 
   /* Settings Popover */
   .kg-settings-popup.slsg-popup-menu {
@@ -492,7 +581,9 @@ const config = {
     right: auto !important;
     top: 112px !important;
     z-index: 10010 !important;
-    width: 268px !important;
+    width: 274px !important;
+    max-height: calc(100dvh - 140px);
+    overflow: auto;
     padding: 14px !important;
     border-radius: 12px !important;
     border: 1px solid var(--workspace-border) !important;
@@ -529,14 +620,14 @@ const config = {
     flex-direction: column;
     gap: 5px;
     margin: 6px 0 !important;
-    font-size: 0.76rem !important;
+    font-size: 0.75rem !important;
     color: var(--sl-color-gray-2);
   }
   .kg-field-label select {
     min-height: 30px !important;
     height: 30px !important;
     padding: 0 8px !important;
-    font-size: 0.78rem !important;
+    font-size: 0.77rem !important;
     border-radius: 6px !important;
     border: 1px solid var(--workspace-border) !important;
     background: var(--sl-color-gray-6) !important;
@@ -547,7 +638,7 @@ const config = {
     align-items: center;
     gap: 8px;
     margin: 5px 0 !important;
-    font-size: 0.78rem !important;
+    font-size: 0.77rem !important;
     cursor: pointer;
     color: var(--sl-color-text);
   }
@@ -587,159 +678,28 @@ const config = {
     cursor: pointer;
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .kg-fs-hud {
       left: 12px;
       right: 12px;
       top: 52px;
     }
     .kg-fs-search {
-      width: 140px;
+      width: 130px;
     }
-    .kg-fs-stats {
+    .kg-fs-stats,
+    .kg-dock-sep {
       display: none;
+    }
+    .kg-fs-legend {
+      border-radius: 14px;
     }
   }
 </style>
 
 <script>
-  const labels: Record<string, string> = {
-    fullscreen: 'تمام‌صفحه یا بازگشت',
-    depth: 'تغییر عمق ارتباطات؛ سطح ۵ گراف سراسری',
-    'reset-zoom': 'بازنشانی زوم',
-    'render-arrows': 'نمایش یا حذف جهت پیوندها',
-    settings: 'تنظیمات گراف',
-    'Repel Force': 'نیروی دافعه',
-    'Center Force': 'نیروی مرکز',
-    'Collider Padding': 'فاصلهٔ نودها',
-    'Link Distance': 'طول پیوندها',
-    'Alpha Decay': 'سرعت آرام‌شدن حرکت',
-  };
-
-  // Fit all graph nodes cleanly within the canvas bounds with division-by-zero protection.
-  function fitGraph(graph: any) {
-    const sim = graph.simulator;
-    const canvas = graph.querySelector('canvas');
-    if (!sim?.nodes?.length || !canvas) return;
-    const nodes = sim.nodes.filter((n: any) => Number.isFinite(n.x) && Number.isFinite(n.y));
-    if (!nodes.length) return;
-    const xs = nodes.map((n: any) => n.x);
-    const ys = nodes.map((n: any) => n.y);
-    const left = Math.min(...xs);
-    const right = Math.max(...xs);
-    const top = Math.min(...ys);
-    const bottom = Math.max(...ys);
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    if (!w || !h) return;
-    const k = Math.min(1, (w - 100) / Math.max(1, right - left), (h - 70) / Math.max(1, bottom - top));
-    const x = w / 2 - ((left + right) / 2) * k;
-    const y = h / 2 - ((top + bottom) / 2) * k;
-    sim.userZoomed = true;
-    sim.centerTransform = sim.centerTransform.translate(-sim.centerTransform.x, -sim.centerTransform.y);
-    sim.zoomTransform =
-      sim.zoomTransform.constructor === Object
-        ? sim.zoomTransform
-        : new sim.zoomTransform.constructor(k, x, y);
-    sim.transform = sim.zoomTransform;
-    sim.renderer.resetZoom(sim.zoomTransform);
-    sim.updateZoom(k, x, y, true);
-    sim.requestRender = true;
-  }
-
-  function nameGraph(graph: HTMLElement) {
-    if (graph.dataset.graphReady !== 'true') {
-      graph.style.opacity = '0';
-      setTimeout(() => {
-        if (graph.isConnected) {
-          fitGraph(graph);
-          graph.style.opacity = '1';
-        }
-      }, 1800);
-    }
-
-    const nameControls = () => {
-      let actions: string[] = ['fullscreen', 'depth', 'reset-zoom', 'render-arrows', 'settings'];
-      try {
-        const parsed = JSON.parse(graph.dataset.config ?? '{}');
-        if (Array.isArray(parsed.actions)) actions = parsed.actions;
-      } catch {}
-      graph.querySelectorAll<HTMLButtonElement>('.slsg-graph-action-button').forEach((button, index) => {
-        const action = button.dataset.graphAction || actions[index];
-        button.type = 'button';
-        button.dataset.graphAction = action;
-        button.setAttribute('aria-label', labels[action] ?? action);
-        button.title = labels[action] ?? action;
-      });
-      const popup = graph.querySelector('.slsg-popup-menu');
-      if (popup && !popup.querySelector('[data-extra-settings]')) {
-        const extra = document.createElement('div');
-        extra.dataset.extraSettings = '';
-        extra.innerHTML =
-          '<label>عمق ارتباطات <select aria-label="عمق ارتباطات"><option value="0">فقط این یادداشت</option><option value="1">همسایه‌ها</option><option value="2">دو مرحله</option><option value="3">سه مرحله</option><option value="4">چهار مرحله</option><option value="5">همه یادداشت‌ها</option></select></label><label><input type="checkbox"/> جهت پیوندها</label>';
-        const g = graph as any;
-        const select = extra.querySelector('select')!;
-        select.value = String(g.config.depth);
-        select.onchange = () => {
-          g.config.depth = Number(select.value);
-          g.full_refresh();
-          setTimeout(() => fitGraph(g), 1000);
-        };
-        const check = extra.querySelector('input')!;
-        check.checked = g.config.renderArrows;
-        check.onchange = () => {
-          g.config.renderArrows = check.checked;
-          g.simulator.requestRender = true;
-        };
-        popup.prepend(extra);
-      }
-      graph.querySelectorAll<HTMLElement>('.slsg-value-slider').forEach(slider => {
-        const label = slider.querySelector<HTMLElement>('.slsg-value-slider-label');
-        const input = slider.querySelector('input');
-        if (label && input) {
-          const name = labels[label.textContent ?? ''] ?? label.textContent ?? '';
-          if (label.textContent !== name) label.textContent = name;
-          input.setAttribute('aria-label', name);
-        }
-      });
-      const canvas = graph.querySelector('canvas');
-      canvas?.setAttribute('role', 'img');
-      canvas?.setAttribute('aria-label', 'نمودار ارتباطات؛ فهرست متنی پیوندها در ادامهٔ صفحه است');
-    };
-
-    const observer = new MutationObserver(nameControls);
-    observer.observe(graph, { childList: true, subtree: true });
-    document.addEventListener('astro:before-swap', () => observer.disconnect(), { once: true });
-    nameControls();
-
-    graph.addEventListener(
-      'click',
-      event => {
-        const button = (event.target as Element).closest<HTMLButtonElement>('[data-graph-action]');
-        if (button?.dataset.graphAction === 'reset-zoom' && graph.dataset.graphReady !== 'true') {
-          setTimeout(() => fitGraph(graph), 30);
-        }
-        if (button && document.activeElement === button) {
-          setTimeout(() => {
-            nameControls();
-            if (!button.isConnected) {
-              graph.querySelector<HTMLButtonElement>(`[data-graph-action="${button.dataset.graphAction}"]`)?.focus();
-            }
-          });
-        }
-      },
-      true
-    );
-
-    graph.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && graph.querySelector('.slsg-popup-menu')) {
-        graph.querySelector('.slsg-popup-menu')?.remove();
-        graph.querySelector<HTMLButtonElement>('[data-graph-action="settings"]')?.focus();
-      }
-    });
-  }
-
   const bound = new WeakSet<HTMLElement>();
+
   function bindGraphs() {
     for (const host of document.querySelectorAll<HTMLElement>('[data-note-graph]')) {
       if (bound.has(host)) continue;
@@ -748,7 +708,6 @@ const config = {
       const status = host.querySelector<HTMLElement>('[data-graph-status]')!;
       let pending = false;
 
-      // Quick depth selector chips
       if (typeof host.querySelectorAll === 'function') {
         host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
           chip.addEventListener('click', () => {
@@ -759,14 +718,12 @@ const config = {
             if (g && g.config) {
               g.config.depth = depth;
               g.full_refresh?.();
-              if (g.dataset?.graphReady !== 'true') setTimeout(() => fitGraph(g), 800);
             } else if (button && !button.hidden) {
               button.click();
             }
           });
         });
 
-        // Interactive UMKO taxonomy legend filter
         host.querySelectorAll<HTMLElement>('[data-legend-kind]').forEach(badge => {
           const toggle = () => {
             const g = host.querySelector('graph-component') as any;
@@ -798,7 +755,6 @@ const config = {
           const mountTarget = slot && typeof slot.append === 'function' ? slot : host;
           mountTarget.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
           if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
-          nameGraph(host.querySelector<HTMLElement>('graph-component')!);
           button.hidden = true;
           status.textContent = '';
         } catch {
@@ -812,11 +768,12 @@ const config = {
         }
       });
 
-      // Start the renderer automatically without blocking article rendering.
+      // Defer graph activation so article reading is never blocked.
       button.hidden = true;
       setTimeout(() => button.click(), 0);
     }
   }
+
   bindGraphs();
   document.addEventListener('astro:page-load', bindGraphs);
 </script>

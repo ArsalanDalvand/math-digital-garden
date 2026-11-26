@@ -16,6 +16,10 @@ import {
   type SimulationNodeDatum,
   type ZoomBehavior,
 } from 'd3';
+import { UMKO_KINDS, UMKO_RELATIONS, UMKO_RELATION_PLANES } from '../lib/umko.mjs';
+
+export type RelationPlaneKey = keyof typeof UMKO_RELATION_PLANES;
+export type LayoutMode = 'force' | 'dag';
 
 export interface SitemapEntry {
   title?: string;
@@ -23,6 +27,7 @@ export interface SitemapEntry {
   external?: boolean;
   links?: string[];
   backlinks?: string[];
+  rels?: Record<string, string[]>;
   tags?: string[];
   kind?: string;
   subtype?: string;
@@ -37,6 +42,8 @@ export interface GraphConfig {
   renderExternal: boolean;
   renderLabels: boolean;
   renderArrows: boolean;
+  typedOnly: boolean;
+  layoutMode: LayoutMode;
   labelFontSize: number;
   linkDistance: number;
   repelForce: number;
@@ -46,14 +53,6 @@ export interface GraphConfig {
   scale: number;
   minZoom: number;
   maxZoom: number;
-  tagRenderMode: string;
-  tagStyles: Record<string, {
-    shape?: string;
-    shapeSize?: number;
-    shapeColor?: string;
-    strokeColor?: string;
-    strokeWidth?: number;
-  }>;
   actions: string[];
 }
 
@@ -79,15 +78,41 @@ export interface GraphNode extends SimulationNodeDatum {
   vy: number;
   fx?: number | null;
   fy?: number | null;
-  // Smooth animation state
   labelAlpha: number;
   hoverScale: number;
+  dagRank?: number;
 }
 
 export interface GraphLink extends SimulationLinkDatum<GraphNode> {
+  id: string;
   source: GraphNode;
   target: GraphNode;
+  relations: string[];
+  primaryRel: string;
+  plane: RelationPlaneKey;
+  isTyped: boolean;
+  isDag: boolean;
   bidirectional: boolean;
+  curveOffset: number;
+  lightColor: string;
+  darkColor: string;
+  dash: 'solid' | 'dashed' | 'dotted';
+  shortLabel: string;
+}
+
+export interface RelationVisualMeta {
+  key: string;
+  plane: RelationPlaneKey;
+  short: string;
+  forward: string;
+  reverse: string;
+  icon: string;
+  dag: boolean;
+  symmetric: boolean;
+  light: string;
+  dark: string;
+  dash: 'solid' | 'dashed' | 'dotted';
+  priority: number;
 }
 
 interface KindVisual {
@@ -97,44 +122,111 @@ interface KindVisual {
   sizeBoost: number;
 }
 
-const KIND_VISUALS: Record<string, KindVisual> = {
-  assertion:         { label: 'گزاره و قضیه',     light: '#1d4ed8', dark: '#60a5fa', sizeBoost: 0.4 },
-  concept:           { label: 'مفهوم و ساختار',   light: '#0d9488', dark: '#2dd4bf', sizeBoost: 0.4 },
-  proof:             { label: 'برهان و اثبات',    light: '#64748b', dark: '#94a3b8', sizeBoost: -0.4 },
-  problem:           { label: 'مسئله و آزمون',    light: '#ea580c', dark: '#fb923c', sizeBoost: 0.3 },
-  solution:          { label: 'راه‌حل و شگرد',    light: '#059669', dark: '#34d399', sizeBoost: -0.2 },
-  technique:         { label: 'تکنیک و شگرد',     light: '#d97706', dark: '#fbbf24', sizeBoost: 0 },
-  hint_ladder:       { label: 'نردبان سقراطی',    light: '#d97706', dark: '#f59e0b', sizeBoost: -0.5 },
-  problem_archetype: { label: 'تیپ مسئله',        light: '#c026d3', dark: '#e879f9', sizeBoost: 0.3 },
-  pitfall:           { label: 'دام و کج‌فهمی',    light: '#b45309', dark: '#fbbf24', sizeBoost: 0.1 },
-  visual_lab:        { label: 'آزمایشگاه تعاملی', light: '#0284c7', dark: '#38bdf8', sizeBoost: 0.4 },
-  collection:        { label: 'مجموعه و نقشه راه', light: '#7c3aed', dark: '#a78bfa', sizeBoost: 1.4 },
-  axiom:             { label: 'اصل موضوعه',       light: '#0e7490', dark: '#22d3ee', sizeBoost: 0.3 },
-  theory:            { label: 'چارچوب نظری',      light: '#4338ca', dark: '#818cf8', sizeBoost: 1.1 },
-  remark:            { label: 'یادداشت تفسیری',   light: '#64748b', dark: '#94a3b8', sizeBoost: -0.6 },
-  example:           { label: 'مثال و مصداق',     light: '#9333ea', dark: '#c084fc', sizeBoost: -0.1 },
-  counterexample:    { label: 'مثال نقض',         light: '#dc2626', dark: '#f87171', sizeBoost: 0.2 },
-  property:          { label: 'ویژگی و ناوردا',   light: '#6366f1', dark: '#818cf8', sizeBoost: 0.1 },
-  algorithm:         { label: 'الگوریتم',         light: '#0284c7', dark: '#38bdf8', sizeBoost: 0.2 },
-  comparison:        { label: 'تحلیل مقایسه‌ای',  light: '#4f46e5', dark: '#818cf8', sizeBoost: 0.2 },
-  code_kernel:       { label: 'هسته محاسباتی',    light: '#475569', dark: '#94a3b8', sizeBoost: -0.2 },
-  symbol:            { label: 'نماد و قرارداد',   light: '#334155', dark: '#94a3b8', sizeBoost: -0.4 },
+const DARK_KIND_COLORS: Record<string, string> = {
+  assertion: '#60a5fa',
+  concept: '#2dd4bf',
+  proof: '#94a3b8',
+  problem: '#fb923c',
+  solution: '#34d399',
+  technique: '#fbbf24',
+  hint_ladder: '#f59e0b',
+  problem_archetype: '#e879f9',
+  pitfall: '#fbbf24',
+  visual_lab: '#38bdf8',
+  collection: '#a78bfa',
+  axiom: '#22d3ee',
+  theory: '#818cf8',
+  remark: '#94a3b8',
+  example: '#c084fc',
+  counterexample: '#f87171',
+  property: '#818cf8',
+  algorithm: '#38bdf8',
+  comparison: '#818cf8',
+  code_kernel: '#94a3b8',
+  symbol: '#94a3b8',
 };
 
-const DEFAULT_VISUAL: KindVisual = {
-  label: 'یادداشت',
-  light: '#4f46e5',
-  dark: '#818cf8',
-  sizeBoost: 0,
+const KIND_SIZE_BOOST: Record<string, number> = {
+  collection: 1.4,
+  theory: 1.1,
+  assertion: 0.4,
+  concept: 0.4,
+  visual_lab: 0.4,
+  problem: 0.3,
+  axiom: 0.3,
+  problem_archetype: 0.3,
+  counterexample: 0.2,
+  algorithm: 0.2,
+  comparison: 0.2,
+  pitfall: 0.1,
+  property: 0.1,
+  technique: 0,
+  example: -0.1,
+  solution: -0.2,
+  code_kernel: -0.2,
+  proof: -0.4,
+  symbol: -0.4,
+  hint_ladder: -0.5,
+  remark: -0.6,
 };
+
+function getKindVisual(kind: string): KindVisual {
+  const entry = (UMKO_KINDS as Record<string, { label: string; color: string }>)[kind];
+  if (!entry) {
+    return { label: 'یادداشت', light: '#4f46e5', dark: '#818cf8', sizeBoost: 0 };
+  }
+  return {
+    label: entry.label,
+    light: entry.color,
+    dark: DARK_KIND_COLORS[kind] || entry.color,
+    sizeBoost: KIND_SIZE_BOOST[kind] ?? 0,
+  };
+}
+
+export function classifyRelation(relKey: string): RelationVisualMeta {
+  const raw = (UMKO_RELATIONS as Record<string, any>)[relKey];
+  if (!raw) {
+    const planeMeta = UMKO_RELATION_PLANES.context;
+    return {
+      key: 'local_context_uses',
+      plane: 'context',
+      short: 'ارجاع متنی',
+      forward: 'ارجاع در متن',
+      reverse: 'ارجاع‌شده از متن',
+      icon: '🔗',
+      dag: false,
+      symmetric: false,
+      light: planeMeta.light,
+      dark: planeMeta.dark,
+      dash: 'solid',
+      priority: planeMeta.priority,
+    };
+  }
+  const planeKey = (raw.plane in UMKO_RELATION_PLANES ? raw.plane : 'context') as RelationPlaneKey;
+  const planeMeta = UMKO_RELATION_PLANES[planeKey];
+  return {
+    key: relKey,
+    plane: planeKey,
+    short: raw.short || raw.forward || relKey,
+    forward: raw.forward || relKey,
+    reverse: raw.reverse || raw.forward || relKey,
+    icon: raw.icon || '🔗',
+    dag: !!raw.dag,
+    symmetric: !!raw.symmetric,
+    light: raw.lightOverride || planeMeta.light,
+    dark: raw.darkOverride || planeMeta.dark,
+    dash: (raw.dashOverride || planeMeta.dash || 'solid') as 'solid' | 'dashed' | 'dotted',
+    priority: planeMeta.priority,
+  };
+}
 
 const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
 function toPersianDigits(n: number | string): string {
   return String(n).replace(/\d/g, d => PERSIAN_DIGITS[Number(d)] ?? d);
 }
 
-function inferSemanticKind(entry: SitemapEntry): string {
-  if (entry.kind && KIND_VISUALS[entry.kind]) return entry.kind;
+export function inferSemanticKind(entry: SitemapEntry): string {
+  if (entry.kind && entry.kind in UMKO_KINDS) return entry.kind;
   const tags = entry.tags || [];
   const title = entry.title || '';
 
@@ -142,7 +234,7 @@ function inferSemanticKind(entry: SitemapEntry): string {
     const t = raw.startsWith('#') ? raw.slice(1) : raw;
     if (t.startsWith('kind:')) {
       const k = t.slice(5);
-      if (KIND_VISUALS[k]) return k;
+      if (k in UMKO_KINDS) return k;
     }
   }
 
@@ -178,12 +270,356 @@ function truncateLabel(title: string, maxChars: number): string {
   return safe.trimEnd() + '…';
 }
 
+export function buildTypedGraphData(
+  sitemap: Record<string, SitemapEntry>,
+  currentPage: string,
+  depth: number,
+  renderExternal = false
+): { nodes: GraphNode[]; links: GraphLink[]; adjacency: Map<string, Set<string>>; typedLinkCount: number } {
+  const visited = new Set<string>();
+  const hasCurrent = !!sitemap[currentPage];
+
+  if (depth >= 5 || depth < 0) {
+    for (const id of Object.keys(sitemap)) {
+      const entry = sitemap[id];
+      if (!entry || entry.exists === false) continue;
+      if (!renderExternal && entry.external) continue;
+      visited.add(id);
+    }
+  } else if (hasCurrent) {
+    visited.add(currentPage);
+    let frontier = [currentPage];
+    for (let d = 0; d < depth; d++) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        const item = sitemap[id];
+        if (!item) continue;
+        const neighbors = [...(item.links || []), ...(item.backlinks || [])];
+        for (const target of neighbors) {
+          const entry = sitemap[target];
+          if (!entry || entry.exists === false) continue;
+          if (!renderExternal && entry.external) continue;
+          if (!visited.has(target)) {
+            visited.add(target);
+            next.push(target);
+          }
+        }
+      }
+      frontier = next;
+      if (!frontier.length) break;
+    }
+  }
+
+  // Collect all directed edges with their exact UMKO relation types
+  const directedMap = new Map<string, { s: string; t: string; rels: string[] }>();
+  for (const id of visited) {
+    const item = sitemap[id];
+    if (!item) continue;
+    const relMap = item.rels || {};
+    const allTargets = new Set<string>([...(item.links || []), ...Object.keys(relMap)]);
+    for (const tgt of allTargets) {
+      if (!visited.has(tgt) || tgt === id) continue;
+      const explicitRels = Array.isArray(relMap[tgt]) ? relMap[tgt].filter(Boolean) : [];
+      directedMap.set(`${id}\0${tgt}`, {
+        s: id,
+        t: tgt,
+        rels: explicitRels.length ? [...new Set(explicitRels)] : ['local_context_uses'],
+      });
+    }
+  }
+
+  const adjacency = new Map<string, Set<string>>();
+  const outCounts = new Map<string, number>();
+  const inCounts = new Map<string, number>();
+  for (const id of visited) {
+    adjacency.set(id, new Set());
+    outCounts.set(id, 0);
+    inCounts.set(id, 0);
+  }
+  for (const edge of directedMap.values()) {
+    adjacency.get(edge.s)!.add(edge.t);
+    adjacency.get(edge.t)!.add(edge.s);
+    outCounts.set(edge.s, (outCounts.get(edge.s) || 0) + 1);
+    inCounts.set(edge.t, (inCounts.get(edge.t) || 0) + 1);
+  }
+
+  // Build nodes positioned in a deterministic golden-angle spiral
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+  const orderedIds = [...visited].sort((a, b) => {
+    if (a === currentPage) return -1;
+    if (b === currentPage) return 1;
+    return (adjacency.get(b)?.size || 0) - (adjacency.get(a)?.size || 0);
+  });
+
+  const nodeMap = new Map<string, GraphNode>();
+  const nodes: GraphNode[] = [];
+  const spreadStep = orderedIds.length <= 20 ? 36 : orderedIds.length <= 80 ? 22 : 13;
+
+  orderedIds.forEach((id, idx) => {
+    const item = sitemap[id];
+    if (!item) return;
+    const isCurrent = id === currentPage;
+    const kind = inferSemanticKind(item);
+    const visual = getKindVisual(kind);
+    const degree = adjacency.get(id)?.size || 0;
+    const baseRadius = 5.4 + visual.sizeBoost + Math.min(4.2, Math.log2(degree + 1) * 1.15);
+    const radius = isCurrent ? Math.max(baseRadius + 1.5, 8.6) : Math.max(4.8, Math.min(11, baseRadius));
+
+    const r = isCurrent ? 0 : Math.sqrt(idx) * spreadStep;
+    const theta = idx * GOLDEN_ANGLE;
+    const title = item.title || id.replace(/^notes\//, '');
+
+    const node: GraphNode = {
+      id,
+      title,
+      shortTitle: truncateLabel(title, 22),
+      fullShortTitle: truncateLabel(title, 30),
+      kind,
+      kindLabel: visual.label,
+      slogan: item.slogan || '',
+      tags: item.tags || [],
+      isCurrent,
+      degree,
+      outCount: outCounts.get(id) || 0,
+      inCount: inCounts.get(id) || 0,
+      radius,
+      lightColor: visual.light,
+      darkColor: visual.dark,
+      x: Math.cos(theta) * r,
+      y: Math.sin(theta) * r,
+      vx: 0,
+      vy: 0,
+      labelAlpha: isCurrent ? 1 : 0,
+      hoverScale: 1,
+    };
+    nodes.push(node);
+    nodeMap.set(id, node);
+  });
+
+  // Resolve pairs into clean straight or curved typed edges
+  const links: GraphLink[] = [];
+  const processedPairs = new Set<string>();
+  let typedLinkCount = 0;
+
+  const makeLink = (
+    sId: string,
+    tId: string,
+    rels: string[],
+    bidirectional: boolean,
+    curveOffset: number
+  ): GraphLink | null => {
+    const source = nodeMap.get(sId);
+    const target = nodeMap.get(tId);
+    if (!source || !target) return null;
+    const metas = rels.map(classifyRelation).sort((a, b) => a.priority - b.priority);
+    const primary = metas[0];
+    const isTyped = primary.key !== 'local_context_uses';
+    if (isTyped) typedLinkCount++;
+    return {
+      id: `${sId}->${tId}`,
+      source,
+      target,
+      relations: rels,
+      primaryRel: primary.key,
+      plane: primary.plane,
+      isTyped,
+      isDag: metas.some(m => m.dag),
+      bidirectional,
+      curveOffset,
+      lightColor: primary.light,
+      darkColor: primary.dark,
+      dash: primary.dash,
+      shortLabel: metas.length > 1 ? `${primary.short} (+${toPersianDigits(metas.length - 1)})` : primary.short,
+    };
+  };
+
+  for (const edge of directedMap.values()) {
+    const pairKey = edge.s < edge.t ? `${edge.s}\0${edge.t}` : `${edge.t}\0${edge.s}`;
+    if (processedPairs.has(pairKey)) continue;
+    processedPairs.add(pairKey);
+
+    const rev = directedMap.get(`${edge.t}\0${edge.s}`);
+    const fwdTyped = edge.rels.some(r => r !== 'local_context_uses');
+    const revTyped = !!rev && rev.rels.some(r => r !== 'local_context_uses');
+
+    if (!rev) {
+      const l = makeLink(edge.s, edge.t, edge.rels, false, 0);
+      if (l) links.push(l);
+    } else if (fwdTyped && !revTyped) {
+      // Typed UMKO relation supersedes plain contextual back-reference
+      const l = makeLink(edge.s, edge.t, edge.rels, false, 0);
+      if (l) links.push(l);
+    } else if (!fwdTyped && revTyped) {
+      const l = makeLink(rev.s, rev.t, rev.rels, false, 0);
+      if (l) links.push(l);
+    } else if (fwdTyped && revTyped) {
+      // Both directions carry explicit semantic relations: separate cleanly with symmetric Bezier arcs
+      const l1 = makeLink(edge.s, edge.t, edge.rels, false, 20);
+      const l2 = makeLink(rev.s, rev.t, rev.rels, false, 20);
+      if (l1) links.push(l1);
+      if (l2) links.push(l2);
+    } else {
+      // Both are plain contextual wikilinks: merge into one crisp bidirectional edge
+      const l = makeLink(edge.s, edge.t, ['local_context_uses'], true, 0);
+      if (l) links.push(l);
+    }
+  }
+
+  return { nodes, links, adjacency, typedLinkCount };
+}
+
+/**
+ * Computes a clean top-down hierarchical DAG layout following UMKO v1.1 backward-linking semantics:
+ * prerequisites / foundational concepts / theorems sit in higher layers (rank 0),
+ * while dependent theorems, proofs, problems, and solutions flow downward.
+ */
+export function computeDagLayout(
+  nodes: GraphNode[],
+  links: GraphLink[]
+): Map<string, { x: number; y: number; rank: number }> {
+  const result = new Map<string, { x: number; y: number; rank: number }>();
+  if (!nodes.length) return result;
+
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const typedDirectional = links.filter(l => l.isTyped && !classifyRelation(l.primaryRel).symmetric);
+  // Prioritize strict DAG relations first, then include directional typed UMKO edges (e.g. illustrates, solves, visualizes)
+  // so examples/solutions/labs neatly sit below the concepts/problems they belong to.
+  const activeLinks = typedDirectional.length > 0 ? typedDirectional : links;
+
+  // Build parent -> child directed edges (parent = foundational / prerequisite, child = dependent)
+  const forwardRels = new Set(['rel_generalizes', 'rel_implies']);
+  const rawChildren = new Map<string, string[]>();
+  for (const n of nodes) rawChildren.set(n.id, []);
+
+  for (const l of activeLinks) {
+    const s = l.source.id;
+    const t = l.target.id;
+    if (!nodeIds.has(s) || !nodeIds.has(t) || s === t) continue;
+    // Backward-linking: source depends on / proves / solves / illustrates / extends target -> target is parent
+    const parent = forwardRels.has(l.primaryRel) ? s : t;
+    const child = forwardRels.has(l.primaryRel) ? t : s;
+    const list = rawChildren.get(parent)!;
+    if (!list.includes(child)) list.push(child);
+  }
+
+  // Break any accidental cycles via DFS so topological layering is guaranteed to terminate
+  const state = new Map<string, 0 | 1 | 2>(); // 0=unvisited, 1=visiting, 2=done
+  const children = new Map<string, string[]>();
+  const parents = new Map<string, string[]>();
+  for (const n of nodes) {
+    state.set(n.id, 0);
+    children.set(n.id, []);
+    parents.set(n.id, []);
+  }
+
+  const dfs = (u: string) => {
+    state.set(u, 1);
+    for (const v of rawChildren.get(u) || []) {
+      const st = state.get(v) || 0;
+      if (st === 1) continue; // cycle back-edge skipped
+      children.get(u)!.push(v);
+      parents.get(v)!.push(u);
+      if (st === 0) dfs(v);
+    }
+    state.set(u, 2);
+  };
+
+  // Start DFS from highest-priority roots (no incoming parent or current/collection hubs)
+  const inDegRaw = new Map<string, number>();
+  for (const n of nodes) inDegRaw.set(n.id, 0);
+  for (const list of rawChildren.values()) {
+    for (const v of list) inDegRaw.set(v, (inDegRaw.get(v) || 0) + 1);
+  }
+  const dfsOrder = [...nodes].sort((a, b) => {
+    const da = inDegRaw.get(a.id) || 0;
+    const db = inDegRaw.get(b.id) || 0;
+    if (da !== db) return da - db;
+    return b.degree - a.degree;
+  });
+  for (const n of dfsOrder) {
+    if (state.get(n.id) === 0) dfs(n.id);
+  }
+
+  // Longest-path topological ranking
+  const inDeg = new Map<string, number>();
+  const rank = new Map<string, number>();
+  const queue: string[] = [];
+  for (const n of nodes) {
+    const d = parents.get(n.id)!.length;
+    inDeg.set(n.id, d);
+    rank.set(n.id, 0);
+    if (d === 0) queue.push(n.id);
+  }
+
+  let head = 0;
+  while (head < queue.length) {
+    const u = queue[head++];
+    const ru = rank.get(u) || 0;
+    for (const v of children.get(u) || []) {
+      if ((rank.get(v) || 0) < ru + 1) rank.set(v, ru + 1);
+      const nextDeg = (inDeg.get(v) || 1) - 1;
+      inDeg.set(v, nextDeg);
+      if (nextDeg === 0) queue.push(v);
+    }
+  }
+
+  // Group into layers & wrap very wide layers cleanly
+  const byRank = new Map<number, GraphNode[]>();
+  for (const n of nodes) {
+    const r = rank.get(n.id) || 0;
+    if (!byRank.has(r)) byRank.set(r, []);
+    byRank.get(r)!.push(n);
+  }
+
+  const sortedRanks = [...byRank.keys()].sort((a, b) => a - b);
+  const posX = new Map<string, number>();
+  const colGap = nodes.length <= 25 ? 145 : nodes.length <= 100 ? 115 : 88;
+  const rowGap = nodes.length <= 25 ? 112 : nodes.length <= 100 ? 96 : 82;
+  const maxPerRow = nodes.length <= 40 ? 9 : 14;
+
+  let visualRow = 0;
+  for (const r of sortedRanks) {
+    const layer = byRank.get(r)!;
+    // Barycenter ordering by average parent X to minimize edge crossings
+    layer.sort((a, b) => {
+      const pa = parents.get(a.id) || [];
+      const pb = parents.get(b.id) || [];
+      const avgA = pa.length ? pa.reduce((s, p) => s + (posX.get(p) ?? 0), 0) / pa.length : 0;
+      const avgB = pb.length ? pb.reduce((s, p) => s + (posX.get(p) ?? 0), 0) / pb.length : 0;
+      if (Math.abs(avgA - avgB) > 0.5) return avgA - avgB;
+      return b.degree - a.degree;
+    });
+
+    const subRows = Math.ceil(layer.length / maxPerRow);
+    for (let sr = 0; sr < subRows; sr++) {
+      const slice = layer.slice(sr * maxPerRow, (sr + 1) * maxPerRow);
+      const totalWidth = (slice.length - 1) * colGap;
+      slice.forEach((n, idx) => {
+        const x = idx * colGap - totalWidth / 2;
+        const y = visualRow * rowGap;
+        posX.set(n.id, x);
+        result.set(n.id, { x, y, rank: r });
+      });
+      visualRow++;
+    }
+  }
+
+  // Center vertically around y = 0
+  const maxY = Math.max(0, (visualRow - 1) * rowGap);
+  for (const val of result.values()) {
+    val.y -= maxY / 2;
+  }
+  return result;
+}
+
 const DEFAULT_CONFIG: GraphConfig = {
   depth: 1,
   prefetchPages: false,
   renderExternal: false,
   renderLabels: true,
   renderArrows: true,
+  typedOnly: false,
+  layoutMode: 'force',
   labelFontSize: 12,
   linkDistance: 120,
   repelForce: 150,
@@ -193,9 +629,7 @@ const DEFAULT_CONFIG: GraphConfig = {
   scale: 1,
   minZoom: 0.08,
   maxZoom: 4.5,
-  tagRenderMode: 'same',
-  tagStyles: {},
-  actions: ['reset-zoom', 'fullscreen', 'render-arrows', 'settings'],
+  actions: ['reset-zoom', 'fullscreen', 'typed-only', 'render-arrows', 'settings'],
 };
 
 const ACTION_ICONS: Record<string, string> = {
@@ -205,6 +639,8 @@ const ACTION_ICONS: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>',
   minimize:
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/></svg>',
+  'typed-only':
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
   'render-arrows':
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="5" r="2.5"/><path d="M7 17 16.5 7.5"/><path d="M11 7h6v6"/></svg>',
   settings:
@@ -214,6 +650,7 @@ const ACTION_ICONS: Record<string, string> = {
 const ACTION_TITLES: Record<string, string> = {
   'reset-zoom': 'بازنشانی زوم',
   fullscreen: 'تمام‌صفحه یا بازگشت',
+  'typed-only': 'فقط روابط صوری UMKO (مخفی‌سازی ارجاعات متنی)',
   'render-arrows': 'نمایش یا حذف جهت پیوندها',
   settings: 'تنظیمات گراف',
 };
@@ -228,11 +665,33 @@ const LEGEND_ITEMS = [
   { kind: 'pitfall', label: 'دام', color: '#b45309' },
 ];
 
+const PLANE_FILTER_ITEMS: Array<{ key: RelationPlaneKey; label: string; color: string; dash: string }> = [
+  { key: 'deduction', label: 'استنتاج', color: '#2563eb', dash: 'solid' },
+  { key: 'structure', label: 'ساختار', color: '#0d9488', dash: 'solid' },
+  { key: 'problem_solving', label: 'مسئله و حل', color: '#ea580c', dash: 'solid' },
+  { key: 'pedagogy', label: 'پیش‌نیاز', color: '#059669', dash: 'dashed' },
+  { key: 'enrichment', label: 'مکمل', color: '#0284c7', dash: 'dotted' },
+];
+
 interface Rect {
   x1: number;
   y1: number;
   x2: number;
   y2: number;
+}
+
+interface EdgeGeom {
+  sx: number;
+  sy: number;
+  cx: number;
+  cy: number;
+  ex: number;
+  ey: number;
+  midX: number;
+  midY: number;
+  endAngle: number;
+  startAngle: number;
+  curved: boolean;
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -252,6 +711,59 @@ function rgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`;
 }
 
+function getEdgeGeometry(link: GraphLink, layoutMode: LayoutMode): EdgeGeom | null {
+  const s = link.source;
+  const t = link.target;
+  const dx = t.x - s.x;
+  const dy = t.y - s.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < s.radius + t.radius + 4) return null;
+
+  const ux = dx / dist;
+  const uy = dy / dist;
+  const curve = link.curveOffset !== 0 ? link.curveOffset : layoutMode === 'dag' && Math.abs(dy) > 40 ? 0 : 0;
+
+  if (Math.abs(curve) > 0.5) {
+    // Perpendicular offset for quadratic Bezier arc
+    const nx = -uy;
+    const ny = ux;
+    const mx = (s.x + t.x) / 2;
+    const my = (s.y + t.y) / 2;
+    const cx = mx + nx * curve;
+    const cy = my + ny * curve;
+
+    const sAng = Math.atan2(cy - s.y, cx - s.x);
+    const eAng = Math.atan2(t.y - cy, t.x - cx);
+    const sx = s.x + Math.cos(sAng) * (s.radius + 1.5);
+    const sy = s.y + Math.sin(sAng) * (s.radius + 1.5);
+    const ex = t.x - Math.cos(eAng) * (t.radius + 2);
+    const ey = t.y - Math.sin(eAng) * (t.radius + 2);
+    const midX = 0.25 * sx + 0.5 * cx + 0.25 * ex;
+    const midY = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+    return { sx, sy, cx, cy, ex, ey, midX, midY, endAngle: eAng, startAngle: sAng + Math.PI, curved: true };
+  }
+
+  const sx = s.x + ux * (s.radius + 1.5);
+  const sy = s.y + uy * (s.radius + 1.5);
+  const ex = t.x - ux * (t.radius + 2);
+  const ey = t.y - uy * (t.radius + 2);
+  const midX = (sx + ex) / 2;
+  const midY = (sy + ey) / 2;
+  const ang = Math.atan2(dy, dx);
+  return { sx, sy, cx: midX, cy: midY, ex, ey, midX, midY, endAngle: ang, startAngle: ang + Math.PI, curved: false };
+}
+
+function pointToSegmentDistSq(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-6) return (px - ax) ** 2 + (py - ay) ** 2;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const projX = ax + t * dx;
+  const projY = ay + t * dy;
+  return (px - projX) ** 2 + (py - projY) ** 2;
+}
+
 export class GraphComponent extends HTMLElement {
   config!: GraphConfig;
   sitemap: Record<string, SitemapEntry> = {};
@@ -264,12 +776,13 @@ export class GraphComponent extends HTMLElement {
   ctx: CanvasRenderingContext2D | null = null;
   tooltipEl!: HTMLDivElement;
   fsHudEl!: HTMLDivElement;
-  fsLegendEl!: HTMLDivElement;
+  fsDockEl!: HTMLDivElement;
   blurEl: HTMLDivElement | null = null;
   placeholderEl: HTMLDivElement | null = null;
 
   nodes: GraphNode[] = [];
   links: GraphLink[] = [];
+  private typedLinkCount = 0;
   private adjacency = new Map<string, Set<string>>();
   private simulation: Simulation<GraphNode, GraphLink> | null = null;
   private zoomBehavior: ZoomBehavior<HTMLCanvasElement, unknown> | null = null;
@@ -277,12 +790,25 @@ export class GraphComponent extends HTMLElement {
 
   private transform: ZoomTransform = zoomIdentity;
   private hoveredNode: GraphNode | null = null;
+  private hoveredLink: GraphLink | null = null;
+  private pointerScreenX = 0;
+  private pointerScreenY = 0;
   private draggedNode: GraphNode | null = null;
+
   private activeKindFilter: string | null = null;
+  private activePlaneFilter: RelationPlaneKey | null = null;
   private searchQuery = '';
   private searchMatches = new Set<string>();
 
-  // Animation states
+  // Smooth layout transition state (Force <-> DAG)
+  private layoutAnim: {
+    startTime: number;
+    duration: number;
+    from: Map<string, { x: number; y: number }>;
+    to: Map<string, { x: number; y: number }>;
+  } | null = null;
+
+  // Animation state
   private hoverMix = 0;
   private rafId = 0;
   private running = false;
@@ -292,13 +818,11 @@ export class GraphComponent extends HTMLElement {
   private lastViewportH = 0;
   private labelWidthCache = new Map<string, number>();
 
-  // Observers & listeners for clean teardown
   private themeObserver: MutationObserver | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private boundKeydown: ((e: KeyboardEvent) => void) | null = null;
   private boundOutsideClick: ((e: MouseEvent) => void) | null = null;
 
-  // Public simulator facade compatible with fitGraph, tests, and controls
   simulator!: {
     readonly nodes: GraphNode[];
     readonly links: GraphLink[];
@@ -327,7 +851,6 @@ export class GraphComponent extends HTMLElement {
     this.config = {
       ...DEFAULT_CONFIG,
       ...parsed,
-      tagStyles: { ...(parsed.tagStyles || {}) },
       actions: Array.isArray(parsed.actions) ? [...parsed.actions] : [...DEFAULT_CONFIG.actions],
     };
     try {
@@ -347,7 +870,6 @@ export class GraphComponent extends HTMLElement {
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Remove legacy skeleton sibling if present
     const prev = this.previousElementSibling;
     if (prev && prev.classList.contains('slsg-graph-skeleton')) {
       prev.remove();
@@ -376,49 +898,68 @@ export class GraphComponent extends HTMLElement {
     this.graphContainer.appendChild(this.actionContainer);
     this.renderActionButtons();
 
-    // Floating glassmorphic hover inspector card
     this.tooltipEl = document.createElement('div');
     this.tooltipEl.className = 'kg-tooltip';
     this.tooltipEl.setAttribute('aria-hidden', 'true');
     this.tooltipEl.hidden = true;
     this.graphContainer.appendChild(this.tooltipEl);
 
-    // Fullscreen HUD (hidden unless in fullscreen)
+    // Fullscreen Top-Right HUD (Search + Depth + Layout Mode + UMKO Typed-Only + Stats)
     this.fsHudEl = document.createElement('div');
     this.fsHudEl.className = 'kg-fs-hud';
     this.fsHudEl.hidden = true;
     this.fsHudEl.innerHTML = `
       <div class="kg-fs-search-wrap">
         <svg class="kg-fs-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="search" class="kg-fs-search" placeholder="جست‌وجوی یادداشت در گراف…" aria-label="جست‌وجوی یادداشت در گراف" />
+        <input type="search" class="kg-fs-search" placeholder="جست‌وجوی یادداشت…" aria-label="جست‌وجوی یادداشت در گراف" />
       </div>
-      <div class="kg-fs-depths" role="group" aria-label="عمق نمایش">
+      <div class="kg-fs-group" role="group" aria-label="عمق نمایش">
         <button type="button" class="kg-fs-chip" data-fs-depth="1">۱ گام</button>
         <button type="button" class="kg-fs-chip" data-fs-depth="2">۲ گام</button>
         <button type="button" class="kg-fs-chip" data-fs-depth="5">سراسری</button>
       </div>
+      <div class="kg-fs-group" role="group" aria-label="نوع چیدمان">
+        <button type="button" class="kg-fs-chip active" data-fs-layout="force" title="چیدمان فیزیکی شبکه‌ای">شبکه‌ای</button>
+        <button type="button" class="kg-fs-chip" data-fs-layout="dag" title="چیدمان درختی پیش‌نیاز و استنتاج (DAG)">درختی DAG</button>
+      </div>
+      <button type="button" class="kg-fs-toggle" data-fs-typed-only aria-pressed="false" title="مخفی‌سازی ارجاعات متنی عادی و نمایش خالص روابط صوری UMKO">فقط UMKO</button>
       <span class="kg-fs-stats" data-fs-stats></span>
     `;
     this.graphContainer.appendChild(this.fsHudEl);
     this.bindFullscreenHud();
 
-    // Fullscreen interactive legend bar
-    this.fsLegendEl = document.createElement('div');
-    this.fsLegendEl.className = 'kg-fs-legend';
-    this.fsLegendEl.hidden = true;
-    this.fsLegendEl.innerHTML = LEGEND_ITEMS.map(
+    // Fullscreen Bottom Unified Dock: Node Kinds + Edge Semantic Planes
+    this.fsDockEl = document.createElement('div');
+    this.fsDockEl.className = 'kg-fs-legend';
+    this.fsDockEl.hidden = true;
+    const kindChips = LEGEND_ITEMS.map(
       item =>
         `<button type="button" class="kg-fs-legend-chip" data-fs-kind="${item.kind}" style="--chip-c:${item.color}"><span class="kg-dot"></span>${item.label}</button>`
     ).join('');
-    this.graphContainer.appendChild(this.fsLegendEl);
-    this.fsLegendEl.addEventListener('click', e => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-kind]');
-      if (!btn) return;
-      const kind = btn.dataset.fsKind || '';
-      this.setKindFilter(this.activeKindFilter === kind ? null : kind);
+    const planeChips = PLANE_FILTER_ITEMS.map(
+      p =>
+        `<button type="button" class="kg-fs-plane-chip" data-fs-plane="${p.key}" style="--plane-c:${p.color}" title="فیلتر پیوندهای صفحهٔ ${p.label}"><span class="kg-line-sample kg-line-${p.dash}"></span>${p.label}</button>`
+    ).join('');
+    this.fsDockEl.innerHTML = `
+      <div class="kg-dock-section" role="group" aria-label="فیلتر نوع گره">${kindChips}</div>
+      <span class="kg-dock-sep" aria-hidden="true"></span>
+      <div class="kg-dock-section" role="group" aria-label="فیلتر صفحهٔ پیوند">${planeChips}</div>
+    `;
+    this.graphContainer.appendChild(this.fsDockEl);
+    this.fsDockEl.addEventListener('click', e => {
+      const kindBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-kind]');
+      if (kindBtn) {
+        const kind = kindBtn.dataset.fsKind || '';
+        this.setKindFilter(this.activeKindFilter === kind ? null : kind);
+        return;
+      }
+      const planeBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-plane]');
+      if (planeBtn) {
+        const plane = planeBtn.dataset.fsPlane as RelationPlaneKey;
+        this.setPlaneFilter(this.activePlaneFilter === plane ? null : plane);
+      }
     });
 
-    // Expose simulator API
     const self = this;
     this.simulator = {
       get nodes() {
@@ -447,7 +988,11 @@ export class GraphComponent extends HTMLElement {
         self.applyTransform(new ZoomTransform(nk, nx, ny), !immediate);
       },
       update: () => {
-        self.applyForces(true);
+        if (self.config.layoutMode === 'force') {
+          self.applyForces(true);
+        } else {
+          self.scheduleFrame();
+        }
       },
       get requestRender() {
         return self.running;
@@ -494,7 +1039,11 @@ export class GraphComponent extends HTMLElement {
 
   public full_refresh() {
     this.buildSubgraph(this.config.depth);
-    this.syncDepthChips();
+    this.syncControls();
+  }
+
+  public fitGraph() {
+    this.fitToBounds(true);
   }
 
   public setKindFilter(kind: string | null) {
@@ -505,13 +1054,106 @@ export class GraphComponent extends HTMLElement {
       el.classList.toggle('is-active', active);
       el.setAttribute('aria-pressed', String(active));
     });
-    this.fsLegendEl?.querySelectorAll<HTMLElement>('[data-fs-kind]').forEach(el => {
+    this.fsDockEl?.querySelectorAll<HTMLElement>('[data-fs-kind]').forEach(el => {
       el.classList.toggle('is-active', !!kind && el.dataset.fsKind === kind);
     });
     this.scheduleFrame();
   }
 
-  private syncDepthChips() {
+  public setPlaneFilter(plane: RelationPlaneKey | null) {
+    this.activePlaneFilter = plane;
+    this.fsDockEl?.querySelectorAll<HTMLElement>('[data-fs-plane]').forEach(el => {
+      el.classList.toggle('is-active', !!plane && el.dataset.fsPlane === plane);
+    });
+    this.scheduleFrame();
+  }
+
+  public setTypedOnly(typedOnly: boolean) {
+    this.config.typedOnly = typedOnly;
+    this.hoveredLink = null;
+    this.updateTooltip();
+    this.syncControls();
+    if (this.config.layoutMode === 'dag') {
+      this.applyDagLayout(true);
+    } else {
+      this.scheduleFrame();
+    }
+  }
+
+  public setLayoutMode(mode: LayoutMode) {
+    if (this.config.layoutMode === mode && !this.layoutAnim) return;
+    this.config.layoutMode = mode;
+    this.syncControls();
+    if (mode === 'dag') {
+      this.applyDagLayout(true);
+    } else {
+      this.layoutAnim = null;
+      for (const n of this.nodes) {
+        n.fx = null;
+        n.fy = null;
+      }
+      this.applyForces(true);
+      setTimeout(() => this.fitToBounds(true), 240);
+    }
+  }
+
+  private getVisibleLinks(): GraphLink[] {
+    if (!this.config.typedOnly) return this.links;
+    return this.links.filter(l => l.isTyped);
+  }
+
+  private applyDagLayout(animated: boolean) {
+    this.simulation?.stop();
+    const visibleLinks = this.getVisibleLinks();
+    const layoutMap = computeDagLayout(this.nodes, visibleLinks);
+
+    if (!animated || this.prefersReducedMotion) {
+      for (const n of this.nodes) {
+        const target = layoutMap.get(n.id);
+        if (target) {
+          n.x = target.x;
+          n.y = target.y;
+          n.vx = 0;
+          n.vy = 0;
+          n.dagRank = target.rank;
+        }
+      }
+      this.layoutAnim = null;
+      this.fitToBounds(false);
+      this.scheduleFrame();
+      return;
+    }
+
+    const from = new Map<string, { x: number; y: number }>();
+    const to = new Map<string, { x: number; y: number }>();
+    for (const n of this.nodes) {
+      from.set(n.id, { x: n.x, y: n.y });
+      const target = layoutMap.get(n.id);
+      if (target) {
+        to.set(n.id, { x: target.x, y: target.y });
+        n.dagRank = target.rank;
+      } else {
+        to.set(n.id, { x: n.x, y: n.y });
+      }
+    }
+
+    this.layoutAnim = {
+      startTime: performance.now(),
+      duration: 360,
+      from,
+      to,
+    };
+    this.scheduleFrame();
+
+    // Fit camera smoothly to the target DAG bounding box
+    const targetNodes = this.nodes.map(n => {
+      const p = to.get(n.id);
+      return p ? { x: p.x, y: p.y, radius: n.radius } : { x: n.x, y: n.y, radius: n.radius };
+    });
+    this.fitPoints(targetNodes, true);
+  }
+
+  private syncControls() {
     const depth = Number(this.config.depth);
     const host = this.closest('[data-note-graph]');
     host?.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(btn => {
@@ -520,19 +1162,42 @@ export class GraphComponent extends HTMLElement {
     this.fsHudEl?.querySelectorAll<HTMLButtonElement>('[data-fs-depth]').forEach(btn => {
       btn.classList.toggle('active', Number(btn.dataset.fsDepth) === depth);
     });
+    this.fsHudEl?.querySelectorAll<HTMLButtonElement>('[data-fs-layout]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.fsLayout === this.config.layoutMode);
+    });
+    const typedBtn = this.fsHudEl?.querySelector<HTMLButtonElement>('[data-fs-typed-only]');
+    if (typedBtn) {
+      typedBtn.classList.toggle('active', !!this.config.typedOnly);
+      typedBtn.setAttribute('aria-pressed', String(!!this.config.typedOnly));
+      typedBtn.disabled = this.typedLinkCount === 0;
+    }
     const stats = this.fsHudEl?.querySelector('[data-fs-stats]');
     if (stats) {
-      stats.textContent = `${toPersianDigits(this.nodes.length)} یادداشت · ${toPersianDigits(this.links.length)} پیوند`;
+      const visLinks = this.getVisibleLinks().length;
+      const typedSuffix = this.typedLinkCount > 0 && !this.config.typedOnly ? ` (${toPersianDigits(this.typedLinkCount)} صوری)` : '';
+      stats.textContent = `${toPersianDigits(this.nodes.length)} یادداشت · ${toPersianDigits(visLinks)} پیوند${typedSuffix}`;
     }
+    this.renderActionButtons();
   }
 
   private bindFullscreenHud() {
     this.fsHudEl.addEventListener('click', e => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-depth]');
-      if (!btn) return;
-      const d = Number(btn.dataset.fsDepth);
-      this.config.depth = d;
-      this.full_refresh();
+      const depthBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-depth]');
+      if (depthBtn) {
+        this.config.depth = Number(depthBtn.dataset.fsDepth);
+        this.full_refresh();
+        return;
+      }
+      const layoutBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-layout]');
+      if (layoutBtn) {
+        const mode = layoutBtn.dataset.fsLayout as LayoutMode;
+        this.setLayoutMode(mode);
+        return;
+      }
+      const typedBtn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-fs-typed-only]');
+      if (typedBtn && !typedBtn.disabled) {
+        this.setTypedOnly(!this.config.typedOnly);
+      }
     });
 
     const input = this.fsHudEl.querySelector<HTMLInputElement>('.kg-fs-search');
@@ -560,9 +1225,7 @@ export class GraphComponent extends HTMLElement {
           e.preventDefault();
           const firstId = this.searchMatches.values().next().value;
           const target = this.nodes.find(n => n.id === firstId);
-          if (target) {
-            this.focusNode(target);
-          }
+          if (target) this.focusNode(target);
         } else if (e.key === 'Escape' && input.value) {
           e.stopPropagation();
           input.value = '';
@@ -581,6 +1244,7 @@ export class GraphComponent extends HTMLElement {
     const tx = w / 2 - node.x * targetK;
     const ty = h / 2 - node.y * targetK;
     this.hoveredNode = node;
+    this.hoveredLink = null;
     this.applyTransform(new ZoomTransform(targetK, tx, ty), true);
     this.updateTooltip();
     this.scheduleFrame();
@@ -589,6 +1253,8 @@ export class GraphComponent extends HTMLElement {
   private renderActionButtons() {
     this.actionContainer.replaceChildren();
     for (const action of this.config.actions) {
+      // Hide typed-only toolbar icon when current subgraph has zero typed UMKO relations (e.g. non-UMKO vault)
+      if (action === 'typed-only' && this.typedLinkCount === 0) continue;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'slsg-graph-action-button kg-action-btn';
@@ -610,6 +1276,14 @@ export class GraphComponent extends HTMLElement {
         btn.addEventListener('click', e => {
           e.stopPropagation();
           this.fitToBounds(true);
+        });
+      } else if (action === 'typed-only') {
+        btn.innerHTML = ACTION_ICONS['typed-only'];
+        btn.classList.toggle('is-active', !!this.config.typedOnly);
+        btn.setAttribute('aria-pressed', String(!!this.config.typedOnly));
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          this.setTypedOnly(!this.config.typedOnly);
         });
       } else if (action === 'render-arrows') {
         btn.innerHTML = ACTION_ICONS['render-arrows'];
@@ -650,11 +1324,9 @@ export class GraphComponent extends HTMLElement {
     this.graphContainer.classList.add('slsg-is-fullscreen');
     document.body.dataset['graphBlur'] = 'true';
     this.fsHudEl.hidden = false;
-    this.fsLegendEl.hidden = false;
-    this.renderActionButtons();
-    this.syncDepthChips();
+    this.fsDockEl.hidden = false;
+    this.syncControls();
 
-    // Wait one layout frame for fixed dimensions to settle, then fit smoothly
     requestAnimationFrame(() => {
       this.syncCanvasSize();
       this.fitToBounds(true);
@@ -668,19 +1340,18 @@ export class GraphComponent extends HTMLElement {
     this.graphContainer.classList.remove('slsg-is-fullscreen');
     document.body.dataset['graphBlur'] = '';
     this.fsHudEl.hidden = true;
-    this.fsLegendEl.hidden = true;
+    this.fsDockEl.hidden = true;
     this.blurEl?.remove();
     this.blurEl = null;
     this.placeholderEl?.remove();
     this.placeholderEl = null;
 
-    // Clear search on exit
     const input = this.fsHudEl.querySelector<HTMLInputElement>('.kg-fs-search');
     if (input) input.value = '';
     this.searchQuery = '';
     this.searchMatches.clear();
 
-    this.renderActionButtons();
+    this.syncControls();
     requestAnimationFrame(() => {
       this.syncCanvasSize();
       this.fitToBounds(true);
@@ -703,7 +1374,7 @@ export class GraphComponent extends HTMLElement {
         </div>
         <div data-extra-settings>
           <label class="kg-field-label">عمق ارتباطات
-            <select aria-label="عمق ارتباطات">
+            <select data-opt="depth" aria-label="عمق ارتباطات">
               <option value="0">فقط این یادداشت</option>
               <option value="1">همسایه‌ها (۱ گام)</option>
               <option value="2">دو مرحله (۲ گام)</option>
@@ -711,6 +1382,26 @@ export class GraphComponent extends HTMLElement {
               <option value="4">چهار مرحله</option>
               <option value="5">همه یادداشت‌ها (سراسری)</option>
             </select>
+          </label>
+          <label class="kg-field-label">حالت چیدمان
+            <select data-opt="layout" aria-label="حالت چیدمان">
+              <option value="force">شبکه‌ای نیرویی (ارگانیک)</option>
+              <option value="dag">درختی پیش‌نیاز و استنتاج (DAG)</option>
+            </select>
+          </label>
+          <label class="kg-field-label">صفحهٔ معنایی پیوندها
+            <select data-opt="plane" aria-label="صفحهٔ معنایی پیوندها">
+              <option value="">همهٔ پیوندها</option>
+              <option value="deduction">استنتاج و برهان</option>
+              <option value="structure">ساختار و سلسله‌مراتب</option>
+              <option value="problem_solving">حل مسئله و آزمون</option>
+              <option value="pedagogy">پیش‌نیاز و آموزش</option>
+              <option value="enrichment">شبیه‌ساز و مکمل</option>
+            </select>
+          </label>
+          <label class="kg-toggle-row">
+            <input type="checkbox" data-opt="typedOnly" ${this.config.typedOnly ? 'checked' : ''} ${this.typedLinkCount === 0 ? 'disabled' : ''} />
+            <span>فقط روابط صوری UMKO</span>
           </label>
           <label class="kg-toggle-row">
             <input type="checkbox" data-opt="arrows" ${this.config.renderArrows ? 'checked' : ''} />
@@ -752,12 +1443,27 @@ export class GraphComponent extends HTMLElement {
       </div>
     `;
 
-    const selectEl = popup.querySelector('select')!;
-    selectEl.value = String(this.config.depth);
-    selectEl.addEventListener('change', () => {
-      this.config.depth = Number(selectEl.value);
+    const depthSel = popup.querySelector<HTMLSelectElement>('[data-opt="depth"]')!;
+    depthSel.value = String(this.config.depth);
+    depthSel.addEventListener('change', () => {
+      this.config.depth = Number(depthSel.value);
       this.full_refresh();
     });
+
+    const layoutSel = popup.querySelector<HTMLSelectElement>('[data-opt="layout"]')!;
+    layoutSel.value = this.config.layoutMode;
+    layoutSel.addEventListener('change', () => {
+      this.setLayoutMode(layoutSel.value as LayoutMode);
+    });
+
+    const planeSel = popup.querySelector<HTMLSelectElement>('[data-opt="plane"]')!;
+    planeSel.value = this.activePlaneFilter || '';
+    planeSel.addEventListener('change', () => {
+      this.setPlaneFilter((planeSel.value || null) as RelationPlaneKey | null);
+    });
+
+    const typedCheck = popup.querySelector<HTMLInputElement>('[data-opt="typedOnly"]')!;
+    typedCheck.addEventListener('change', () => this.setTypedOnly(typedCheck.checked));
 
     const arrowsCheck = popup.querySelector<HTMLInputElement>('[data-opt="arrows"]')!;
     arrowsCheck.addEventListener('change', () => {
@@ -780,7 +1486,7 @@ export class GraphComponent extends HTMLElement {
         const val = Number(input.value);
         this.config[key] = val;
         if (out) out.textContent = toPersianDigits(digits ? val.toFixed(digits) : val);
-        this.applyForces(true);
+        if (this.config.layoutMode === 'force') this.applyForces(true);
       });
     };
     bindSlider('repelForce', 'repel');
@@ -795,7 +1501,10 @@ export class GraphComponent extends HTMLElement {
       this.config.centerForce = DEFAULT_CONFIG.centerForce;
       this.config.renderArrows = true;
       this.config.renderLabels = true;
-      this.applyForces(true);
+      this.config.typedOnly = false;
+      this.setPlaneFilter(null);
+      this.setKindFilter(null);
+      this.setLayoutMode('force');
       popup.remove();
       this.toggleSettingsPopup();
     });
@@ -804,154 +1513,36 @@ export class GraphComponent extends HTMLElement {
   }
 
   private buildSubgraph(depth: number) {
-    const visited = new Set<string>();
-    const hasCurrent = !!this.sitemap[this.currentPage];
+    const built = buildTypedGraphData(this.sitemap, this.currentPage, depth, this.config.renderExternal);
+    this.nodes = built.nodes;
+    this.links = built.links;
+    this.adjacency = built.adjacency;
+    this.typedLinkCount = built.typedLinkCount;
 
-    if (depth >= 5 || depth < 0) {
-      for (const id of Object.keys(this.sitemap)) {
-        const entry = this.sitemap[id];
-        if (!entry || entry.exists === false) continue;
-        if (!this.config.renderExternal && entry.external) continue;
-        visited.add(id);
-      }
-    } else if (hasCurrent) {
-      visited.add(this.currentPage);
-      let frontier = [this.currentPage];
-      for (let d = 0; d < depth; d++) {
-        const next: string[] = [];
-        for (const id of frontier) {
-          const item = this.sitemap[id];
-          if (!item) continue;
-          const neighbors = [...(item.links || []), ...(item.backlinks || [])];
-          for (const target of neighbors) {
-            const entry = this.sitemap[target];
-            if (!entry || entry.exists === false) continue;
-            if (!this.config.renderExternal && entry.external) continue;
-            if (!visited.has(target)) {
-              visited.add(target);
-              next.push(target);
-            }
-          }
-        }
-        frontier = next;
-        if (!frontier.length) break;
-      }
+    if (this.typedLinkCount === 0 && this.config.typedOnly) {
+      this.config.typedOnly = false;
     }
 
-    // Build deduplicated link list & adjacency
-    const directedSet = new Set<string>();
-    for (const id of visited) {
-      const item = this.sitemap[id];
-      if (!item) continue;
-      for (const tgt of item.links || []) {
-        if (visited.has(tgt) && tgt !== id) {
-          directedSet.add(`${id}\0${tgt}`);
-        }
-      }
-    }
-
-    const adj = new Map<string, Set<string>>();
-    const outCounts = new Map<string, number>();
-    const inCounts = new Map<string, number>();
-    for (const id of visited) {
-      adj.set(id, new Set());
-      outCounts.set(id, 0);
-      inCounts.set(id, 0);
-    }
-
-    const rawEdges: Array<{ s: string; t: string; bidirectional: boolean }> = [];
-    const seenPair = new Set<string>();
-    for (const key of directedSet) {
-      const [s, t] = key.split('\0');
-      adj.get(s)!.add(t);
-      adj.get(t)!.add(s);
-      outCounts.set(s, (outCounts.get(s) || 0) + 1);
-      inCounts.set(t, (inCounts.get(t) || 0) + 1);
-
-      const pairKey = s < t ? `${s}\0${t}` : `${t}\0${s}`;
-      if (seenPair.has(pairKey)) continue;
-      seenPair.add(pairKey);
-      const isBidi = directedSet.has(`${t}\0${s}`);
-      rawEdges.push({ s, t, bidirectional: isBidi });
-    }
-
-    // Create nodes positioned cleanly in golden-angle spiral
-    const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-    const orderedIds = [...visited].sort((a, b) => {
-      if (a === this.currentPage) return -1;
-      if (b === this.currentPage) return 1;
-      return (adj.get(b)?.size || 0) - (adj.get(a)?.size || 0);
-    });
-
-    const nodeMap = new Map<string, GraphNode>();
-    const newNodes: GraphNode[] = [];
-    const spreadStep = orderedIds.length <= 20 ? 34 : orderedIds.length <= 80 ? 22 : 13;
-
-    orderedIds.forEach((id, idx) => {
-      const item = this.sitemap[id];
-      if (!item) return;
-      const isCurrent = id === this.currentPage;
-      const kind = inferSemanticKind(item);
-      const visual = (kind && KIND_VISUALS[kind]) || DEFAULT_VISUAL;
-      const degree = adj.get(id)?.size || 0;
-      const baseRadius = 5.4 + visual.sizeBoost + Math.min(4.2, Math.log2(degree + 1) * 1.15);
-      const radius = isCurrent ? Math.max(baseRadius + 1.5, 8.6) : Math.max(4.8, Math.min(11, baseRadius));
-
-      const r = isCurrent ? 0 : Math.sqrt(idx) * spreadStep;
-      const theta = idx * GOLDEN_ANGLE;
-      const title = item.title || id.replace(/^notes\//, '');
-
-      const node: GraphNode = {
-        id,
-        title,
-        shortTitle: truncateLabel(title, 22),
-        fullShortTitle: truncateLabel(title, 32),
-        kind,
-        kindLabel: visual.label,
-        slogan: item.slogan || '',
-        tags: item.tags || [],
-        isCurrent,
-        degree,
-        outCount: outCounts.get(id) || 0,
-        inCount: inCounts.get(id) || 0,
-        radius,
-        lightColor: visual.light,
-        darkColor: visual.dark,
-        x: Math.cos(theta) * r,
-        y: Math.sin(theta) * r,
-        vx: 0,
-        vy: 0,
-        labelAlpha: isCurrent ? 1 : 0,
-        hoverScale: 1,
-      };
-      newNodes.push(node);
-      nodeMap.set(id, node);
-    });
-
-    const newLinks: GraphLink[] = [];
-    for (const e of rawEdges) {
-      const source = nodeMap.get(e.s);
-      const target = nodeMap.get(e.t);
-      if (source && target) {
-        newLinks.push({ source, target, bidirectional: e.bidirectional });
-      }
-    }
-
-    this.nodes = newNodes;
-    this.links = newLinks;
-    this.adjacency = adj;
     this.hoveredNode = null;
+    this.hoveredLink = null;
     this.draggedNode = null;
     this.hoverMix = 0;
+    this.layoutAnim = null;
     this.labelWidthCache.clear();
     this.updateTooltip();
 
-    // Stop previous simulation and build fresh D3 force simulation
     this.simulation?.stop();
     this.simulation = forceSimulation<GraphNode>(this.nodes);
     this.applyForces(false);
 
-    // Pre-warm layout synchronously so frame 1 is immediately spacious, centered, and jitter-free
+    if (this.config.layoutMode === 'dag') {
+      this.simulation.stop();
+      this.syncCanvasSize();
+      this.applyDagLayout(false);
+      this.syncControls();
+      return;
+    }
+
     const currentNode = this.nodes.find(n => n.isCurrent);
     if (currentNode) {
       currentNode.fx = 0;
@@ -971,15 +1562,11 @@ export class GraphComponent extends HTMLElement {
       currentNode.fy = null;
     }
 
-    this.simulation.on('tick', () => {
-      this.scheduleFrame();
-    });
-
-    // Gentle living tail settle
+    this.simulation.on('tick', () => this.scheduleFrame());
     this.simulation.alpha(this.prefersReducedMotion ? 0.01 : 0.16).restart();
 
     this.syncCanvasSize();
-    this.syncDepthChips();
+    this.syncControls();
     this.fitToBounds(false);
     this.scheduleFrame();
   }
@@ -996,7 +1583,7 @@ export class GraphComponent extends HTMLElement {
     const baseCenter = Number(this.config.centerForce) || 0.12;
 
     const effectiveRepel = isSmall ? baseRepel * 2.1 : isMedium ? baseRepel * 1.45 : baseRepel * 0.95;
-    const effectiveDist = isSmall ? Math.max(72, baseDist * 0.88) : isMedium ? Math.max(58, baseDist * 0.68) : Math.max(38, baseDist * 0.45);
+    const effectiveDist = isSmall ? Math.max(74, baseDist * 0.9) : isMedium ? Math.max(58, baseDist * 0.68) : Math.max(38, baseDist * 0.45);
     const effectiveCollider = isSmall ? Math.max(20, baseCollider) : isMedium ? Math.max(11, baseCollider * 0.55) : Math.max(5, baseCollider * 0.28);
     const effectiveCenter = isSmall ? Math.max(0.06, baseCenter * 0.65) : isMedium ? Math.max(0.07, baseCenter * 0.75) : Math.max(0.09, baseCenter * 0.9);
 
@@ -1005,8 +1592,8 @@ export class GraphComponent extends HTMLElement {
         'link',
         forceLink<GraphNode, GraphLink>(this.links)
           .id(d => d.id)
-          .distance(effectiveDist)
-          .strength(isSmall ? 0.42 : isMedium ? 0.35 : 0.28)
+          .distance(l => (l.isTyped ? effectiveDist * 0.92 : effectiveDist * 1.08))
+          .strength(l => (l.isTyped ? (isSmall ? 0.48 : 0.38) : (isSmall ? 0.34 : 0.22)))
       )
       .force(
         'charge',
@@ -1071,15 +1658,14 @@ export class GraphComponent extends HTMLElement {
     let didDrag = false;
 
     this.dragBehavior = drag<HTMLCanvasElement, unknown>()
-      .subject(event => {
-        const node = this.findNodeAtCanvas(event.x, event.y);
-        return node || undefined;
-      })
+      .subject(event => this.findNodeAtCanvas(event.x, event.y) || undefined)
       .on('start', event => {
         const node = event.subject as GraphNode | undefined;
         if (!node) return;
         this.draggedNode = node;
         this.hoveredNode = node;
+        this.hoveredLink = null;
+        this.layoutAnim = null;
         dragStartX = event.x;
         dragStartY = event.y;
         didDrag = false;
@@ -1087,7 +1673,7 @@ export class GraphComponent extends HTMLElement {
         node.fy = node.y;
         this.tooltipEl.hidden = true;
         this.canvas.style.cursor = 'grabbing';
-        if (!event.active && this.simulation) {
+        if (this.config.layoutMode === 'force' && !event.active && this.simulation) {
           this.simulation.alphaTarget(0.28).restart();
         }
         this.scheduleFrame();
@@ -1095,9 +1681,7 @@ export class GraphComponent extends HTMLElement {
       .on('drag', event => {
         const node = event.subject as GraphNode | undefined;
         if (!node) return;
-        if (Math.hypot(event.x - dragStartX, event.y - dragStartY) > 4) {
-          didDrag = true;
-        }
+        if (Math.hypot(event.x - dragStartX, event.y - dragStartY) > 4) didDrag = true;
         const [wx, wy] = this.transform.invert([event.x, event.y]);
         node.fx = wx;
         node.fy = wy;
@@ -1108,11 +1692,11 @@ export class GraphComponent extends HTMLElement {
       .on('end', event => {
         const node = event.subject as GraphNode | undefined;
         if (!node) return;
-        if (!event.active && this.simulation) {
-          this.simulation.alphaTarget(0);
+        if (this.config.layoutMode === 'force') {
+          if (!event.active && this.simulation) this.simulation.alphaTarget(0);
+          node.fx = null;
+          node.fy = null;
         }
-        node.fx = null;
-        node.fy = null;
         this.draggedNode = null;
         this.canvas.style.cursor = this.hoveredNode ? 'pointer' : 'grab';
 
@@ -1135,46 +1719,56 @@ export class GraphComponent extends HTMLElement {
     canvasSel.call(this.zoomBehavior);
     this.canvas.style.cursor = 'grab';
 
-    // Hover tracking
+    // Hover tracking: node priority first, then semantic edge hit-testing
     this.canvas.addEventListener('pointermove', (e: PointerEvent) => {
       if (this.draggedNode || e.buttons !== 0) return;
       const rect = this.canvas.getBoundingClientRect();
-      const hit = this.findNodeAtCanvas(e.clientX - rect.left, e.clientY - rect.top);
-      if (hit !== this.hoveredNode) {
-        this.hoveredNode = hit;
-        this.canvas.style.cursor = hit ? 'pointer' : 'grab';
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      this.pointerScreenX = mx;
+      this.pointerScreenY = my;
+
+      const hitNode = this.findNodeAtCanvas(mx, my);
+      if (hitNode) {
+        const changed = hitNode !== this.hoveredNode || this.hoveredLink !== null;
+        this.hoveredNode = hitNode;
+        this.hoveredLink = null;
+        this.canvas.style.cursor = 'pointer';
         this.updateTooltip();
-        this.scheduleFrame();
-      } else if (hit) {
-        this.updateTooltip();
+        if (changed) this.scheduleFrame();
+        return;
       }
+
+      const hitLink = this.findLinkAtCanvas(mx, my);
+      const changed = this.hoveredNode !== null || hitLink !== this.hoveredLink;
+      this.hoveredNode = null;
+      this.hoveredLink = hitLink;
+      this.canvas.style.cursor = hitLink ? 'help' : 'grab';
+      this.updateTooltip();
+      if (changed) this.scheduleFrame();
     });
 
     this.canvas.addEventListener('pointerleave', () => {
       if (this.draggedNode) return;
-      if (this.hoveredNode) {
+      if (this.hoveredNode || this.hoveredLink) {
         this.hoveredNode = null;
+        this.hoveredLink = null;
         this.canvas.style.cursor = 'grab';
         this.updateTooltip();
         this.scheduleFrame();
       }
     });
 
-    // Double-click empty canvas to smoothly fit graph
     this.canvas.addEventListener('dblclick', (e: MouseEvent) => {
       const rect = this.canvas.getBoundingClientRect();
       const hit = this.findNodeAtCanvas(e.clientX - rect.left, e.clientY - rect.top);
-      if (!hit) {
-        this.fitToBounds(true);
-      }
+      if (!hit) this.fitToBounds(true);
     });
   }
 
   private setupObservers() {
     if (typeof MutationObserver !== 'undefined') {
-      this.themeObserver = new MutationObserver(() => {
-        this.scheduleFrame();
-      });
+      this.themeObserver = new MutationObserver(() => this.scheduleFrame());
       this.themeObserver.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ['data-theme'],
@@ -1188,11 +1782,8 @@ export class GraphComponent extends HTMLElement {
         if (!w || !h) return;
         const sizeChanged = Math.abs(w - this.lastViewportW) > 4 || Math.abs(h - this.lastViewportH) > 4;
         this.syncCanvasSize();
-        if (sizeChanged && !this.simulator.userZoomed) {
-          this.fitToBounds(false);
-        } else {
-          this.scheduleFrame();
-        }
+        if (sizeChanged && !this.simulator.userZoomed) this.fitToBounds(false);
+        else this.scheduleFrame();
       });
       this.resizeObserver.observe(this.graphContainer);
     }
@@ -1261,6 +1852,63 @@ export class GraphComponent extends HTMLElement {
     return best;
   }
 
+  private findLinkAtCanvas(mx: number, my: number): GraphLink | null {
+    const k = this.transform.k;
+    const tx = this.transform.x;
+    const ty = this.transform.y;
+    const thresholdSq = 7.5 * 7.5;
+    let best: GraphLink | null = null;
+    let bestDistSq = thresholdSq;
+
+    const visibleLinks = this.getVisibleLinks();
+    for (const l of visibleLinks) {
+      if (this.activePlaneFilter && l.plane !== this.activePlaneFilter) continue;
+      const g = getEdgeGeometry(l, this.config.layoutMode);
+      if (!g) continue;
+
+      const sSx = g.sx * k + tx;
+      const sSy = g.sy * k + ty;
+      const eSx = g.ex * k + tx;
+      const eSy = g.ey * k + ty;
+
+      // Quick AABB reject
+      const cSx = g.cx * k + tx;
+      const cSy = g.cy * k + ty;
+      const minX = Math.min(sSx, eSx, cSx) - 10;
+      const maxX = Math.max(sSx, eSx, cSx) + 10;
+      const minY = Math.min(sSy, eSy, cSy) - 10;
+      const maxY = Math.max(sSy, eSy, cSy) + 10;
+      if (mx < minX || mx > maxX || my < minY || my > maxY) continue;
+
+      let d2 = Infinity;
+      if (!g.curved) {
+        d2 = pointToSegmentDistSq(mx, my, sSx, sSy, eSx, eSy);
+      } else {
+        // Sample 6 segments along quadratic Bezier curve
+        let prevX = sSx;
+        let prevY = sSy;
+        for (let step = 1; step <= 6; step++) {
+          const u = step / 6;
+          const inv = 1 - u;
+          const px = inv * inv * sSx + 2 * inv * u * cSx + u * u * eSx;
+          const py = inv * inv * sSy + 2 * inv * u * cSy + u * u * eSy;
+          const segD2 = pointToSegmentDistSq(mx, my, prevX, prevY, px, py);
+          if (segD2 < d2) d2 = segD2;
+          prevX = px;
+          prevY = py;
+        }
+      }
+
+      // Slightly prefer typed edges when overlapping
+      const weighted = l.isTyped ? d2 * 0.75 : d2;
+      if (weighted < bestDistSq) {
+        bestDistSq = weighted;
+        best = l;
+      }
+    }
+    return best;
+  }
+
   private syncCanvasSize() {
     if (!this.canvas) return;
     const w = this.graphContainer.clientWidth || 300;
@@ -1280,7 +1928,11 @@ export class GraphComponent extends HTMLElement {
     if (!this.canvas || !this.nodes.length) return;
     const valid = this.nodes.filter(n => Number.isFinite(n.x) && Number.isFinite(n.y));
     if (!valid.length) return;
+    this.fitPoints(valid, animated);
+  }
 
+  private fitPoints(points: Array<{ x: number; y: number; radius: number }>, animated: boolean) {
+    if (!this.canvas || !points.length) return;
     const w = this.graphContainer.clientWidth || this.canvas.clientWidth || 300;
     const h = this.graphContainer.clientHeight || this.canvas.clientHeight || 256;
     if (!w || !h) return;
@@ -1289,7 +1941,7 @@ export class GraphComponent extends HTMLElement {
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
-    for (const n of valid) {
+    for (const n of points) {
       const r = n.radius + 8;
       if (n.x - r < minX) minX = n.x - r;
       if (n.x + r > maxX) maxX = n.x + r;
@@ -1299,14 +1951,14 @@ export class GraphComponent extends HTMLElement {
 
     const padX = this.isFullscreen ? 88 : 42;
     const padTop = this.isFullscreen ? 76 : 44;
-    const padBottom = this.isFullscreen ? 72 : 34;
+    const padBottom = this.isFullscreen ? 78 : 34;
 
     const spanX = Math.max(1, maxX - minX);
     const spanY = Math.max(1, maxY - minY);
     const availW = Math.max(60, w - padX * 2);
     const availH = Math.max(60, h - padTop - padBottom);
 
-    const maxFitScale = valid.length <= 2 ? 1.1 : this.isFullscreen ? 1.35 : 1.08;
+    const maxFitScale = points.length <= 2 ? 1.1 : this.isFullscreen ? 1.35 : 1.08;
     const k = Math.max(this.config.minZoom || 0.08, Math.min(maxFitScale, availW / spanX, availH / spanY));
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
@@ -1328,10 +1980,7 @@ export class GraphComponent extends HTMLElement {
 
     const sel = select(this.canvas);
     if (animated && !this.prefersReducedMotion && typeof (sel as any).transition === 'function') {
-      (sel as any)
-        .transition()
-        .duration(280)
-        .call(this.zoomBehavior.transform, target);
+      (sel as any).transition().duration(280).call(this.zoomBehavior.transform, target);
     } else {
       sel.call(this.zoomBehavior.transform, target);
     }
@@ -1339,53 +1988,111 @@ export class GraphComponent extends HTMLElement {
     this.scheduleFrame();
   }
 
+  private findDirectRelationWithCurrent(node: GraphNode): string | null {
+    if (node.isCurrent) return null;
+    for (const l of this.links) {
+      if (!l.isTyped) continue;
+      if (l.source.id === this.currentPage && l.target.id === node.id) {
+        const meta = classifyRelation(l.primaryRel);
+        return `${meta.icon} ${meta.forward}`;
+      }
+      if (l.target.id === this.currentPage && l.source.id === node.id) {
+        const meta = classifyRelation(l.primaryRel);
+        return `${meta.icon} ${meta.reverse}`;
+      }
+    }
+    return null;
+  }
+
   private updateTooltip() {
     if (!this.tooltipEl) return;
-    const n = this.hoveredNode;
-    if (!n || this.draggedNode) {
+    if (this.draggedNode) {
       this.tooltipEl.hidden = true;
       return;
     }
 
     const isDark = document.documentElement.dataset.theme === 'dark';
-    const dotColor = isDark ? n.darkColor : n.lightColor;
-    const connText = n.degree === 0 ? 'بدون پیوند' : `${toPersianDigits(n.degree)} ارتباط`;
-    const sloganHtml =
-      this.isFullscreen && n.slogan
-        ? `<div class="kg-tooltip-slogan">${this.escapeHtml(truncateLabel(n.slogan, 95))}</div>`
-        : '';
-
-    this.tooltipEl.innerHTML = `
-      <div class="kg-tooltip-top">
-        <span class="kg-tooltip-kind" style="--kind-c:${dotColor}"><span class="kg-dot"></span>${this.escapeHtml(n.kindLabel)}</span>
-        <span class="kg-tooltip-meta">${connText}</span>
-      </div>
-      <div class="kg-tooltip-title">${this.escapeHtml(n.title)}</div>
-      ${sloganHtml}
-    `;
-    this.tooltipEl.hidden = false;
-
     const w = this.graphContainer.clientWidth || 300;
     const h = this.graphContainer.clientHeight || 256;
-    const sx = n.x * this.transform.k + this.transform.x;
-    const sy = n.y * this.transform.k + this.transform.y;
-    const tipW = this.tooltipEl.offsetWidth || 210;
-    const tipH = this.tooltipEl.offsetHeight || 58;
-    const margin = 10;
-    const nodeOffset = n.radius * this.transform.k + 12;
 
-    let left = sx - tipW / 2;
+    // 1. Node hover tooltip
+    if (this.hoveredNode) {
+      const n = this.hoveredNode;
+      const dotColor = isDark ? n.darkColor : n.lightColor;
+      const connText = n.degree === 0 ? 'بدون پیوند' : `${toPersianDigits(n.degree)} ارتباط`;
+      const relWithCurrent = this.findDirectRelationWithCurrent(n);
+      const relHtml = relWithCurrent
+        ? `<div class="kg-tooltip-rel">${this.escapeHtml(relWithCurrent)}</div>`
+        : '';
+      const sloganHtml =
+        this.isFullscreen && n.slogan
+          ? `<div class="kg-tooltip-slogan">${this.escapeHtml(truncateLabel(n.slogan, 95))}</div>`
+          : '';
+
+      this.tooltipEl.innerHTML = `
+        <div class="kg-tooltip-top">
+          <span class="kg-tooltip-kind" style="--kind-c:${dotColor}"><span class="kg-dot"></span>${this.escapeHtml(n.kindLabel)}</span>
+          <span class="kg-tooltip-meta">${connText}</span>
+        </div>
+        <div class="kg-tooltip-title">${this.escapeHtml(n.title)}</div>
+        ${relHtml}
+        ${sloganHtml}
+      `;
+      this.tooltipEl.hidden = false;
+
+      const sx = n.x * this.transform.k + this.transform.x;
+      const sy = n.y * this.transform.k + this.transform.y;
+      this.positionTooltip(sx, sy, n.radius * this.transform.k + 12, w, h);
+      return;
+    }
+
+    // 2. Semantic Edge hover tooltip
+    if (this.hoveredLink) {
+      const l = this.hoveredLink;
+      const planeInfo = UMKO_RELATION_PLANES[l.plane];
+      const accent = isDark ? l.darkColor : l.lightColor;
+      const relBadges = l.relations
+        .map(rk => {
+          const m = classifyRelation(rk);
+          return `<span class="kg-edge-pill" style="--edge-c:${isDark ? m.dark : m.light}">${m.icon} ${this.escapeHtml(m.forward)}</span>`;
+        })
+        .join('');
+
+      this.tooltipEl.innerHTML = `
+        <div class="kg-tooltip-top">
+          <span class="kg-tooltip-kind" style="--kind-c:${accent}">
+            <span class="kg-line-sample kg-line-${l.dash}"></span>
+            ${this.escapeHtml(planeInfo.label)}
+          </span>
+        </div>
+        <div class="kg-edge-pills">${relBadges}</div>
+        <div class="kg-edge-endpoints">
+          <span>${this.escapeHtml(truncateLabel(l.source.title, 26))}</span>
+          <span class="kg-edge-arrow" aria-hidden="true">${l.bidirectional ? '↔' : '←'}</span>
+          <span>${this.escapeHtml(truncateLabel(l.target.title, 26))}</span>
+        </div>
+      `;
+      this.tooltipEl.hidden = false;
+      this.positionTooltip(this.pointerScreenX, this.pointerScreenY, 14, w, h);
+      return;
+    }
+
+    this.tooltipEl.hidden = true;
+  }
+
+  private positionTooltip(anchorX: number, anchorY: number, offset: number, w: number, h: number) {
+    const tipW = this.tooltipEl.offsetWidth || 220;
+    const tipH = this.tooltipEl.offsetHeight || 64;
+    const margin = 10;
+
+    let left = anchorX - tipW / 2;
     if (left < margin) left = margin;
     if (left + tipW > w - margin) left = Math.max(margin, w - tipW - margin);
 
-    let top = sy - nodeOffset - tipH;
-    const topSafe = this.isFullscreen ? 56 : 44;
-    if (top < topSafe) {
-      top = sy + nodeOffset;
-    }
-    if (top + tipH > h - margin) {
-      top = Math.max(margin, h - tipH - margin);
-    }
+    let top = anchorY - offset - tipH;
+    const topSafe = this.isFullscreen ? 58 : 44;
+    if (top < topSafe) top = anchorY + offset;
+    if (top + tipH > h - margin) top = Math.max(margin, h - tipH - margin);
 
     this.tooltipEl.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
   }
@@ -1408,9 +2115,7 @@ export class GraphComponent extends HTMLElement {
     this.rafId = 0;
     this.running = false;
     const needsMore = this.draw();
-    if (needsMore) {
-      this.scheduleFrame();
-    }
+    if (needsMore) this.scheduleFrame();
   }
 
   private measureShortLabel(ctx: CanvasRenderingContext2D, text: string, font: string): number {
@@ -1428,6 +2133,25 @@ export class GraphComponent extends HTMLElement {
     const ctx = this.ctx;
     if (!ctx || !this.canvas) return false;
 
+    let needsMoreFrames = false;
+
+    // Advance Force <-> DAG smooth position transition if active
+    if (this.layoutAnim) {
+      const elapsed = performance.now() - this.layoutAnim.startTime;
+      const rawT = Math.min(1, elapsed / this.layoutAnim.duration);
+      const ease = 1 - Math.pow(1 - rawT, 3); // cubic ease-out
+      for (const n of this.nodes) {
+        const a = this.layoutAnim.from.get(n.id);
+        const b = this.layoutAnim.to.get(n.id);
+        if (a && b) {
+          n.x = a.x + (b.x - a.x) * ease;
+          n.y = a.y + (b.y - a.y) * ease;
+        }
+      }
+      if (rawT < 1) needsMoreFrames = true;
+      else this.layoutAnim = null;
+    }
+
     const w = this.graphContainer.clientWidth || 300;
     const h = this.graphContainer.clientHeight || 256;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -1443,11 +2167,16 @@ export class GraphComponent extends HTMLElement {
     const tx = this.transform.x;
     const ty = this.transform.y;
 
-    // Determine focus mode (hover, active legend filter, or active search)
-    const hasFilter = !!(this.hoveredNode || this.activeKindFilter || this.searchQuery);
+    const visibleLinks = this.getVisibleLinks();
+    const hasFilter = !!(
+      this.hoveredNode ||
+      this.hoveredLink ||
+      this.activeKindFilter ||
+      this.activePlaneFilter ||
+      this.searchQuery
+    );
     const targetHoverMix = hasFilter ? 1 : 0;
     const lerpSpeed = this.prefersReducedMotion ? 1 : 0.24;
-    let needsMoreFrames = false;
 
     if (Math.abs(this.hoverMix - targetHoverMix) > 0.005) {
       this.hoverMix += (targetHoverMix - this.hoverMix) * lerpSpeed;
@@ -1456,19 +2185,46 @@ export class GraphComponent extends HTMLElement {
       this.hoverMix = targetHoverMix;
     }
 
-    // Build highlighted node set
-    const highlighted = new Set<string>();
+    // Build highlighted node set based on active focus/filter
+    const highlightedNodes = new Set<string>();
+    const highlightedLinks = new Set<GraphLink>();
+
     if (this.hoveredNode) {
-      highlighted.add(this.hoveredNode.id);
-      const neighbors = this.adjacency.get(this.hoveredNode.id);
-      if (neighbors) {
-        for (const nb of neighbors) highlighted.add(nb);
+      highlightedNodes.add(this.hoveredNode.id);
+      for (const l of visibleLinks) {
+        if (l.source === this.hoveredNode || l.target === this.hoveredNode) {
+          highlightedLinks.add(l);
+          highlightedNodes.add(l.source.id);
+          highlightedNodes.add(l.target.id);
+        }
+      }
+    } else if (this.hoveredLink) {
+      highlightedLinks.add(this.hoveredLink);
+      highlightedNodes.add(this.hoveredLink.source.id);
+      highlightedNodes.add(this.hoveredLink.target.id);
+    } else if (this.activePlaneFilter) {
+      for (const l of visibleLinks) {
+        if (l.plane === this.activePlaneFilter) {
+          highlightedLinks.add(l);
+          highlightedNodes.add(l.source.id);
+          highlightedNodes.add(l.target.id);
+        }
       }
     } else if (this.searchQuery) {
-      for (const id of this.searchMatches) highlighted.add(id);
+      for (const id of this.searchMatches) highlightedNodes.add(id);
     } else if (this.activeKindFilter) {
       for (const n of this.nodes) {
-        if (n.kind === this.activeKindFilter) highlighted.add(n.id);
+        if (n.kind === this.activeKindFilter) highlightedNodes.add(n.id);
+      }
+    }
+
+    // When typedOnly is enabled, subtly track nodes connected by at least one typed edge
+    const typedConnectedNodes = new Set<string>();
+    if (this.config.typedOnly) {
+      typedConnectedNodes.add(this.currentPage);
+      for (const l of visibleLinks) {
+        typedConnectedNodes.add(l.source.id);
+        typedConnectedNodes.add(l.target.id);
       }
     }
 
@@ -1476,7 +2232,7 @@ export class GraphComponent extends HTMLElement {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    // Subtle spatial dot-grid backdrop (screen-locked with gentle parallax feel)
+    // Subtle dot-grid canvas backdrop
     const gridSpacing = Math.max(18, Math.min(36, 26 * Math.sqrt(Math.max(0.35, Math.min(2, k)))));
     const ox = ((tx % gridSpacing) + gridSpacing) % gridSpacing;
     const oy = ((ty % gridSpacing) + gridSpacing) % gridSpacing;
@@ -1487,76 +2243,101 @@ export class GraphComponent extends HTMLElement {
       }
     }
 
-    // World-space transform for links & nodes
+    // World-space pass for typed links & nodes
     ctx.save();
     ctx.translate(tx, ty);
     ctx.scale(k, k);
 
-    const accentHex = isDark ? '#60a5fa' : '#2563eb';
-    const baseEdgeColor = isDark ? '161, 161, 170' : '100, 116, 139';
-    const surfaceBg = isDark ? '#1c1c1e' : '#ffffff';
-    const showArrows = !!this.config.renderArrows && (k >= 0.45 || this.nodes.length <= 35);
+    const surfaceBg = isDark ? '#1b1b1e' : '#ffffff';
+    const showArrows = !!this.config.renderArrows && (k >= 0.42 || this.nodes.length <= 40);
     const invK = 1 / Math.max(0.25, k);
+    const edgeLabelsToDraw: Array<{ link: GraphLink; mx: number; my: number; color: string }> = [];
 
-    // 1. Draw non-highlighted links first, then highlighted links on top
     const drawLinkPass = (highlightPass: boolean) => {
-      for (const link of this.links) {
-        const s = link.source;
-        const t = link.target;
-        const isAdjLink =
-          this.hoveredNode !== null
-            ? s === this.hoveredNode || t === this.hoveredNode
-            : hasFilter && highlighted.has(s.id) && highlighted.has(t.id);
+      for (const link of visibleLinks) {
+        const isHighlighted =
+          highlightedLinks.has(link) ||
+          (!this.hoveredNode &&
+            !this.hoveredLink &&
+            !this.activePlaneFilter &&
+            hasFilter &&
+            highlightedNodes.has(link.source.id) &&
+            highlightedNodes.has(link.target.id));
 
-        if (highlightPass !== isAdjLink) continue;
+        if (highlightPass !== isHighlighted) continue;
 
-        const dx = t.x - s.x;
-        const dy = t.y - s.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 0.001) continue;
+        const g = getEdgeGeometry(link, this.config.layoutMode);
+        if (!g) continue;
 
-        const ux = dx / dist;
-        const uy = dy / dist;
-        const sx = s.x + ux * (s.radius + 1.5);
-        const sy = s.y + uy * (s.radius + 1.5);
-        const ex = t.x - ux * (t.radius + 1.8);
-        const ey = t.y - uy * (t.radius + 1.8);
+        const baseHex = isDark ? link.darkColor : link.lightColor;
 
-        if (dist <= s.radius + t.radius + 3) continue;
+        // Visual hierarchy: typed UMKO relations shine clearly, plain contextual links stay whisper-quiet
+        let alpha: number;
+        let lineW: number;
+        if (highlightPass) {
+          alpha = link.isTyped ? 0.52 + 0.46 * this.hoverMix : 0.35 + 0.42 * this.hoverMix;
+          lineW = Math.min(2.6, Math.max(1.25, (link.isTyped ? 1.85 : 1.35) * invK));
+        } else {
+          const restAlpha = link.isTyped
+            ? this.nodes.length > 120
+              ? 0.34
+              : 0.56
+            : this.nodes.length > 120
+            ? 0.12
+            : this.typedLinkCount > 0
+            ? 0.2
+            : 0.28;
+          alpha = Math.max(0.04, restAlpha * (1 - 0.82 * this.hoverMix));
+          lineW = Math.min(1.8, Math.max(0.65, (link.isTyped ? 1.3 : 0.9) * invK));
+        }
+
+        // Line dash pattern (Orthogonal channel: solid=deduction/structure/problem, dashed=pedagogy/pitfall/refutes, dotted=enrichment)
+        if (link.dash === 'dashed') {
+          ctx.setLineDash([5.5 * Math.sqrt(invK), 3.6 * Math.sqrt(invK)]);
+        } else if (link.dash === 'dotted') {
+          ctx.setLineDash([2.1 * Math.sqrt(invK), 3.2 * Math.sqrt(invK)]);
+        } else {
+          ctx.setLineDash([]);
+        }
 
         ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(ex, ey);
-
-        if (highlightPass) {
-          const alpha = 0.35 + 0.55 * this.hoverMix;
-          ctx.strokeStyle = rgba(accentHex, alpha);
-          ctx.lineWidth = Math.min(2.4, Math.max(1.2, 1.65 * invK));
+        ctx.moveTo(g.sx, g.sy);
+        if (g.curved) {
+          ctx.quadraticCurveTo(g.cx, g.cy, g.ex, g.ey);
         } else {
-          const normalAlpha = this.nodes.length > 120 ? 0.16 : 0.28;
-          const fadedAlpha = Math.max(0.05, normalAlpha * (1 - 0.78 * this.hoverMix));
-          ctx.strokeStyle = `rgba(${baseEdgeColor}, ${fadedAlpha.toFixed(3)})`;
-          ctx.lineWidth = Math.min(1.5, Math.max(0.7, 1.05 * invK));
+          ctx.lineTo(g.ex, g.ey);
         }
+        ctx.strokeStyle = rgba(baseHex, alpha);
+        ctx.lineWidth = lineW;
         ctx.stroke();
+        ctx.setLineDash([]);
 
-        // Crisp miniature arrowheads
-        if (showArrows && (highlightPass || this.nodes.length <= 120 || k > 0.9)) {
-          const headLen = Math.min(7.5, Math.max(4.2, (highlightPass ? 6.8 : 5.2) * Math.sqrt(invK)));
-          const angle = Math.atan2(dy, dx);
+        // Crisp directional arrowhead aligned to true curve tangent
+        if (showArrows && (highlightPass || link.isTyped || this.nodes.length <= 100 || k > 0.9)) {
+          const headLen = Math.min(8, Math.max(4.4, (highlightPass ? 7.2 : link.isTyped ? 5.8 : 4.8) * Math.sqrt(invK)));
           const drawHead = (tipX: number, tipY: number, ang: number) => {
             ctx.beginPath();
             ctx.moveTo(tipX, tipY);
             ctx.lineTo(tipX - headLen * Math.cos(ang - 0.44), tipY - headLen * Math.sin(ang - 0.44));
             ctx.lineTo(tipX - headLen * Math.cos(ang + 0.44), tipY - headLen * Math.sin(ang + 0.44));
             ctx.closePath();
-            ctx.fillStyle = ctx.strokeStyle as string;
+            ctx.fillStyle = rgba(baseHex, Math.min(1, alpha + 0.1));
             ctx.fill();
           };
-          drawHead(ex, ey, angle);
+          drawHead(g.ex, g.ey, g.endAngle);
           if (link.bidirectional && highlightPass) {
-            drawHead(sx, sy, angle + Math.PI);
+            drawHead(g.sx, g.sy, g.startAngle);
           }
+        }
+
+        // Collect typed edge midpoint labels when hovering a node (progressive disclosure!)
+        if (highlightPass && this.hoveredNode && link.isTyped) {
+          edgeLabelsToDraw.push({
+            link,
+            mx: g.midX * k + tx,
+            my: g.midY * k + ty,
+            color: baseHex,
+          });
         }
       }
     };
@@ -1564,11 +2345,13 @@ export class GraphComponent extends HTMLElement {
     drawLinkPass(false);
     if (this.hoverMix > 0.01) drawLinkPass(true);
 
-    // 2. Draw nodes (dimmed first, then active/current/hovered on top)
+    // Draw nodes (dimmed first, active/current/hovered on top)
     const drawNode = (n: GraphNode) => {
       const isHovered = n === this.hoveredNode;
-      const isActive = !hasFilter || highlighted.has(n.id);
-      const targetScale = isHovered ? 1.24 : 1;
+      const isEdgeEndpoint = !!this.hoveredLink && (this.hoveredLink.source === n || this.hoveredLink.target === n);
+      const isActive =
+        (!hasFilter || highlightedNodes.has(n.id)) && (!this.config.typedOnly || typedConnectedNodes.has(n.id));
+      const targetScale = isHovered ? 1.24 : isEdgeEndpoint ? 1.15 : 1;
       if (Math.abs(n.hoverScale - targetScale) > 0.005) {
         n.hoverScale += (targetScale - n.hoverScale) * lerpSpeed;
         needsMoreFrames = true;
@@ -1578,13 +2361,12 @@ export class GraphComponent extends HTMLElement {
 
       const r = n.radius * n.hoverScale;
       const fillHex = isDark ? n.darkColor : n.lightColor;
-      const nodeAlpha = isActive ? 1 : 1 - 0.82 * this.hoverMix;
+      const nodeAlpha = isActive ? 1 : this.config.typedOnly && !typedConnectedNodes.has(n.id) ? 0.16 : 1 - 0.82 * this.hoverMix;
 
-      // Soft outer halo for current node or hovered node
-      if ((n.isCurrent || isHovered) && nodeAlpha > 0.3) {
+      if ((n.isCurrent || isHovered || isEdgeEndpoint) && nodeAlpha > 0.3) {
         ctx.beginPath();
         ctx.arc(n.x, n.y, r + (isHovered ? 6 : 5), 0, Math.PI * 2);
-        ctx.fillStyle = rgba(fillHex, isHovered ? 0.22 : isDark ? 0.18 : 0.14);
+        ctx.fillStyle = rgba(fillHex, isHovered ? 0.24 : isDark ? 0.18 : 0.14);
         ctx.fill();
 
         if (n.isCurrent) {
@@ -1596,20 +2378,17 @@ export class GraphComponent extends HTMLElement {
         }
       }
 
-      // Surface separator ring so incoming edges never look muddy against node edge
       ctx.beginPath();
       ctx.arc(n.x, n.y, r + 1.2, 0, Math.PI * 2);
       ctx.fillStyle = surfaceBg;
       ctx.fill();
 
-      // Core node disc
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
       ctx.fillStyle = rgba(fillHex, nodeAlpha);
       ctx.fill();
 
-      // Crisp subtle border on hover or current
-      if (isHovered) {
+      if (isHovered || isEdgeEndpoint) {
         ctx.strokeStyle = isDark ? '#ffffff' : '#0f172a';
         ctx.lineWidth = Math.min(2.2, Math.max(1.2, 1.8 * invK));
         ctx.stroke();
@@ -1617,48 +2396,51 @@ export class GraphComponent extends HTMLElement {
     };
 
     for (const n of this.nodes) {
-      if (!n.isCurrent && n !== this.hoveredNode && (!hasFilter || !highlighted.has(n.id))) {
-        drawNode(n);
-      }
+      if (!n.isCurrent && n !== this.hoveredNode && (!hasFilter || !highlightedNodes.has(n.id))) drawNode(n);
     }
     for (const n of this.nodes) {
-      if (hasFilter && highlighted.has(n.id) && !n.isCurrent && n !== this.hoveredNode) {
-        drawNode(n);
-      }
+      if (hasFilter && highlightedNodes.has(n.id) && !n.isCurrent && n !== this.hoveredNode) drawNode(n);
     }
     const currentNode = this.nodes.find(n => n.isCurrent);
     if (currentNode && currentNode !== this.hoveredNode) drawNode(currentNode);
     if (this.hoveredNode) drawNode(this.hoveredNode);
 
-    ctx.restore(); // Exit world transform -> draw crisp screen-space labels!
+    ctx.restore(); // Exit world transform -> crisp screen-space labels!
 
-    // 3. Zero-Overlap Screen-Space Intelligent Label Engine
+    // Screen-space collision-protected labels (nodes + hovered semantic edge pills)
+    const placed: Rect[] = [{ x1: 0, y1: 0, x2: 186, y2: 46 }];
+    if (this.isFullscreen) {
+      placed.push({ x1: Math.max(0, w - 580), y1: 0, x2: w, y2: 56 });
+      placed.push({ x1: 0, y1: Math.max(0, h - 56), x2: w, y2: h });
+    }
+
     if (this.config.renderLabels) {
-      const placed: Rect[] = [
-        // Reserve top-left action toolbar area so labels never sit behind buttons
-        { x1: 0, y1: 0, x2: 156, y2: 46 },
-      ];
-      if (this.isFullscreen) {
-        // Reserve fullscreen top-right HUD and bottom legend bar
-        placed.push({ x1: Math.max(0, w - 420), y1: 0, x2: w, y2: 56 });
-        placed.push({ x1: 0, y1: Math.max(0, h - 52), x2: w, y2: h });
-      }
-
       const fontSize = this.isFullscreen ? 12 : 11;
       const regularFont = `500 ${fontSize}px Vazirmatn, system-ui, sans-serif`;
       const boldFont = `600 ${fontSize}px Vazirmatn, system-ui, sans-serif`;
       const labelHeight = fontSize + 5;
 
-      // Determine zoom threshold based on density
       const nCount = this.nodes.length;
       const minZoomForAll =
-        nCount <= 14 ? 0.42 : nCount <= 35 ? 0.68 : nCount <= 100 ? 0.92 : this.isFullscreen ? 0.95 : 1.15;
+        this.config.layoutMode === 'dag'
+          ? 0.45
+          : nCount <= 14
+          ? 0.42
+          : nCount <= 35
+          ? 0.68
+          : nCount <= 100
+          ? 0.92
+          : this.isFullscreen
+          ? 0.95
+          : 1.15;
 
-      // Build priority-ordered candidates
       const candidates: Array<{ node: GraphNode; priority: number }> = [];
       for (const n of this.nodes) {
-        // Hovered node already has the rich HTML inspector card — skip duplicate canvas label for hoveredNode
         if (n === this.hoveredNode && !this.draggedNode) {
+          n.labelAlpha = 0;
+          continue;
+        }
+        if (this.config.typedOnly && !typedConnectedNodes.has(n.id)) {
           n.labelAlpha = 0;
           continue;
         }
@@ -1672,28 +2454,25 @@ export class GraphComponent extends HTMLElement {
         let priority = -1;
         if (n.isCurrent) {
           priority = 1000;
-        } else if (this.hoveredNode && highlighted.has(n.id)) {
+        } else if ((this.hoveredNode || this.hoveredLink) && highlightedNodes.has(n.id)) {
           priority = 800 + n.degree;
-        } else if ((this.searchQuery || this.activeKindFilter) && highlighted.has(n.id)) {
+        } else if ((this.searchQuery || this.activeKindFilter || this.activePlaneFilter) && highlightedNodes.has(n.id)) {
           priority = 700 + n.degree;
         } else if (!hasFilter) {
           if (k >= minZoomForAll) {
             priority = 100 + n.degree + (n.kind === 'collection' ? 40 : 0);
           } else if (this.isFullscreen && n.degree >= 10) {
-            // Show major hub landmarks in fullscreen overview
             priority = 50 + n.degree;
           }
         }
 
         if (priority >= 0) {
           candidates.push({ node: n, priority });
+        } else if (n.labelAlpha > 0.02) {
+          n.labelAlpha *= 1 - lerpSpeed;
+          needsMoreFrames = true;
         } else {
-          if (n.labelAlpha > 0.02) {
-            n.labelAlpha *= 1 - lerpSpeed;
-            needsMoreFrames = true;
-          } else {
-            n.labelAlpha = 0;
-          }
+          n.labelAlpha = 0;
         }
       }
 
@@ -1707,7 +2486,7 @@ export class GraphComponent extends HTMLElement {
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
 
-      const maxLabels = this.isFullscreen ? 42 : 12;
+      const maxLabels = this.isFullscreen ? 44 : 12;
       let drawnCount = 0;
 
       for (const { node: n, priority } of candidates) {
@@ -1720,7 +2499,6 @@ export class GraphComponent extends HTMLElement {
         const rScreen = n.radius * n.hoverScale * k;
         const gap = n.isCurrent ? 7 : 5;
 
-        // Try placing below node first, then above node if colliding
         const belowY = sy + rScreen + labelHeight / 2 + gap;
         const aboveY = sy - rScreen - labelHeight / 2 - gap;
         const tryPositions = [belowY, aboveY];
@@ -1735,10 +2513,8 @@ export class GraphComponent extends HTMLElement {
               x2: sx + halfW,
               y2: cy + labelHeight / 2 + 4,
             };
-            // Keep label cleanly inside canvas bounds
-            if (rect.x1 < 6 || rect.x2 > w - 6 || rect.y1 < 6 || rect.y2 > h - 6) {
-              continue;
-            }
+            if (rect.x1 < 6 || rect.x2 > w - 6 || rect.y1 < 6 || rect.y2 > h - 6) continue;
+
             let collides = false;
             for (const p of placed) {
               if (rectsOverlap(rect, p)) {
@@ -1746,14 +2522,13 @@ export class GraphComponent extends HTMLElement {
                 break;
               }
             }
-            // Also avoid covering any other node's circle in small/medium graphs
             if (!collides && nCount <= 60) {
               for (const other of this.nodes) {
                 if (other === n) continue;
-                const ox = other.x * k + tx;
-                const oy = other.y * k + ty;
-                const or = other.radius * k + 2;
-                if (ox + or > rect.x1 && ox - or < rect.x2 && oy + or > rect.y1 && oy - or < rect.y2) {
+                const ox2 = other.x * k + tx;
+                const oy2 = other.y * k + ty;
+                const or2 = other.radius * k + 2;
+                if (ox2 + or2 > rect.x1 && ox2 - or2 < rect.x2 && oy2 + or2 > rect.y1 && oy2 - or2 < rect.y2) {
                   collides = true;
                   break;
                 }
@@ -1782,21 +2557,16 @@ export class GraphComponent extends HTMLElement {
           ctx.save();
           ctx.globalAlpha = n.labelAlpha;
           ctx.font = font;
-
           if (n.isCurrent) {
-            // Subtle crisp pill behind current node's label
             const pillX = sx - textW / 2 - 6;
             const pillY = chosenY - labelHeight / 2;
             const pillW = textW + 12;
             ctx.fillStyle = isDark ? 'rgba(32, 32, 36, 0.92)' : 'rgba(255, 255, 255, 0.95)';
-            ctx.strokeStyle = rgba(isDark ? n.darkColor : n.lightColor, 0.45);
+            ctx.strokeStyle = rgba(isDark ? n.darkColor : n.lightColor, 0.48);
             ctx.lineWidth = 1;
             ctx.beginPath();
-            if (typeof ctx.roundRect === 'function') {
-              ctx.roundRect(pillX, pillY, pillW, labelHeight, 5);
-            } else {
-              ctx.rect(pillX, pillY, pillW, labelHeight);
-            }
+            if (typeof ctx.roundRect === 'function') ctx.roundRect(pillX, pillY, pillW, labelHeight, 5);
+            else ctx.rect(pillX, pillY, pillW, labelHeight);
             ctx.fill();
             ctx.stroke();
             ctx.fillStyle = textColor;
@@ -1808,6 +2578,58 @@ export class GraphComponent extends HTMLElement {
             ctx.fillStyle = priority >= 700 ? textColor : mutedTextColor;
             ctx.fillText(text, sx, chosenY);
           }
+          ctx.restore();
+        }
+      }
+
+      // Draw crisp progressive-disclosure semantic pills on typed edges connected to hoveredNode
+      if (edgeLabelsToDraw.length > 0 && this.hoverMix > 0.2) {
+        const edgeFont = '500 10px Vazirmatn, system-ui, sans-serif';
+        const pillH = 17;
+        ctx.font = edgeFont;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        let edgePillsDrawn = 0;
+        const maxEdgePills = this.isFullscreen ? 12 : 4;
+        for (const item of edgeLabelsToDraw) {
+          if (edgePillsDrawn >= maxEdgePills) break;
+          const tw = this.measureShortLabel(ctx, item.link.shortLabel, edgeFont);
+          const pw = tw + 12;
+          const rect: Rect = {
+            x1: item.mx - pw / 2 - 3,
+            y1: item.my - pillH / 2 - 2,
+            x2: item.mx + pw / 2 + 3,
+            y2: item.my + pillH / 2 + 2,
+          };
+          if (rect.x1 < 6 || rect.x2 > w - 6 || rect.y1 < 6 || rect.y2 > h - 6) continue;
+          let collides = false;
+          for (const p of placed) {
+            if (rectsOverlap(rect, p)) {
+              collides = true;
+              break;
+            }
+          }
+          if (collides) continue;
+
+          placed.push(rect);
+          edgePillsDrawn++;
+
+          ctx.save();
+          ctx.globalAlpha = Math.min(0.96, this.hoverMix);
+          ctx.fillStyle = isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255, 255, 255, 0.94)';
+          ctx.strokeStyle = rgba(item.color, 0.55);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(item.mx - pw / 2, item.my - pillH / 2, pw, pillH, 999);
+          } else {
+            ctx.rect(item.mx - pw / 2, item.my - pillH / 2, pw, pillH);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = item.color;
+          ctx.fillText(item.link.shortLabel, item.mx, item.my + 0.5);
           ctx.restore();
         }
       }
