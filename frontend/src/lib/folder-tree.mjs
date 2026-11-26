@@ -1,3 +1,4 @@
+/** @type {Record<string, string>} */
 const BOOK_TITLES = {
   'axler-linear-algebra-done-right': 'جبر خطی آکسلر',
   'axler': 'جبر خطی آکسلر'

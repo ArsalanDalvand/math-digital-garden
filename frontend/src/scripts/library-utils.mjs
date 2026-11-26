@@ -4,7 +4,7 @@ export const publicationHref = (item) => item.visibility === 'unlisted' ? '/shar
 export const threadComments = (comments) => comments.filter(c=>!c.parent_id).map(c=>({...c,replies:comments.filter(reply=>reply.parent_id===c.id)}));
 
 /** Resolve just this visible folder; never cache private overlays in the public tree.
- * @param {{label:string,link?:string,items?:any[]}[]} nodes
+ * @param {{label:string,link?:string,items?:any[],count?:number}[]} nodes
  * @param {(path:string,data:unknown)=>Promise<any[]>} api
  */
 export async function personalNodes(nodes,api){
