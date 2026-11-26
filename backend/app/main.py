@@ -1,10 +1,12 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime
+from hashlib import sha256
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -54,6 +56,18 @@ class NoteResponse(BaseModel):
     updated_at: datetime
 
 
+class NoteMetaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    slug: str
+    title: str
+    book_slug: str
+    chapter_slug: str
+    relative_path: str
+    current_hash: str
+    updated_at: datetime
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -94,6 +108,42 @@ async def get_catalogue_session(
 ) -> AsyncIterator[AsyncSession]:
     async with asynccontextmanager(get_session)() as session:
         yield session
+
+
+@app.get("/api/catalogue/meta")
+async def list_catalogue_meta(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    query = select(
+        CanonicalNote.id,
+        CanonicalNote.slug,
+        CanonicalNote.title,
+        CanonicalNote.book_slug,
+        CanonicalNote.chapter_slug,
+        CanonicalNote.relative_path,
+        CanonicalNote.current_hash,
+        CanonicalNote.updated_at,
+    ).order_by(CanonicalNote.slug)
+    try:
+        result = await session.execute(query)
+        rows = result.all()
+    except (SQLAlchemyError, OSError, TimeoutError):
+        raise HTTPException(503, "Database unavailable") from None
+
+    digest = sha256(
+        "\n".join(f"{row.slug}:{row.current_hash}" for row in rows).encode("utf-8")
+    ).hexdigest()[:16]
+    etag = f'W/"{digest}"'
+    headers = {"ETag": etag, "Cache-Control": "no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+
+    payload = [
+        NoteMetaResponse.model_validate(row, from_attributes=True).model_dump(mode="json")
+        for row in rows
+    ]
+    return JSONResponse(content=payload, headers=headers)
 
 
 @app.get("/api/notes", response_model=list[NoteResponse])
