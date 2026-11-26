@@ -328,3 +328,65 @@ export async function getKnowledgeIndex(overrideNote) {
   const notes = await fetchVaultNotes(overrideNote);
   return buildKnowledgeIndex(notes);
 }
+
+/**
+ * Fetch live dynamic book catalogue summary from PostgreSQL discovery API.
+ * @returns {Promise<{ total_notes: number; books: Array<{ book_slug: string; title: string; edition: string; description: string; note_count: number; chapter_count: number; entry_slug: string; entry_label: string; highlights: Array<{ label: string; slug: string }> }> }>}
+ */
+export async function fetchBooks() {
+  const origin = resolveOrigin();
+  const response = await fetch(`${origin}/api/books`, { signal: AbortSignal.timeout(2500) });
+  if (!response.ok) throw new Error('Books unavailable');
+  const data = await response.json();
+  if (!data || typeof data !== 'object' || !Array.isArray(data.books)) {
+    throw new Error('Invalid books payload');
+  }
+  return data;
+}
+
+/**
+ * Search indexed PostgreSQL notes with safe legacy fallback when /api/search is absent or mocked.
+ * @param {{ q?: string; tag?: string; track?: string; kind?: string; book?: string; limit?: number; offset?: number }} [params]
+ */
+export async function searchCatalogue(params = {}) {
+  const origin = resolveOrigin();
+  const q = typeof params.q === 'string' ? params.q : '';
+  const tag = typeof params.tag === 'string' ? params.tag : '';
+  const track = typeof params.track === 'string' ? params.track : '';
+  const kind = typeof params.kind === 'string' ? params.kind : '';
+  const book = typeof params.book === 'string' ? params.book : '';
+  const limit = Number.isInteger(params.limit) ? Number(params.limit) : 20;
+  const offset = Number.isInteger(params.offset) ? Number(params.offset) : 0;
+
+  const qs = new URLSearchParams();
+  if (q) qs.set('q', q);
+  if (tag) qs.set('tag', tag);
+  if (track) qs.set('track', track);
+  if (kind) qs.set('kind', kind);
+  if (book) qs.set('book', book);
+  qs.set('limit', String(Math.max(1, Math.min(200, limit))));
+  qs.set('offset', String(Math.max(0, offset)));
+
+  const response = await fetch(`${origin}/api/search?${qs.toString()}`, {
+    signal: AbortSignal.timeout(4000),
+  });
+  if (response.status === 404) {
+    const notes = await fetchCatalogue(q);
+    return { mode: 'legacy', notes };
+  }
+  if (!response.ok) {
+    throw new Error('Search unavailable');
+  }
+  const payload = await response.json();
+  if (Array.isArray(payload)) {
+    return { mode: 'legacy', notes: payload };
+  }
+  if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+    return {
+      mode: 'indexed',
+      total: Number(payload.total) || 0,
+      items: payload.items,
+    };
+  }
+  throw new Error('Invalid search payload');
+}

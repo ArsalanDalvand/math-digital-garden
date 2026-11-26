@@ -7,6 +7,7 @@ import MobileStudyTools from '../components/MobileStudyTools';
 import ReadingSettings from '../components/ReadingSettings.astro';
 import NoteOutline from '../components/NoteOutline.astro';
 import AccountMenu from '../components/AccountMenu';
+import CommandPalette from '../components/search/CommandPalette';
 import LibraryNavigation from '../components/LibraryNavigation.astro';
 import {BookOpen,Search,PanelRightClose,PanelLeft,SunMoon,GitPullRequest,Ellipsis,House} from 'lucide-react';
 import '@fontsource/vazirmatn/400.css';
@@ -32,6 +33,17 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
   <button data-nav-toggle aria-label="باز و بسته کردن فهرست" aria-controls="workspace-navigation" aria-expanded="true"><PanelRightClose size={18} aria-hidden="true"/></button>
   <a href="/" class="workspace-brand"><BookOpen size={20} aria-hidden="true"/><strong>{brandName}</strong></a>
   <nav aria-label="ابزارهای عمومی">
+    <button
+      type="button"
+      class="command-palette-trigger"
+      data-command-trigger
+      aria-label="جست‌وجوی سریع (Ctrl+K)"
+      title="جست‌وجوی سریع (Ctrl+K)"
+    >
+      <Search size={16} aria-hidden="true"/>
+      <span class="command-trigger-label">جست‌وجو…</span>
+      <kbd class="command-trigger-kbd" dir="ltr">Ctrl K</kbd>
+    </button>
     <AccountMenu client:load />
   </nav>
 </header>
@@ -66,8 +78,9 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
   <div class="workspace-document"><h1>{title}</h1><slot/></div>
 </main>
 {tools&&<aside id="workspace-study-tools" class="workspace-tools" aria-label="ابزارهای مطالعه"><slot name="tools"/></aside>}
-</div><Excalidraw/><Mermaid/><CanvasViewer/><Presentation/>
+</div><Excalidraw/><Mermaid/><CanvasViewer/><Presentation/><CommandPalette client:load/>
 <script>
+ document.querySelectorAll<HTMLButtonElement>('[data-command-trigger]').forEach((btn)=>btn.addEventListener('click',()=>document.dispatchEvent(new CustomEvent('garden:open-command-palette'))));
  document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
  const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
  function updateThemeLabel(){if(themeToggle)themeToggle.setAttribute('aria-label',document.documentElement.dataset.theme==='dark'?'تغییر به پوستهٔ روشن':'تغییر به پوستهٔ تیره');}
