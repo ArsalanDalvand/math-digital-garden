@@ -257,7 +257,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     >
       <div className="note-graph-header">
         <h2>گراف ارتباط</h2>
-        <div className="graph-depth-quickbar" role="group" aria-label="عمق نمایش همسایگی گراف">
+        <fieldset className="graph-depth-quickbar" aria-label="عمق نمایش همسایگی گراف">
           <span className="depth-label">عمق:</span>
           {[1, 2, 5].map((depth) => (
             <button
@@ -271,7 +271,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
               {depth === 5 ? 'همه' : toPersianDigits(depth)}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
 
       <p
@@ -362,7 +362,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         </div>
       </div>
 
-      <div className="graph-umko-legend" data-graph-legend="" aria-label="فیلتر بر اساس نوع UMKO">
+      <section className="graph-umko-legend" data-graph-legend="" aria-label="فیلتر بر اساس نوع UMKO">
         {LEGEND_ITEMS.map((item) => {
           const active = state.activeKindFilter === item.kind;
           return (
@@ -379,7 +379,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
             </button>
           );
         })}
-      </div>
+      </section>
 
       <GraphFullscreenModal
         state={state}

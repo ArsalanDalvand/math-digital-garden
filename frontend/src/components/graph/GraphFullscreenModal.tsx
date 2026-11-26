@@ -84,7 +84,7 @@ export function GraphFullscreenModal({
             />
           </div>
 
-          <div className="kg-fs-group" role="group" aria-label="تنظیم عمق گراف">
+          <fieldset className="kg-fs-group" aria-label="تنظیم عمق گراف">
             {[1, 2, 5].map((depth) => (
               <button
                 key={depth}
@@ -97,9 +97,9 @@ export function GraphFullscreenModal({
                 {depth === 5 ? 'همه' : `${toPersianDigits(depth)} گام`}
               </button>
             ))}
-          </div>
+          </fieldset>
 
-          <div className="kg-fs-group" role="group" aria-label="حالت چیدمان">
+          <fieldset className="kg-fs-group" aria-label="حالت چیدمان">
             <button
               type="button"
               className={`kg-fs-chip${state.layoutMode === 'force' ? ' active' : ''}`}
@@ -118,7 +118,7 @@ export function GraphFullscreenModal({
             >
               DAG
             </button>
-          </div>
+          </fieldset>
 
           <button
             type="button"
@@ -200,7 +200,7 @@ export function GraphFullscreenModal({
           onClose={() => onPatch({ settingsOpen: false })}
         />
 
-        <div className="kg-fs-legend" aria-label="فیلتر انواع گره‌ها و روابط">
+        <section className="kg-fs-legend" aria-label="فیلتر انواع گره‌ها و روابط">
           <div className="kg-dock-section">
             {LEGEND_ITEMS.map((item) => {
               const active = state.activeKindFilter === item.kind;
@@ -249,7 +249,7 @@ export function GraphFullscreenModal({
               );
             })}
           </div>
-        </div>
+        </section>
       </div>
     </div>,
     document.body,

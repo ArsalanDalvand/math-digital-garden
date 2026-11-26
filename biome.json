@@ -1,0 +1,39 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
+  "files": {
+    "includes": [
+      "frontend/src/**/*.ts",
+      "frontend/src/**/*.tsx",
+      "tests/e2e/**/*.ts",
+      "playwright.config.ts",
+      "!frontend/src/components/ui/**",
+      "!.local/**",
+      "!.venv/**",
+      "!frontend/dist/**",
+      "!frontend/.astro/**"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "useIterableCallbackReturn": "off"
+      }
+    }
+  }
+}

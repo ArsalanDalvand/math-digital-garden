@@ -6,7 +6,16 @@
     "build": "pnpm --filter frontend build",
     "check": "pnpm --filter frontend check",
     "tsc": "pnpm --filter frontend tsc",
+    "lint": "biome lint frontend/src tests/e2e playwright.config.ts",
+    "lint:fix": "biome lint --write frontend/src tests/e2e playwright.config.ts",
+    "lint:py": ".venv/bin/ruff check backend tests",
     "test": "pnpm --filter frontend test",
-    "test:reader": "pnpm --filter frontend test:reader"
+    "test:reader": "pnpm --filter frontend test:reader",
+    "test:e2e": "playwright test",
+    "test:all": "pnpm tsc && pnpm lint && pnpm test && pnpm test:reader && .venv/bin/pytest -q"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.9",
+    "@playwright/test": "^1.65.1"
   }
 }
