@@ -3,7 +3,7 @@ import { noteHref } from './markdown.mjs';
 /** The graph engine normalizes node IDs to paths without a leading slash. @param {string} slug */
 const graphPath = slug => noteHref(slug).slice(1);
 
-/** @param {Awaited<ReturnType<typeof import('./markdown.mjs').buildKnowledge>>} garden */
+/** @param {import('./markdown.mjs').IndexedNote[]} garden */
 export function graphSitemap(garden) {
   return Object.fromEntries(garden.map(note => {
     const kindTag = note.kind ? [`#kind:${note.kind}`] : [];
