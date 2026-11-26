@@ -1,17 +1,17 @@
-import {
-  KNOWLEDGE_SCHEMA,
-  UMKO_KINDS,
-  UMKO_RELATIONS,
-  UMKO_RELATION_PLANES,
-} from '../umko.mjs';
+import { KNOWLEDGE_SCHEMA, UMKO_KINDS, UMKO_RELATION_PLANES, UMKO_RELATIONS } from '../umko.mjs';
 import type {
+  BuildGraphOptions,
   GraphLink,
   GraphNode,
+  GraphStats,
   KindVisual,
+  NodeShape,
   RelationPlaneKey,
   RelationVisualMeta,
   SitemapEntry,
 } from './types.ts';
+
+export { KNOWLEDGE_SCHEMA };
 
 export const DARK_KIND_COLORS: Record<string, string> = Object.fromEntries(
   Object.entries(KNOWLEDGE_SCHEMA.kinds).map(([kind, meta]) => [kind, meta.dark || meta.color]),
@@ -21,8 +21,56 @@ export const KIND_SIZE_BOOST: Record<string, number> = Object.fromEntries(
   Object.entries(KNOWLEDGE_SCHEMA.kinds).map(([kind, meta]) => [kind, meta.sizeBoost ?? 0]),
 );
 
-export const LEGEND_ITEMS: ReadonlyArray<{ kind: string; label: string; color: string }> =
-  KNOWLEDGE_SCHEMA.legendKinds;
+const KIND_ALIASES: Record<string, string> = {
+  definition: 'concept',
+  theorem: 'assertion',
+  lemma: 'assertion',
+  proposition: 'assertion',
+  corollary: 'assertion',
+  exercise: 'problem',
+  moc: 'collection',
+  roadmap: 'collection',
+};
+
+const VALID_SHAPES = new Set<NodeShape>([
+  'circle',
+  'double-circle',
+  'hexagon',
+  'square',
+  'diamond',
+  'triangle',
+  'octagon',
+]);
+
+function asNodeShape(raw?: string): NodeShape {
+  return raw && VALID_SHAPES.has(raw as NodeShape) ? (raw as NodeShape) : 'circle';
+}
+
+export function normalizeKind(rawKind?: string): string {
+  const clean = (rawKind || '').trim().toLowerCase();
+  if (!clean) return '';
+  if (clean in UMKO_KINDS) return clean;
+  return KIND_ALIASES[clean] || '';
+}
+
+export const LEGEND_ITEMS: ReadonlyArray<{
+  kind: string;
+  label: string;
+  color: string;
+  light: string;
+  dark: string;
+  shape: NodeShape;
+}> = KNOWLEDGE_SCHEMA.legendKinds.map((item) => {
+  const meta = (UMKO_KINDS as Record<string, { color: string; dark?: string; shape?: string }>)[
+    item.kind
+  ];
+  return {
+    ...item,
+    light: meta?.color || item.color,
+    dark: meta?.dark || item.color,
+    shape: asNodeShape(meta?.shape),
+  };
+});
 
 export const PLANE_FILTER_ITEMS: Array<{
   key: RelationPlaneKey;
@@ -45,17 +93,32 @@ export function toPersianDigits(n: number | string): string {
 export function getKindVisual(kind: string): KindVisual {
   const kindsMap = UMKO_KINDS as Record<
     string,
-    { label: string; color: string; dark?: string; sizeBoost?: number }
+    { label: string; color: string; dark?: string; sizeBoost?: number; shape?: string }
   >;
-  const entry = kindsMap[kind];
+  const normalized = normalizeKind(kind);
+  const entry = normalized ? kindsMap[normalized] : undefined;
   if (!entry) {
-    return KNOWLEDGE_SCHEMA.fallbackKind;
+    const fallback = KNOWLEDGE_SCHEMA.fallbackKind as {
+      label: string;
+      light: string;
+      dark: string;
+      sizeBoost?: number;
+      shape?: string;
+    };
+    return {
+      label: fallback.label,
+      light: fallback.light,
+      dark: fallback.dark,
+      sizeBoost: fallback.sizeBoost ?? 0,
+      shape: asNodeShape(fallback.shape),
+    };
   }
   return {
     label: entry.label,
     light: entry.color,
     dark: entry.dark || entry.color,
     sizeBoost: entry.sizeBoost ?? 0,
+    shape: asNodeShape(entry.shape),
   };
 }
 
@@ -97,7 +160,9 @@ export function classifyRelation(relKey: string): RelationVisualMeta {
       priority: planeMeta.priority,
     };
   }
-  const planeKey = (raw.plane && raw.plane in planesMap ? raw.plane : 'context') as RelationPlaneKey;
+  const planeKey = (
+    raw.plane && raw.plane in planesMap ? raw.plane : 'context'
+  ) as RelationPlaneKey;
   const planeMeta = planesMap[planeKey];
   return {
     key: relKey,
@@ -121,24 +186,28 @@ export function getPlaneLabel(plane: RelationPlaneKey): string {
 }
 
 export function inferSemanticKind(entry: SitemapEntry): string {
-  if (entry.kind && entry.kind in UMKO_KINDS) return entry.kind;
+  const direct = normalizeKind(entry.kind);
+  if (direct) return direct;
   const tags = entry.tags || [];
   const title = entry.title || '';
 
   for (const raw of tags) {
     const t = raw.startsWith('#') ? raw.slice(1) : raw;
     if (t.startsWith('kind:')) {
-      const k = t.slice(5);
-      if (k in UMKO_KINDS) return k;
+      const normalized = normalizeKind(t.slice(5));
+      if (normalized) return normalized;
     }
   }
 
   const tagSet = new Set(tags.map((t) => (t.startsWith('#') ? t.slice(1) : t)));
-  if (tagSet.has('MOC') || tagSet.has('نقشه_راه') || /^00-MOC|^MOC-/.test(title)) return 'collection';
-  if (tagSet.has('جئوجبرا') || tagSet.has('تجسم_هندسی') || tagSet.has('شبیه‌ساز')) return 'visual_lab';
+  if (tagSet.has('MOC') || tagSet.has('نقشه_راه') || /^00-MOC|^MOC-/.test(title))
+    return 'collection';
+  if (tagSet.has('جئوجبرا') || tagSet.has('تجسم_هندسی') || tagSet.has('شبیه‌ساز'))
+    return 'visual_lab';
   if (tagSet.has('دام') || tagSet.has('کج‌فهمی')) return 'pitfall';
   if (tagSet.has('مثال_نقض')) return 'counterexample';
-  if (tagSet.has('قضیه') || tagSet.has('لم') || tagSet.has('نتیجه') || tagSet.has('گزاره')) return 'assertion';
+  if (tagSet.has('قضیه') || tagSet.has('لم') || tagSet.has('نتیجه') || tagSet.has('گزاره'))
+    return 'assertion';
   if (tagSet.has('تعریف') || tagSet.has('مفهوم') || tagSet.has('پیش‌نیاز')) return 'concept';
   if (tagSet.has('اثبات') || tagSet.has('برهان')) return 'proof';
   if (tagSet.has('مثال')) return 'example';
@@ -165,25 +234,92 @@ export function truncateLabel(title: string, maxChars: number): string {
   return `${safe.trimEnd()}…`;
 }
 
+const MOC_TITLE_RE =
+  /(?:^|[\s\-_/])(?:00-?MOC|نقشه(?:\s*های)?\s*راه|نقشه\s*گراف|فهرست|درسنامه\s*و\s*نقشه|MOC\b|Roadmap|README|Templates)/i;
+
+const RAW_OCR_TITLE_RE = /^(?:صفحه[-\s]*[0-9۰-۹]+|متن\s*خام\s*OCR)(?:\b|[\s\-_]|$)/i;
+const RAW_OCR_TOKEN_RE = /(?:^|[\s\-_/])(?:متن\s*خام\s*OCR|OCR)(?:$|[\s\-_/])/i;
+
+/** Returns true for hub MOCs, roadmaps, and structural index notes. */
+export function isMocOrRoadmap(entry: SitemapEntry | undefined | null, id = ''): boolean {
+  if (!entry && !id) return false;
+  const normalizedKind = normalizeKind(entry?.kind);
+  if (normalizedKind === 'collection') return true;
+  const tags = entry?.tags || [];
+  for (const raw of tags) {
+    const clean = raw.trim().toLowerCase().replace(/^#/, '');
+    if (
+      clean === 'kind:collection' ||
+      clean === 'collection' ||
+      clean === 'moc' ||
+      clean === 'sub:roadmap' ||
+      clean === 'sub:chapter_handout' ||
+      clean === 'نقشه_راه'
+    ) {
+      return true;
+    }
+  }
+  const title = (entry?.title || '').trim();
+  return MOC_TITLE_RE.test(title) || MOC_TITLE_RE.test(id);
+}
+
+/** Returns true for raw OCR page dumps and untyped archival page stubs. */
+export function isRawOcrOrphan(entry: SitemapEntry | undefined | null, id = ''): boolean {
+  if (!entry && !id) return false;
+  const title = (entry?.title || '').trim();
+  if (RAW_OCR_TITLE_RE.test(title) || RAW_OCR_TOKEN_RE.test(title) || RAW_OCR_TOKEN_RE.test(id)) {
+    return true;
+  }
+  const hasSemanticKind = Boolean(normalizeKind(entry?.kind));
+  const hasTags = Array.isArray(entry?.tags) && entry.tags.length > 0;
+  if (!hasSemanticKind && !hasTags) {
+    const chapter = entry?.chapter_slug || '';
+    if (/مراجع\s*و\s*اسناد\s*اولیه|00-مراجع/i.test(chapter)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function buildTypedGraphData(
   sitemap: Record<string, SitemapEntry>,
   currentPage: string,
   depth: number,
-  renderExternal = false,
+  options: boolean | BuildGraphOptions = false,
 ): {
   nodes: GraphNode[];
   links: GraphLink[];
   adjacency: Map<string, Set<string>>;
   typedLinkCount: number;
+  stats: GraphStats;
 } {
+  const renderExternal = typeof options === 'boolean' ? options : Boolean(options.renderExternal);
+  const showHubsAndRaw = typeof options === 'boolean' ? false : Boolean(options.showHubsAndRaw);
+
   const visited = new Set<string>();
-  const hasCurrent = !!sitemap[currentPage];
+  const hiddenHubIds = new Set<string>();
+  const currentEntry = sitemap[currentPage];
+  const hasCurrent = !!currentEntry;
+  const currentIsMoc = isMocOrRoadmap(currentEntry, currentPage);
+  const currentIsRaw = isRawOcrOrphan(currentEntry, currentPage);
+
+  const shouldFilterNode = (id: string, entry: SitemapEntry | undefined): boolean => {
+    if (!entry || entry.exists === false) return false;
+    if (showHubsAndRaw || id === currentPage) return false;
+    if (!currentIsMoc && isMocOrRoadmap(entry, id)) return true;
+    if (!currentIsRaw && isRawOcrOrphan(entry, id)) return true;
+    return false;
+  };
 
   if (depth >= 5 || depth < 0) {
     for (const id of Object.keys(sitemap)) {
       const entry = sitemap[id];
       if (!entry || entry.exists === false) continue;
       if (!renderExternal && entry.external) continue;
+      if (shouldFilterNode(id, entry)) {
+        hiddenHubIds.add(id);
+        continue;
+      }
       visited.add(id);
     }
   } else if (hasCurrent) {
@@ -199,6 +335,10 @@ export function buildTypedGraphData(
           const entry = sitemap[target];
           if (!entry || entry.exists === false) continue;
           if (!renderExternal && entry.external) continue;
+          if (shouldFilterNode(target, entry)) {
+            hiddenHubIds.add(target);
+            continue;
+          }
           if (!visited.has(target)) {
             visited.add(target);
             next.push(target);
@@ -261,7 +401,9 @@ export function buildTypedGraphData(
     const visual = getKindVisual(kind);
     const degree = adjacency.get(id)?.size || 0;
     const baseRadius = 5.4 + visual.sizeBoost + Math.min(4.2, Math.log2(degree + 1) * 1.15);
-    const radius = isCurrent ? Math.max(baseRadius + 1.5, 8.6) : Math.max(4.8, Math.min(11, baseRadius));
+    const radius = isCurrent
+      ? Math.max(baseRadius + 1.5, 8.6)
+      : Math.max(4.8, Math.min(11, baseRadius));
 
     const r = isCurrent ? 0 : Math.sqrt(idx) * spreadStep;
     const theta = idx * GOLDEN_ANGLE;
@@ -274,7 +416,10 @@ export function buildTypedGraphData(
       fullShortTitle: truncateLabel(title, 30),
       kind,
       kindLabel: visual.label,
+      shape: visual.shape,
       level: item.level || '',
+      bookSlug: item.book_slug || '',
+      chapterSlug: item.chapter_slug || '',
       slogan: item.slogan || '',
       tags: item.tags || [],
       isCurrent,
@@ -327,7 +472,10 @@ export function buildTypedGraphData(
       lightColor: primary.light,
       darkColor: primary.dark,
       dash: primary.dash,
-      shortLabel: metas.length > 1 ? `${primary.short} (+${toPersianDigits(metas.length - 1)})` : primary.short,
+      shortLabel:
+        metas.length > 1
+          ? `${primary.short} (+${toPersianDigits(metas.length - 1)})`
+          : primary.short,
     };
   };
 
@@ -360,7 +508,18 @@ export function buildTypedGraphData(
     }
   }
 
-  return { nodes, links, adjacency, typedLinkCount };
+  return {
+    nodes,
+    links,
+    adjacency,
+    typedLinkCount,
+    stats: {
+      nodeCount: nodes.length,
+      linkCount: links.length,
+      typedLinkCount,
+      hiddenHubCount: hiddenHubIds.size,
+    },
+  };
 }
 
 const graphSitemapCache = new Map<

@@ -10,6 +10,19 @@ export type RelationPlaneKey =
 
 export type LayoutMode = 'force' | 'dag';
 
+export type NodeShape =
+  | 'circle'
+  | 'double-circle'
+  | 'hexagon'
+  | 'square'
+  | 'diamond'
+  | 'triangle'
+  | 'octagon';
+
+export type ColorByMode = 'kind' | 'level' | 'chapter';
+
+export type PathTraceMode = 'off' | 'prerequisites' | 'impact';
+
 export interface SitemapEntry {
   title?: string;
   exists?: boolean;
@@ -23,16 +36,21 @@ export interface SitemapEntry {
   level?: string;
   slogan?: string;
   uid?: string;
+  book_slug?: string;
+  chapter_slug?: string;
 }
 
 export interface GraphConfig {
   depth: number;
   prefetchPages: boolean;
   renderExternal: boolean;
+  showHubsAndRaw: boolean;
   renderLabels: boolean;
   renderArrows: boolean;
   typedOnly: boolean;
   layoutMode: LayoutMode;
+  colorBy: ColorByMode;
+  pathTraceMode: PathTraceMode;
   labelFontSize: number;
   linkDistance: number;
   repelForce: number;
@@ -51,7 +69,10 @@ export interface GraphNode extends SimulationNodeDatum {
   fullShortTitle: string;
   kind: string;
   kindLabel: string;
+  shape: NodeShape;
   level: string;
+  bookSlug: string;
+  chapterSlug: string;
   slogan: string;
   tags: string[];
   isCurrent: boolean;
@@ -109,12 +130,54 @@ export interface KindVisual {
   light: string;
   dark: string;
   sizeBoost: number;
+  shape: NodeShape;
 }
 
 export interface GraphStats {
   nodeCount: number;
   linkCount: number;
   typedLinkCount: number;
+  hiddenHubCount: number;
+}
+
+export interface BuildGraphOptions {
+  renderExternal?: boolean;
+  showHubsAndRaw?: boolean;
+}
+
+export interface PathTraceStep {
+  nodeId: string;
+  title: string;
+  kind: string;
+  kindLabel: string;
+  lightColor: string;
+  darkColor: string;
+  shape: NodeShape;
+  hop: number;
+  viaRelation: string;
+}
+
+export interface PathTraceResult {
+  mode: PathTraceMode;
+  startId: string;
+  nodeHops: Map<string, number>;
+  highlightedLinkKeys: Set<string>;
+  orderedSteps: PathTraceStep[];
+}
+
+export interface NeighborSummary {
+  prereqCount: number;
+  dependentCount: number;
+  exerciseCount: number;
+  hiddenHubCount: number;
+}
+
+export interface ColorLegendItem {
+  id: string;
+  label: string;
+  color: string;
+  shape: NodeShape;
+  count?: number;
 }
 
 export type HoverTarget =
@@ -137,10 +200,13 @@ export const DEFAULT_GRAPH_CONFIG: GraphConfig = {
   depth: 1,
   prefetchPages: false,
   renderExternal: false,
+  showHubsAndRaw: false,
   renderLabels: true,
   renderArrows: true,
   typedOnly: false,
   layoutMode: 'force',
+  colorBy: 'kind',
+  pathTraceMode: 'off',
   labelFontSize: 12,
   linkDistance: 120,
   repelForce: 150,

@@ -36,6 +36,8 @@ export function graphSitemap(garden) {
       level: note.level || '',
       slogan: note.slogan_fa || '',
       uid: note.uid || '',
+      book_slug: note.book_slug || '',
+      chapter_slug: note.chapter_slug || '',
     };
     if (Object.keys(rels).length > 0) {
       entry.rels = rels;
