@@ -1,5 +1,6 @@
+import json
 from collections.abc import AsyncIterator
-from functools import lru_cache
+from functools import lru_cache, partial
 
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,6 +24,7 @@ def get_engine() -> AsyncEngine:
         max_overflow=15,
         pool_recycle=1800,
         pool_pre_ping=True,
+        json_serializer=partial(json.dumps, ensure_ascii=False),
     )
 
 

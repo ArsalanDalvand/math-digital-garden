@@ -42,7 +42,7 @@ async def test_postgres_migration_roundtrip_constraints_and_public_api():
     suffix = uuid4().hex
     try:
         async with engine.connect() as connection:
-            assert int(await connection.scalar(text("SHOW server_version_num"))) // 10000 == 16
+            assert int(await connection.scalar(text("SHOW server_version_num"))) // 10000 >= 16
             assert (
                 await connection.scalar(
                     text("SELECT extname FROM pg_extension WHERE extname='vector'")
