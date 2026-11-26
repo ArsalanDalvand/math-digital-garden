@@ -1,6 +1,10 @@
 """Full canonical menu uses the existing personal fork; real isolated PostgreSQL."""
 
-from tests.test_workspace import RAW, register
+import pytest
+
+from tests.test_workspace import DATABASE_URL, RAW, register
+
+pytestmark = [pytest.mark.integration, pytest.mark.skipif(not DATABASE_URL, reason="dedicated DB")]
 
 
 async def test_canonical_comments_without_fork_or_publication(journey):

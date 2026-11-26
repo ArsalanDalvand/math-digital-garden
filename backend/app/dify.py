@@ -81,6 +81,8 @@ def event(name: str, data: object) -> str:
 @router.post("/chat", dependencies=[Depends(write_guard)])
 @limiter.limit("25/minute")
 async def chat(request: Request, data: ChatInput, user: Me, db: DB) -> StreamingResponse:
+    if not settings.ai_enabled:
+        raise HTTPException(503, "AI assistant is temporarily disabled")
     note = await note_by_slug(db, data.slug)
     raw, version = note.current_content, note.current_hash
     if data.scope == "personal":

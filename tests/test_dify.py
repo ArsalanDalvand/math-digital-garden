@@ -4,11 +4,13 @@ import json
 from uuid import uuid4
 
 import httpx
+import pytest
 
 from backend.app.config import settings
-from tests.test_workspace import RAW, register
+from tests.test_workspace import DATABASE_URL, RAW, register
 
 pytest_plugins = ["tests.test_workspace"]
+pytestmark = [pytest.mark.integration, pytest.mark.skipif(not DATABASE_URL, reason="dedicated DB")]
 
 
 def body(note, **changes):
@@ -56,6 +58,7 @@ async def test_dify_identity_context_version_selection_and_owner(journey, monkey
         )
 
     monkeypatch.setattr(dify, "transport", httpx.MockTransport(transport))
+    monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "dify_api_key", "fixture-only")
     monkeypatch.setattr(settings, "dify_base_url", "https://dify.invalid/v1")
     for changes, status in [
@@ -98,6 +101,7 @@ async def test_dify_failure_does_not_break_notes(journey, monkeypatch):
 
     a, b, db, note = journey
     await register(a)
+    monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "dify_api_key", "")
     assert (await a.post("/api/ai/chat", json=body(note))).status_code == 503
     monkeypatch.setattr(settings, "dify_api_key", "fixture-only")
@@ -125,6 +129,7 @@ async def test_dify_interrupted_stream_and_cancel_stop_owned_task(journey, monke
 
     a, b, db, note = journey
     identity, _ = await register(a)
+    monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "dify_api_key", "fixture-only")
     upstream, task = str(uuid4()), str(uuid4())
     stops = []
@@ -169,6 +174,7 @@ async def test_dify_rejects_spoofed_identity_ambiguous_selection_and_upstream_er
     a, b, db, note = journey
     await register(a)
     await register(b)
+    monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "dify_api_key", "fixture-only")
     observed = []
 
@@ -208,6 +214,7 @@ async def test_disconnect_cleanup_survives_cancelled_request_scope(journey, monk
 
     a, b, db, note = journey
     identity, _ = await register(a)
+    monkeypatch.setattr(settings, "ai_enabled", True)
     monkeypatch.setattr(settings, "dify_api_key", "fixture-only")
     task, upstream = str(uuid4()), str(uuid4())
     stopped = []

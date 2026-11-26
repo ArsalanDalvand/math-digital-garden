@@ -91,7 +91,9 @@ def validate_git_url(url: str) -> None:
     if not hostname:
         raise HTTPException(400, "نشانی مخزن واردشده نامعتبر است.")
 
-    if hostname in ("localhost", "localhost.localdomain") or hostname.endswith((".local", ".internal", ".localhost")):
+    if hostname in ("localhost", "localhost.localdomain") or hostname.endswith(
+        (".local", ".internal", ".localhost")
+    ):
         raise HTTPException(
             400,
             f"دسترسی به آدرس‌های شبکه داخلی ({hostname}) به دلایل امنیتی مجاز نیست.",
@@ -125,39 +127,79 @@ def validate_git_url(url: str) -> None:
             raise HTTPException(400, "دامنهٔ آدرس مخزن قابل دسترسی یا تحلیل DNS نیست.") from None
 
 
+def validate_git_branch(branch: str) -> str:
+    """Reject git option injection and invalid ref names."""
+    cleaned = branch.strip()
+    if (
+        not cleaned
+        or len(cleaned) > 255
+        or cleaned.startswith("-")
+        or cleaned.startswith("/")
+        or cleaned.endswith("/")
+        or cleaned.endswith(".")
+        or cleaned.endswith(".lock")
+        or ".." in cleaned
+        or "@{" in cleaned
+        or any(ord(ch) < 32 or ord(ch) == 127 or ch.isspace() for ch in cleaned)
+        or any(ch in cleaned for ch in "~^:?*[\\")
+    ):
+        raise HTTPException(400, "نام شاخهٔ گیت نامعتبر است.")
+    return cleaned
+
+
 def clone_git_repo(repo_url: str, branch: str = "main", target_dir: str = "") -> str:
     """Clone a git repository with depth 1 and return the latest commit SHA."""
+    safe_branch = validate_git_branch(branch)
+    safe_url = repo_url.strip()
+    if safe_url.startswith("-") or not safe_url.startswith(("http://", "https://")):
+        raise HTTPException(400, "نشانی مخزن واردشده نامعتبر است.")
+
     env = {
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_SSH_COMMAND": "ssh -o BatchMode=yes",
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": os.environ.get("HOME") or os.path.expanduser("~"),
     }
-    for key in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"):
+    for key in (
+        "HTTP_PROXY",
+        "http_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "NO_PROXY",
+        "no_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ):
         if os.environ.get(key):
             env[key] = os.environ[key]
+    git_opts = ["-c", "core.hooksPath=/dev/null", "-c", "core.symlinks=false"]
     # First attempt: clone the specified branch
     clone_cmd = [
         "git",
+        *git_opts,
         "clone",
         "--depth",
         "1",
         "--single-branch",
         "-b",
-        branch,
-        repo_url,
+        safe_branch,
+        "--",
+        safe_url,
         target_dir,
     ]
     res = subprocess.run(clone_cmd, env=env, capture_output=True, text=True, timeout=CLONE_TIMEOUT)
     if res.returncode != 0:
+        shutil.rmtree(target_dir, ignore_errors=True)
         # Fallback: clone without branch specification (use remote HEAD default branch)
         fallback_cmd = [
             "git",
+            *git_opts,
             "clone",
             "--depth",
             "1",
             "--single-branch",
-            repo_url,
+            "--",
+            safe_url,
             target_dir,
         ]
         res_fb = subprocess.run(
@@ -165,13 +207,21 @@ def clone_git_repo(repo_url: str, branch: str = "main", target_dir: str = "") ->
         )
         if res_fb.returncode != 0:
             err = res_fb.stderr.strip() or res.stderr.strip() or "خطا در دریافت مخزن"
-            logger.warning("Git clone failed for %s: %s", repo_url, err)
+            logger.warning("Git clone failed for %s: %s", safe_url, err)
             raise HTTPException(
                 400, f"کلون مخزن با خطا مواجه شد: {err[-200:]}"
             )
 
     # Get commit SHA
-    sha_cmd = ["git", "-C", target_dir, "rev-parse", "HEAD"]
+    sha_cmd = [
+        "git",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-C",
+        target_dir,
+        "rev-parse",
+        "HEAD",
+    ]
     res_sha = subprocess.run(sha_cmd, env=env, capture_output=True, text=True, timeout=10)
     commit_sha = res_sha.stdout.strip()
     return commit_sha or "HEAD"
