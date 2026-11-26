@@ -1,80 +1,183 @@
 ---
-import { buildKnowledge, noteHref } from '../lib/markdown.mjs';
-interface Props { garden: Awaited<ReturnType<typeof buildKnowledge>>; slugs: string[] }
-const { garden, slugs } = Astro.props;
-const destinations = garden.filter(note => slugs.includes(note.slug));
+interface Props {
+  slugs?: string[];
+  garden?: unknown[];
+}
 ---
-{destinations.map(note => <template data-preview-slug={note.slug} data-preview-title={note.title}>
-  <header><a href={noteHref(note.slug)}>{note.title}</a><button type="button" data-close-preview aria-label="بستن پیش‌نمایش">بستن</button></header>
-  <article class="note" set:html={note.previewHtml} />
-  <a href={noteHref(note.slug)}>مطالعهٔ کامل یادداشت</a>
-</template>)}
 <div id="inline-note-preview" class="inline-note-preview" popover="auto" role="dialog" aria-modal="false" aria-label="پیش‌نمایش یادداشت" dir="rtl"></div>
 <script>
+  type PreviewPayload = { slug: string; title: string; href: string; html: string };
   const popup = document.querySelector<HTMLElement>('#inline-note-preview');
   if (popup && typeof popup.showPopover === 'function') {
-    const templates = new Map([...document.querySelectorAll<HTMLTemplateElement>('template[data-preview-slug]')].map(template => [template.dataset.previewSlug, template]));
+    const templates = new Map(
+      [...document.querySelectorAll<HTMLTemplateElement>('template[data-preview-slug]')].map((template) => [
+        template.dataset.previewSlug,
+        template,
+      ])
+    );
+    const previewCache = new Map<string, PreviewPayload>();
+    const pending = new Map<string, Promise<PreviewPayload>>();
     let activeLink: HTMLAnchorElement | undefined;
     let activeButton: HTMLButtonElement | undefined;
     let returnFocus: HTMLElement | undefined;
     let closing = false;
+    let openSeq = 0;
     let timer: ReturnType<typeof setTimeout>;
+
     const position = () => {
       if (!activeLink || !popup.matches(':popover-open')) return;
       const anchor = activeLink.getBoundingClientRect();
       const box = popup.getBoundingClientRect();
-      popup.style.left = `${Math.max(8,Math.min(anchor.right-box.width, innerWidth-box.width-8))}px`;
-      popup.style.top = `${Math.max(8,Math.min(anchor.bottom, innerHeight-box.height-8))}px`;
+      popup.style.left = `${Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))}px`;
+      popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
     };
+
     const close = (restore = false) => {
       clearTimeout(timer);
+      openSeq++;
       closing = true;
       popup.hidePopover();
-      activeButton?.setAttribute('aria-expanded','false');
+      activeButton?.setAttribute('aria-expanded', 'false');
       if (restore) returnFocus?.focus();
       closing = false;
     };
+
     const scheduleClose = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        if (!popup.matches(':hover') && !popup.contains(document.activeElement) && document.activeElement !== activeLink && document.activeElement !== activeButton) close();
+        if (
+          !popup.matches(':hover') &&
+          !popup.contains(document.activeElement) &&
+          document.activeElement !== activeLink &&
+          document.activeElement !== activeButton
+        ) {
+          close();
+        }
       }, 180);
     };
-    const open = (link: HTMLAnchorElement, button: HTMLButtonElement, explicit = false) => {
-      if (closing) return;
-      clearTimeout(timer);
-      const template = templates.get(link.dataset.notePreview);
-      if (!template) return;
-      activeButton?.setAttribute('aria-expanded','false');
+
+    const fetchPreview = async (slug: string): Promise<PreviewPayload> => {
+      const cached = previewCache.get(slug);
+      if (cached) return cached;
+      const existing = pending.get(slug);
+      if (existing) return existing;
+      const promise = (async () => {
+        const res = await fetch(`/api/note-preview/${encodeURIComponent(slug)}`, {
+          credentials: 'same-origin',
+        });
+        if (!res.ok) throw new Error('Preview unavailable');
+        const data = (await res.json()) as PreviewPayload;
+        previewCache.set(slug, data);
+        return data;
+      })();
+      pending.set(slug, promise);
+      try {
+        return await promise;
+      } finally {
+        if (pending.get(slug) === promise) pending.delete(slug);
+      }
+    };
+
+    const renderFragment = (title: string, href: string, html: string) => {
+      const frag = document.createDocumentFragment();
+      const header = document.createElement('header');
+      const titleLink = document.createElement('a');
+      titleLink.href = href;
+      titleLink.textContent = title;
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('data-close-preview', '');
+      closeBtn.setAttribute('aria-label', 'بستن پیش‌نمایش');
+      closeBtn.textContent = 'بستن';
+      header.append(titleLink, closeBtn);
+
+      const article = document.createElement('article');
+      article.className = 'note';
+      article.innerHTML = html;
+
+      const fullLink = document.createElement('a');
+      fullLink.href = href;
+      fullLink.textContent = 'مطالعهٔ کامل یادداشت';
+
+      frag.append(header, article, fullLink);
+      return frag;
+    };
+
+    const mountPopover = (link: HTMLAnchorElement, button: HTMLButtonElement, title: string, node: DocumentFragment, explicit: boolean) => {
+      activeButton?.setAttribute('aria-expanded', 'false');
       activeLink = link;
       activeButton = button;
       returnFocus = explicit ? button : link;
-      popup.replaceChildren(template.content.cloneNode(true));
-      popup.querySelectorAll<HTMLElement>('pre[aria-label]').forEach(code=>code.setAttribute('aria-label', `پیش‌نمایش ${template.dataset.previewTitle}: ${code.getAttribute('aria-label')}`));
-      popup.setAttribute('aria-label', `پیش‌نمایش ${template.dataset.previewTitle}`);
+      popup.replaceChildren(node);
+      popup.querySelectorAll<HTMLElement>('pre[aria-label]').forEach((code) =>
+        code.setAttribute('aria-label', `پیش‌نمایش ${title}: ${code.getAttribute('aria-label')}`)
+      );
+      popup.setAttribute('aria-label', `پیش‌نمایش ${title}`);
       popup.showPopover();
-      button.setAttribute('aria-expanded','true');
+      button.setAttribute('aria-expanded', 'true');
       position();
-      popup.querySelector<HTMLButtonElement>('[data-close-preview]')?.addEventListener('click',() => close(true));
+      popup.querySelector<HTMLButtonElement>('[data-close-preview]')?.addEventListener('click', () => close(true));
       if (explicit) popup.querySelector<HTMLButtonElement>('[data-close-preview]')?.focus();
     };
-    for (const link of document.querySelectorAll<HTMLAnchorElement>('article.note a[data-note-preview]')) {
-      const template = templates.get(link.dataset.notePreview);
-      if (!template) continue;
-      const button = link as unknown as HTMLButtonElement;
-      link.addEventListener('pointerenter',event => {if(event.pointerType==='mouse'){clearTimeout(timer);timer=setTimeout(()=>open(link,button),650);}});
-      link.addEventListener('keydown',event=>{if(event.altKey&&event.key==='ArrowDown'){event.preventDefault();open(link,button,true);}});
-      link.addEventListener('pointerleave',scheduleClose);
-      link.addEventListener('blur',scheduleClose);
 
-      button.addEventListener('blur',scheduleClose);
+    const open = (link: HTMLAnchorElement, button: HTMLButtonElement, explicit = false) => {
+      if (closing) return;
+      clearTimeout(timer);
+      const slug = link.dataset.notePreview;
+      if (!slug) return;
+      const seq = ++openSeq;
+
+      const template = templates.get(slug);
+      if (template) {
+        mountPopover(link, button, template.dataset.previewTitle || slug, template.content.cloneNode(true) as DocumentFragment, explicit);
+        return;
+      }
+
+      const cached = previewCache.get(slug);
+      if (cached) {
+        mountPopover(link, button, cached.title, renderFragment(cached.title, cached.href, cached.html), explicit);
+        return;
+      }
+
+      void fetchPreview(slug)
+        .then((data) => {
+          if (seq !== openSeq || closing || !link.isConnected) return;
+          if (!explicit && !link.matches(':hover') && document.activeElement !== link) return;
+          mountPopover(link, button, data.title, renderFragment(data.title, data.href, data.html), explicit);
+        })
+        .catch(() => {});
+    };
+
+    for (const link of document.querySelectorAll<HTMLAnchorElement>('article.note a[data-note-preview]')) {
+      const slug = link.dataset.notePreview;
+      if (!slug) continue;
+      const button = link as unknown as HTMLButtonElement;
+      link.addEventListener('pointerenter', (event) => {
+        if (event.pointerType === 'mouse') {
+          clearTimeout(timer);
+          timer = setTimeout(() => open(link, button), 650);
+        }
+      });
+      link.addEventListener('keydown', (event) => {
+        if (event.altKey && event.key === 'ArrowDown') {
+          event.preventDefault();
+          open(link, button, true);
+        }
+      });
+      link.addEventListener('pointerleave', scheduleClose);
+      link.addEventListener('blur', scheduleClose);
+      button.addEventListener('blur', scheduleClose);
     }
-    popup.addEventListener('pointerenter',() => clearTimeout(timer));
-    popup.addEventListener('pointerleave',scheduleClose);
-    popup.addEventListener('focusout',scheduleClose);
-    document.addEventListener('keydown',event => { if (event.key === 'Escape' && popup.matches(':popover-open')) close(popup.contains(document.activeElement)); });
-    popup.addEventListener('toggle',() => { if (!popup.matches(':popover-open')) activeButton?.setAttribute('aria-expanded','false'); });
-    window.addEventListener('resize',position);
-    window.addEventListener('scroll',position,true);
+    popup.addEventListener('pointerenter', () => clearTimeout(timer));
+    popup.addEventListener('pointerleave', scheduleClose);
+    popup.addEventListener('focusout', scheduleClose);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && popup.matches(':popover-open')) close(popup.contains(document.activeElement));
+    });
+    popup.addEventListener('toggle', () => {
+      if (!popup.matches(':popover-open')) activeButton?.setAttribute('aria-expanded', 'false');
+    });
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
   }
 </script>

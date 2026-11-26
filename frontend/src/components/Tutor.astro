@@ -1,6 +1,7 @@
 ---
 import StudyAssistant from './StudyAssistant';
-interface Props {slug:string}
-const {slug}=Astro.props;
+interface Props { slug: string }
+const { slug } = Astro.props;
+const aiEnabled = (import.meta.env.PUBLIC_AI_ENABLED || process.env.PUBLIC_AI_ENABLED) === 'true';
 ---
-<StudyAssistant slug={slug} client:load />
+{aiEnabled && <StudyAssistant slug={slug} client:load />}

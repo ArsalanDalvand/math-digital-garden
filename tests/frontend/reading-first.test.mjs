@@ -14,7 +14,10 @@ test('personal actions are visible and assistant uses an immediately loaded runt
   assert.match(workspace,/class="workspace-toolbar"/);
   assert.doesNotMatch(workspace,/<details[^>]*data-od-id="personal-tools"/);
   assert.match(workspace,/role="status"[^>]*data-save-status/);
-  assert.match(read('components/Tutor.astro'),/<StudyAssistant[^>]*client:load/);
+  const tutor = read('components/Tutor.astro');
+  assert.match(tutor,/PUBLIC_AI_ENABLED/);
+  assert.match(tutor,/aiEnabled && <StudyAssistant[^>]*client:load/);
+  assert.doesNotMatch(read('pages/notes/[slug].astro'),/<Tutor\b/);
 });
 test('shared reader styles bind neutral tokens, touch sizes and dark mode', () => {
   const css = read('styles/custom.css');

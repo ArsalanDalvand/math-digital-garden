@@ -2,15 +2,24 @@
 import { noteHref } from '../lib/markdown.mjs';
 import { UMKO_RELATIONS } from '../lib/umko.mjs';
 
-type Note = Awaited<ReturnType<typeof import('../lib/markdown.mjs').buildKnowledge>>[number];
+type Note = {
+  slug: string;
+  title: string;
+  kind?: string;
+  resolvedRelations?: Record<string, string[]>;
+  reverseRelations?: Record<string, string[]>;
+};
 
 interface Props {
   note: Note;
-  garden: Note[];
+  garden?: Note[];
+  bySlug?: Map<string, Note>;
 }
 
-const { note, garden } = Astro.props;
+const { note, garden = [], bySlug } = Astro.props;
 if (!note) return;
+const resolveNote = (s: string) => bySlug?.get(s) ?? garden.find(n => n.slug === s);
+const relationsMap: Record<string, { forward?: string; reverse?: string; icon?: string }> = UMKO_RELATIONS;
 
 const forward = Object.entries(note.resolvedRelations || {}).filter(([_, slugs]) => slugs.length > 0);
 const reverse = Object.entries(note.reverseRelations || {}).filter(([_, slugs]) => slugs.length > 0);
@@ -22,8 +31,8 @@ const hasRelations = forward.length > 0 || reverse.length > 0;
     <h3 class="semantic-header">شبکهٔ مفهومی و روابط ساختاری (UMKO v1.1)</h3>
     <div class="semantic-groups">
       {forward.map(([relKey, slugs]) => {
-        const info = UMKO_RELATIONS[relKey] || { forward: relKey, icon: '🔗' };
-        const relNotes = slugs.map(s => garden.find(n => n.slug === s)).filter(Boolean);
+        const info = relationsMap[relKey] || { forward: relKey, icon: '🔗' };
+        const relNotes = slugs.map(resolveNote).filter(Boolean);
         return (
           <div class="semantic-group">
             <h4 class="semantic-group-title">
@@ -46,8 +55,8 @@ const hasRelations = forward.length > 0 || reverse.length > 0;
       })}
 
       {reverse.map(([relKey, slugs]) => {
-        const info = UMKO_RELATIONS[relKey] || { reverse: relKey, icon: '🔗' };
-        const relNotes = slugs.map(s => garden.find(n => n.slug === s)).filter(Boolean);
+        const info = relationsMap[relKey] || { reverse: relKey, icon: '🔗' };
+        const relNotes = slugs.map(resolveNote).filter(Boolean);
         return (
           <div class="semantic-group semantic-group-reverse">
             <h4 class="semantic-group-title">

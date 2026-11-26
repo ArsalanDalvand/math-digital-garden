@@ -20,6 +20,10 @@ Object.assign(manifest, {
     ['src/pages/review.astro', () => import(new URL('pages/review.astro.mjs', server))],
     ['src/pages/api/[...path].ts', () => import(new URL('pages/api/_---path_.astro.mjs', server))],
     ['src/pages/api/preview.ts', () => import(new URL('pages/api/preview.astro.mjs', server))],
+    ['src/pages/api/graph.json.ts', () => import(new URL('pages/api/graph.json.astro.mjs', server))],
+    ['src/pages/api/link-index.json.ts', () => import(new URL('pages/api/link-index.json.astro.mjs', server))],
+    ['src/pages/api/note-preview/[slug].ts', () => import(new URL('pages/api/note-preview/_slug_.astro.mjs', server))],
+    ['src/pages/api/library-tree.ts', () => import(new URL('pages/api/library-tree.astro.mjs', server))],
     ['src/pages/search.astro', () => import(new URL('pages/search.astro.mjs', server))],
   ]),
   serverIslandMap: new Map(),
@@ -34,8 +38,12 @@ test.afterEach(() => { globalThis.fetch = originalFetch; });
 
 test('Database note renders through the built SSR route', async () => {
   globalThis.fetch = async (url) => {
-    if (String(url).includes('?')) return Response.json([{slug:'cantor', title:'کانتور', current_content:raw}]);
-    assert.match(String(url), /\/api\/notes\/cantor$/);
+    const sUrl = String(url);
+    if (sUrl.endsWith('/api/catalogue/meta')) {
+      return Response.json([{ slug: 'cantor', title: 'کانتور', current_hash: 'h-cantor' }]);
+    }
+    if (sUrl.includes('?')) return Response.json([{slug:'cantor', title:'کانتور', current_content:raw}]);
+    assert.match(sUrl, /\/api\/notes\/cantor$/);
     return Response.json({ title: '</title><img onerror=alert(1)>', current_content: raw });
   };
   const response = await app.render(new Request('http://test/notes/cantor'));
@@ -89,26 +97,96 @@ test('SSR renders aliases, backlinks, tags, TOC and safe destination previews',a
   const html=await response.text();
   assert.match(html,/href="\/notes\/two"/);
   assert.match(html,/پیش‌نمایش مقصد/);
-  assert.match(html,/katex/);
-  assert.match(html,/href="#بخش-اول"/);
-  assert.match(html,/name="q"/);
-  assert.match(html,/starlight-theme-select/);
+  assert.match(html,/id="بخش-اول"/);
+  assert.match(html,/class="note-outline"/);
+  assert.match(html,/href="\/search"/);
+  assert.match(html,/data-theme-toggle/);
   assert.doesNotMatch(html,/<script>alert/);
 });
 
-test('SSR publishes the ready-made graph and inert safe inline-preview templates',async()=>{
-  const source={slug:'one',title:'مبدأ',current_content:'[[مقصد]]'};
-  const target={slug:'two',title:'مقصد',current_content:'## تعریف\n$x^2$ <img src=x onerror=alert(1)>'};
-  globalThis.fetch=async(url)=>Response.json(String(url).includes('?') ? [source,target] : source);
+test('SSR publishes lightweight note HTML with on-demand graph and preview APIs',async()=>{
+  const source={slug:'one',title:'مبدأ',current_content:'[[مقصد]]',current_hash:'h-one'};
+  const target={slug:'two',title:'مقصد',current_content:'## تعریف\n$x^2$ <img src=x onerror=alert(1)>',current_hash:'h-two'};
+  globalThis.fetch=async(url)=>{
+    const s=String(url);
+    if(s.endsWith('/api/catalogue/meta')) return Response.json([
+      {slug:'one',title:'مبدأ',current_hash:'h-one',book_slug:'math',chapter_slug:'sets',relative_path:'math/sets/one.md'},
+      {slug:'two',title:'مقصد',current_hash:'h-two',book_slug:'math',chapter_slug:'sets',relative_path:'math/sets/two.md'},
+    ]);
+    if(s.includes('?')) return Response.json([source,target]);
+    if(s.endsWith('/api/notes/one')) return Response.json(source);
+    return Response.json(target);
+  };
   const response=await app.render(new Request('http://test/notes/one'));
   const html=await response.text();
   assert.equal(response.status,200);
-  assert.match(html, /<graph-component[^>]*data-sitemap=/);
+  assert.match(html, /<graph-component[^>]*data-graph-url="\/api\/graph\.json"/);
+  assert.doesNotMatch(html, /data-sitemap=/);
   assert.match(html, /data-note-preview="two"/);
-  assert.match(html, /<template[^>]*data-preview-slug="two"/);
+  assert.doesNotMatch(html, /<template[^>]*data-preview-slug=/);
+  assert.doesNotMatch(html, /data-note-link-index/);
+  assert.doesNotMatch(html, /data-chat-form/);
   assert.match(html, /popover="auto"/);
   assert.match(html, /role="dialog"/);
   assert.doesNotMatch(html, /<img src=x onerror/);
+
+  // GET /api/graph.json + ETag / 304
+  const graphRes = await app.render(new Request('http://test/api/graph.json'));
+  assert.equal(graphRes.status, 200);
+  const graphEtag = graphRes.headers.get('etag');
+  assert.ok(graphEtag);
+  const graphData = await graphRes.json();
+  assert.equal(graphData['notes/one'].title, 'مبدأ');
+  assert.deepEqual(graphData['notes/one'].links, ['notes/two']);
+  const graph304 = await app.render(new Request('http://test/api/graph.json', { headers: { 'If-None-Match': graphEtag } }));
+  assert.equal(graph304.status, 304);
+
+  // GET /api/note-preview/[slug] + ref + sanitization + 404
+  const prevRes = await app.render(new Request('http://test/api/note-preview/two'));
+  assert.equal(prevRes.status, 200);
+  assert.ok(prevRes.headers.get('etag'));
+  const prevJson = await prevRes.json();
+  assert.equal(prevJson.slug, 'two');
+  assert.match(prevJson.html, /katex/);
+  assert.doesNotMatch(prevJson.html, /<img src=x onerror/);
+  const prevRef = await app.render(new Request('http://test/api/note-preview/one?ref=two'));
+  assert.equal(prevRef.status, 200);
+  assert.match((await prevRef.json()).html, /href="\/notes\/two"/);
+  assert.equal((await app.render(new Request('http://test/api/note-preview/missing'))).status, 404);
+  assert.equal((await app.render(new Request('http://test/api/note-preview/bad%20slug'))).status, 404);
+
+  // GET /api/link-index.json + ETag / 304
+  const linkRes = await app.render(new Request('http://test/api/link-index.json'));
+  assert.equal(linkRes.status, 200);
+  const linkEtag = linkRes.headers.get('etag');
+  assert.ok(linkEtag);
+  const links = await linkRes.json();
+  assert.equal(links.length, 2);
+  assert.equal((await app.render(new Request('http://test/api/link-index.json', { headers: { 'If-None-Match': linkEtag } }))).status, 304);
+});
+
+test('GET /api/library-tree uses lightweight metadata without fetching note bodies and supports ETag/304', async () => {
+  const fetchedUrls = [];
+  globalThis.fetch = async (url) => {
+    const s = String(url);
+    fetchedUrls.push(s);
+    if (s.endsWith('/api/catalogue/meta')) {
+      return Response.json(
+        [{ slug: 'alg-1', title: 'گروه', book_slug: 'alg', chapter_slug: 'ch1', relative_path: 'alg/ch1/group.md', current_hash: 'h1' }],
+        { headers: { ETag: 'W/"meta-1"' } }
+      );
+    }
+    throw new Error(`Unexpected full-body fetch: ${s}`);
+  };
+  const res = await app.render(new Request('http://test/api/library-tree'));
+  assert.equal(res.status, 200);
+  const etag = res.headers.get('etag');
+  assert.ok(etag);
+  const tree = await res.json();
+  assert.equal(tree[0].label, 'alg');
+  assert.ok(fetchedUrls.every((u) => u.endsWith('/api/catalogue/meta')));
+  const res304 = await app.render(new Request('http://test/api/library-tree', { headers: { 'If-None-Match': etag } }));
+  assert.equal(res304.status, 304);
 });
 
 
@@ -150,13 +228,13 @@ test('Account, workspace and review are available without exposing private SSR d
   }
 });
 
-test('Reader exposes editor, formula input and citation chat controls',async()=>{
+test('Reader exposes editor and formula input controls while AI tutor stays gated',async()=>{
   globalThis.fetch=async(url)=>Response.json(String(url).includes('?') ? [{slug:'cantor',title:'کانتور',current_content:raw}] : {slug:'cantor',title:'کانتور',current_content:raw});
   const response=await app.render(new Request('http://test/notes/cantor'));
   const html=await response.text();
   assert.match(html,/data-workspace-note="cantor"/);
-  assert.match(html,/ویرایش نسخهٔ شخصی/);
-  assert.match(html,/data-chat-form/);
+  assert.match(html,/data-edit[^>]*>نوشتن/);
+  assert.doesNotMatch(html,/data-chat-form/);
 });
 
 test('Node adapter retains the configured local Host for CSRF and ignores untrusted hosts',async()=>{

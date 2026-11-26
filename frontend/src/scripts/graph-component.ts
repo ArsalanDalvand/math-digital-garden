@@ -764,9 +764,50 @@ function pointToSegmentDistSq(px: number, py: number, ax: number, ay: number, bx
   return (px - projX) ** 2 + (py - projY) ** 2;
 }
 
+const graphSitemapCache = new Map<
+  string,
+  { promise: Promise<Record<string, SitemapEntry>>; data?: Record<string, SitemapEntry>; fetch: typeof globalThis.fetch }
+>();
+
+export function resetGraphSitemapCache() {
+  graphSitemapCache.clear();
+}
+
+export async function fetchGraphSitemap(url: string): Promise<Record<string, SitemapEntry>> {
+  const currentFetch = globalThis.fetch;
+  const existing = graphSitemapCache.get(url);
+  if (existing && existing.fetch === currentFetch) {
+    if (existing.data) return existing.data;
+    return existing.promise;
+  }
+  const promise = currentFetch(url, { credentials: 'same-origin' })
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Graph sitemap fetch failed: ${response.status}`);
+      }
+      const data = (await response.json()) as Record<string, SitemapEntry>;
+      const entry = graphSitemapCache.get(url);
+      if (entry?.promise === promise) {
+        entry.data = data;
+      }
+      return data;
+    });
+  graphSitemapCache.set(url, { promise, fetch: currentFetch });
+  try {
+    return await promise;
+  } catch (error) {
+    const entry = graphSitemapCache.get(url);
+    if (entry?.promise === promise) {
+      graphSitemapCache.delete(url);
+    }
+    throw error;
+  }
+}
+
 export class GraphComponent extends HTMLElement {
   config!: GraphConfig;
   sitemap: Record<string, SitemapEntry> = {};
+  graphUrl = '';
   currentPage = '';
   isFullscreen = false;
 
@@ -858,6 +899,7 @@ export class GraphComponent extends HTMLElement {
     } catch {
       this.sitemap = {};
     }
+    this.graphUrl = this.dataset.graphUrl || '/api/graph.json';
     this.currentPage = (this.dataset.slug || location.pathname.replace(/^\/+/, '')).replace(/\/+$/, '');
   }
 
@@ -876,7 +918,6 @@ export class GraphComponent extends HTMLElement {
     }
 
     this.classList.add('slsg-graph-component');
-    this.dataset.graphReady = 'true';
     this.style.visibility = 'visible';
     this.style.opacity = '1';
 
@@ -1004,7 +1045,27 @@ export class GraphComponent extends HTMLElement {
 
     this.setupInteractions();
     this.setupObservers();
-    this.buildSubgraph(this.config.depth);
+    if (Object.keys(this.sitemap).length > 0) {
+      this.buildSubgraph(this.config.depth);
+      this.dataset.graphReady = 'true';
+    } else if (this.graphUrl) {
+      this.dataset.graphReady = 'loading';
+      void fetchGraphSitemap(this.graphUrl)
+        .then(data => {
+          if (!this.isConnected || !this.mounted) return;
+          this.sitemap = data;
+          this.buildSubgraph(this.config.depth);
+          this.dataset.graphReady = 'true';
+        })
+        .catch(() => {
+          if (this.isConnected && this.mounted) {
+            this.dataset.graphReady = 'error';
+          }
+        });
+    } else {
+      this.buildSubgraph(this.config.depth);
+      this.dataset.graphReady = 'true';
+    }
   }
 
   disconnectedCallback() {

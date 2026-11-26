@@ -1115,6 +1115,6 @@ test('7. SemanticConnections Component Markup Generation', async (t) => {
     assert.match(notePageSource, /import NoteProperties from '\.\.\/\.\.\/components\/NoteProperties\.astro'/);
     assert.match(notePageSource, /import SemanticConnections from '\.\.\/\.\.\/components\/SemanticConnections\.astro'/);
     assert.match(notePageSource, /<NoteProperties note=\{current\} \/>/);
-    assert.match(notePageSource, /<SemanticConnections note=\{current\} garden=\{garden\} \/>/);
+    assert.match(notePageSource, /<SemanticConnections note=\{current\} bySlug=\{bySlug\} \/>/);
   });
 });

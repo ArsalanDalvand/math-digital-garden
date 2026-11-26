@@ -55,6 +55,7 @@ export function buildNoteLinkResolver(notes, baseUrl, currentNotePath = '') {
     if (!map.has(collapsed)) map.set(collapsed, id);
   }
 
+  /** @param {string} target */
   return function resolveLink(target) {
     if (!target) return null;
     const trimmed = target.trim();
