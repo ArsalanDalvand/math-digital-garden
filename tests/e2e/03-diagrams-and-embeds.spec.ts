@@ -5,16 +5,18 @@ test.describe('Diagrams, KaTeX embeds, and interactive visuals', () => {
     const response = await page.goto('/sample');
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('article.note')).toBeVisible();
-    await expect(page.locator('article.note .katex').first()).toBeVisible();
+    const sampleArticle = page.locator('article.note:not([data-presentation-stage])');
+    await expect(sampleArticle).toBeVisible();
+    await expect(sampleArticle.locator('.katex').first()).toBeVisible();
   });
 
   test('canonical geometric visualizations note renders cleanly', async ({ page }) => {
     const response = await page.goto('/notes/axler-a354fd365fa3e3ed');
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('article.note')).toBeVisible();
-    const heading = page.locator('article.note h1, main h1').first();
+    const article = page.locator('article.note[data-ai-scope="canonical"]');
+    await expect(article).toBeVisible();
+    const heading = article.locator('h1').or(page.locator('main h1')).first();
     await expect(heading).toBeVisible();
   });
 });

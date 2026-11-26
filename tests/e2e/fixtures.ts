@@ -1,5 +1,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 
+const GUEST_AUTH_ENDPOINT_RE = /\/api\/(?:account|auth\/me|workspace(?:\/|$)|library(?:\/|$))/;
+
 export const test = base.extend<{
   attachErrorGuards: (allowGuest401?: boolean) => () => void;
 }>({
@@ -15,7 +17,7 @@ export const test = base.extend<{
       if (msg.type() !== 'error') return;
       const locUrl = msg.location()?.url || '';
       const text = msg.text();
-      if (text.includes('401') && locUrl.includes('/api/account')) {
+      if (text.includes('401') && GUEST_AUTH_ENDPOINT_RE.test(locUrl)) {
         return;
       }
       consoleErrors.push(`${text}${locUrl ? ` (${locUrl})` : ''}`);

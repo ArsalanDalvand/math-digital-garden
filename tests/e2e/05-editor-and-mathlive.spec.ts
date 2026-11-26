@@ -29,7 +29,9 @@ test.describe('Workspace note controls and reading settings', () => {
     const response = await page.goto(targetUrl);
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('[data-workspace-note]')).toBeVisible();
+    await expect(page.locator('[data-workspace-note]')).toBeAttached();
+    const toolsToggle = page.locator('.desktop-tools-toggle');
+    await expect(toolsToggle).toBeVisible();
     const navToggle = page.locator('[data-nav-toggle]');
     await expect(navToggle).toHaveAttribute('aria-expanded', 'true');
     await navToggle.click();

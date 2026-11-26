@@ -26,8 +26,9 @@ test.describe('Reading experience, KaTeX BiDi, and theming', () => {
     const response = await page.goto(targetSlug);
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('article.note')).toBeVisible();
-    const katex = page.locator('article.note .katex').first();
+    const article = page.locator('article.note[data-ai-scope="canonical"]');
+    await expect(article).toBeVisible();
+    const katex = article.locator('.katex').first();
     await expect(katex).toBeVisible();
 
     const direction = await katex.evaluate((el) => getComputedStyle(el).direction);
@@ -35,7 +36,7 @@ test.describe('Reading experience, KaTeX BiDi, and theming', () => {
     await assertNoHorizontalOverflow(page);
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('article.note')).toBeVisible();
+    await expect(article).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 });

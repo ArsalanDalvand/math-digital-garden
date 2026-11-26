@@ -18,6 +18,6 @@ test.describe('Search and catalogue navigation', () => {
     await noteLink.click();
 
     await page.waitForURL(/\/notes\//);
-    await expect(page.locator('article.note')).toBeVisible();
+    await expect(page.locator('article.note[data-ai-scope="canonical"]')).toBeVisible();
   });
 });
