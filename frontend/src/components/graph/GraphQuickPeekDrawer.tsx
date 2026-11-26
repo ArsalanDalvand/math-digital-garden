@@ -105,6 +105,8 @@ export function GraphQuickPeekDrawer({
   const accent = isDark ? node.darkColor : node.lightColor;
   const noteHref = `/${node.id}`;
   const hasConnections = connections.outgoing.length > 0 || connections.incoming.length > 0;
+  const sloganText = node.slogan || preview?.slogan || '';
+  const showSlogan = Boolean(sloganText) && (!sloganText.includes('$') || !preview?.html);
 
   return (
     <aside
@@ -138,9 +140,7 @@ export function GraphQuickPeekDrawer({
 
       <div className="kg-qp-title-block">
         <h3 className="kg-qp-title">{node.title}</h3>
-        {(node.slogan || preview?.slogan) && (
-          <p className="kg-qp-slogan">{node.slogan || preview?.slogan}</p>
-        )}
+        {showSlogan && <p className="kg-qp-slogan">{sloganText}</p>}
       </div>
 
       <div className="kg-qp-actions">
@@ -176,7 +176,7 @@ export function GraphQuickPeekDrawer({
           onClick={() => onSetPathTrace(pathTraceMode === 'impact' ? 'off' : 'impact')}
         >
           <Sparkles size={12} aria-hidden="true" />
-          <span>کاربردها و وابسته‌ها</span>
+          <span>مسیر کاربردها</span>
         </button>
       </fieldset>
 
