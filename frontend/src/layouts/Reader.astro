@@ -80,7 +80,19 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
 {tools&&<aside id="workspace-study-tools" class="workspace-tools" aria-label="ابزارهای مطالعه"><slot name="tools"/></aside>}
 </div><Excalidraw/><Mermaid/><CanvasViewer/><Presentation/><CommandPalette client:load/>
 <script>
- document.querySelectorAll<HTMLButtonElement>('[data-command-trigger]').forEach((btn)=>btn.addEventListener('click',()=>document.dispatchEvent(new CustomEvent('garden:open-command-palette'))));
+ const openCmdk = () => {
+  if (document.documentElement.dataset.cmdkReady !== 'true') {
+   (window as { __gardenOpenCmdkQueued?: boolean }).__gardenOpenCmdkQueued = true;
+  }
+  document.dispatchEvent(new CustomEvent('garden:open-command-palette'));
+ };
+ document.querySelectorAll<HTMLButtonElement>('[data-command-trigger]').forEach((btn)=>btn.addEventListener('click',openCmdk));
+ window.addEventListener('keydown',(event)=>{
+  if(document.documentElement.dataset.cmdkReady!=='true'&&(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+   event.preventDefault();
+   openCmdk();
+  }
+ });
  document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
  const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
  function updateThemeLabel(){if(themeToggle)themeToggle.setAttribute('aria-label',document.documentElement.dataset.theme==='dark'?'تغییر به پوستهٔ روشن':'تغییر به پوستهٔ تیره');}
