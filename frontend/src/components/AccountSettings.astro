@@ -1,20 +1,10 @@
 ---
-interface Props {page:'profile'|'preferences'}
-const {page}=Astro.props;
+import AccountSettingsPanel from './account/AccountSettingsPanel';
+
+interface Props {
+  page: 'profile' | 'preferences';
+}
+
+const { page } = Astro.props;
 ---
-<div class="account-settings">
-  <nav aria-label="تنظیمات حساب" class="account-settings-nav"><a href="/settings/account/profile" aria-current={page==='profile'?'page':undefined}>پروفایل من</a><a href="/settings/account/preferences" aria-current={page==='preferences'?'page':undefined}>ترجیحات من</a></nav>
-  <div class="account-settings-main">
-    <p role="status" data-settings-loading>در حال دریافت حساب…</p>
-    <div data-settings-login hidden><p>برای تغییر تنظیمات وارد حساب شوید.</p><a href="/account">ورود / ثبت‌نام</a></div>
-    <div data-settings-content hidden>
-    {page==='profile'?<>
-      <section class="account-section" aria-labelledby="avatar-heading"><h2 id="avatar-heading">تصویر پروفایل</h2><div class="garden-row"><span class="account-avatar account-avatar-large" data-avatar-fallback aria-hidden="true"></span><img data-avatar-preview class="account-avatar account-avatar-large" alt="تصویر پروفایل فعلی" width="64" height="64" hidden/><div><label for="avatar-file">انتخاب تصویر</label><input id="avatar-file" data-avatar-file type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="avatar-help"/><p id="avatar-help" class="garden-field-help">PNG، JPEG یا WebP؛ حداکثر ۵۱۲ کیلوبایت و ۵۱۲ × ۵۱۲ پیکسل.</p><button type="button" data-avatar-remove hidden>حذف تصویر</button></div></div><p data-avatar-status role="status"></p></section>
-      <form data-settings-form="profile" class="account-section"><h2>نام نمایشی</h2><div class="garden-field"><label for="profile-name">نام</label><input id="profile-name" name="full_name" autocomplete="name" required maxlength="255"/></div><div class="garden-row"><button class="garden-button-primary" type="submit">ذخیره نام</button><p role="status" data-form-status></p></div></form>
-      <form data-settings-form="email" class="account-section"><h2>تغییر ایمیل</h2><div class="garden-field"><label for="profile-email">ایمیل</label><input id="profile-email" name="email" type="email" dir="ltr" autocomplete="email" required maxlength="255"/></div><div class="garden-field"><label for="email-password">رمز عبور فعلی</label><input id="email-password" name="current_password" type="password" autocomplete="current-password" dir="ltr" required maxlength="256"/></div><div class="garden-row"><button type="submit">ذخیره ایمیل</button><p role="status" data-form-status></p></div></form>
-      <form data-settings-form="password" class="account-section"><h2>تغییر رمز عبور</h2><p class="garden-field-help">پس از تغییر رمز، نشست‌های دیگر حساب خارج می‌شوند.</p><div class="garden-field"><label for="current-password">رمز عبور فعلی</label><input id="current-password" name="current_password" type="password" autocomplete="current-password" dir="ltr" required maxlength="256"/></div><div class="garden-field"><label for="new-password">رمز عبور جدید</label><input id="new-password" name="password" type="password" autocomplete="new-password" dir="ltr" required minlength="12" maxlength="256" aria-describedby="password-help"/><p id="password-help" class="garden-field-help">۱۲ تا ۲۵۶ نویسه</p></div><div class="garden-field"><label for="confirm-password">تکرار رمز عبور جدید</label><input id="confirm-password" name="confirmation" type="password" autocomplete="new-password" dir="ltr" required minlength="12" maxlength="256"/></div><div class="garden-row"><button type="submit">ذخیره رمز عبور</button><p role="status" data-form-status></p></div></form>
-    </>:<form data-settings-form="preferences" class="account-section"><h2>ظاهر و مطالعه</h2><div class="garden-field"><label for="preference-theme">پوسته</label><select id="preference-theme" name="theme"><option value="light">روشن</option><option value="dark">تیره</option><option value="system">همگام با دستگاه</option></select></div><div class="garden-field"><label for="preference-size">اندازه متن</label><input id="preference-size" name="size" type="range" min="16" max="26"/><output for="preference-size" data-size-output></output></div><div class="garden-field"><label for="preference-leading">فاصله خطوط</label><input id="preference-leading" name="leading" type="range" min="1.5" max="2.5" step="0.1"/></div><div class="garden-field"><label for="preference-width">عرض صفحه</label><select id="preference-width" name="width"><option value="620">باریک</option><option value="760">معمولی</option><option value="960">عریض</option></select></div><label class="account-checkbox"><input name="focus" type="checkbox"/>مطالعه بدون سایدبار</label><div class="garden-field"><label for="preference-mode">حالت پیش‌فرض جزوه شخصی</label><select id="preference-mode" name="default_mode"><option value="read">مطالعه</option><option value="edit">ویرایش</option></select></div><label class="account-checkbox"><input name="fixed_toolbar" type="checkbox"/>ثابت ماندن نوار ابزار هنگام ویرایش</label><div class="garden-row"><button class="garden-button-primary" type="submit">ذخیره ترجیحات</button><p role="status" data-form-status></p></div></form>}
-    </div>
-  </div>
-</div>
-<script>import '../scripts/account-settings';</script>
+<AccountSettingsPanel page={page} client:load />

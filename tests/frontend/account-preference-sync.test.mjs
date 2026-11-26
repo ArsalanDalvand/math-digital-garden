@@ -12,7 +12,7 @@ function mount(){
  document.addEventListener('garden:identity',event=>identities.push(event.detail));
  class ApiError extends Error{constructor(status){super();this.status=status;}}
  const exports={};
- const require=name=>name==='react'?{useState:initial=>{let state=initial;return[state,value=>{state=typeof value==='function'?value(state):value;}];},useEffect:effect=>{cleanup=effect();}}:name==='react/jsx-runtime'?{jsx:()=>null,jsxs:()=>null}:name.endsWith('/api')?{ApiError,api:(path,data,method)=>new Promise((resolve,reject)=>requests.push({path,data,method,resolve,reject}))}:name.endsWith('/account-preferences')?{applyPreferences:value=>applied.push(value)}:{};
+ const require=name=>name==='react'?{useState:initial=>{let state=initial;return[state,value=>{state=typeof value==='function'?value(state):value;}];},useEffect:effect=>{cleanup=effect();}}:name==='react/jsx-runtime'?{jsx:()=>null,jsxs:()=>null}:name.endsWith('/api')?{ApiError,api:(path,data,method)=>new Promise((resolve,reject)=>requests.push({path,data,method,resolve,reject}))}:name.endsWith('/account-preferences')?{applyPreferences:value=>applied.push(value)}:name.endsWith('/garden')?{$identity:{set(){}},setAppIdentity:user=>document.dispatchEvent(new CustomEvent('garden:identity',{detail:user?{id:user.id,role:user.role}:null})),syncThemeFromDom:()=>'light'}:{};
  vm.runInNewContext(compiled,{exports,require,document,window,CustomEvent,Date,location:{assign(){}}});exports.default();
  return{document,window,ApiError,requests,applied,identities,unmount:()=>cleanup()};
 }

@@ -119,7 +119,8 @@ test('SSR publishes lightweight note HTML with on-demand graph and preview APIs'
   const response=await app.render(new Request('http://test/notes/one'));
   const html=await response.text();
   assert.equal(response.status,200);
-  assert.match(html, /<graph-component[^>]*data-graph-url="\/api\/graph\.json"/);
+  assert.match(html, /data-note-graph/);
+  assert.match(html, /\/api\/graph\.json/);
   assert.doesNotMatch(html, /data-sitemap=/);
   assert.match(html, /data-note-preview="two"/);
   assert.doesNotMatch(html, /<template[^>]*data-preview-slug=/);
