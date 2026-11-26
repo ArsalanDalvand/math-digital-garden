@@ -3,7 +3,12 @@ import { Maximize2, RefreshCw, RotateCcw, SlidersHorizontal } from 'lucide-react
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { KnowledgeGraphEngine } from '../../lib/graph/canvas-engine.ts';
 import { fetchGraphSitemap, LEGEND_ITEMS, toPersianDigits } from '../../lib/graph/schema.ts';
-import type { HoverTarget } from '../../lib/graph/types.ts';
+import type {
+  GraphNode,
+  HoverTarget,
+  NeighborSummary,
+  PathTraceResult,
+} from '../../lib/graph/types.ts';
 import {
   $graphUi,
   $theme,
@@ -13,12 +18,29 @@ import {
 } from '../../stores/garden.ts';
 import { GraphFullscreenModal } from './GraphFullscreenModal.tsx';
 import { GraphSettingsPopover } from './GraphSettingsPopover.tsx';
+import { GraphSummaryStrip } from './GraphSummaryStrip.tsx';
 import { GraphTooltip } from './GraphTooltip.tsx';
+import { NodeShapeGlyph } from './NodeShapeGlyph.tsx';
 
 interface GraphWidgetProps {
   slug: string;
   graphUrl?: string;
 }
+
+const EMPTY_SUMMARY: NeighborSummary = {
+  prereqCount: 0,
+  dependentCount: 0,
+  exerciseCount: 0,
+  hiddenHubCount: 0,
+};
+
+const EMPTY_TRACE: PathTraceResult = {
+  mode: 'off',
+  startId: '',
+  nodeHops: new Map(),
+  highlightedLinkKeys: new Set(),
+  orderedSteps: [],
+};
 
 export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: GraphWidgetProps) {
   const state = useStore($graphUi);
@@ -27,6 +49,8 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
 
   const [hover, setHover] = useState<HoverTarget>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [summary, setSummary] = useState<NeighborSummary>(EMPTY_SUMMARY);
+  const [pathTrace, setPathTrace] = useState<PathTraceResult>(EMPTY_TRACE);
 
   const inlineContainerRef = useRef<HTMLDivElement | null>(null);
   const inlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -40,6 +64,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
   }, []);
 
   if (!engineRef.current) {
+    const initial = $graphUi.get();
     engineRef.current = new KnowledgeGraphEngine(
       slug,
       {
@@ -49,12 +74,27 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
           if (
             prev.nodeCount !== stats.nodeCount ||
             prev.linkCount !== stats.linkCount ||
-            prev.typedLinkCount !== stats.typedLinkCount
+            prev.typedLinkCount !== stats.typedLinkCount ||
+            prev.hiddenHubCount !== stats.hiddenHubCount
           ) {
             $graphUi.set({ ...prev, ...stats });
           }
         },
+        onSummaryChange: (nextSummary) => setSummary(nextSummary),
+        onPathTraceChange: (nextTrace) => setPathTrace(nextTrace),
+        onBackgroundClick: () => {
+          const cur = $graphUi.get();
+          if (cur.isFullscreen && cur.selectedNodeId) {
+            $graphUi.set({ ...cur, selectedNodeId: null });
+          }
+        },
         onNodeSelect: (node, event) => {
+          const cur = $graphUi.get();
+          if (cur.isFullscreen && !(event && (event.metaKey || event.ctrlKey))) {
+            setHover(null);
+            $graphUi.set({ ...cur, selectedNodeId: node.id, settingsOpen: false });
+            return;
+          }
           const href = `/${node.id}`;
           if (event && (event.metaKey || event.ctrlKey)) {
             window.open(href, '_blank', 'noopener');
@@ -64,15 +104,18 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         },
       },
       {
-        depth: $graphUi.get().depth,
-        layoutMode: $graphUi.get().layoutMode,
-        typedOnly: $graphUi.get().typedOnly,
-        renderArrows: $graphUi.get().renderArrows,
-        renderLabels: $graphUi.get().renderLabels,
-        repelForce: $graphUi.get().repelForce,
-        colliderPadding: $graphUi.get().colliderPadding,
-        linkDistance: $graphUi.get().linkDistance,
-        centerForce: $graphUi.get().centerForce,
+        depth: initial.depth,
+        layoutMode: initial.layoutMode,
+        typedOnly: initial.typedOnly,
+        showHubsAndRaw: initial.showHubsAndRaw,
+        colorBy: initial.colorBy,
+        pathTraceMode: initial.pathTraceMode,
+        renderArrows: initial.renderArrows,
+        renderLabels: initial.renderLabels,
+        repelForce: initial.repelForce,
+        colliderPadding: initial.colliderPadding,
+        linkDistance: initial.linkDistance,
+        centerForce: initial.centerForce,
       },
     );
   }
@@ -84,6 +127,13 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       if (typeof document !== 'undefined') {
         delete document.body.dataset.graphBlur;
       }
+      $graphUi.set({
+        ...$graphUi.get(),
+        isFullscreen: false,
+        settingsOpen: false,
+        selectedNodeId: null,
+        pivotSlug: '',
+      });
       engine?.destroy();
       engineRef.current = null;
     };
@@ -94,13 +144,15 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     const engine = engineRef.current;
     if (!engine) return;
 
-    patchState({ status: 'loading', errorMessage: '' });
+    patchState({ status: 'loading', errorMessage: '', pivotSlug: '', selectedNodeId: null });
 
     fetchGraphSitemap(graphUrl)
       .then((sitemap) => {
         if (cancelled || !engineRef.current) return;
         engineRef.current.setSitemap(sitemap, slug);
         const stats = engineRef.current.getStats();
+        setSummary(engineRef.current.getNeighborSummary());
+        setPathTrace(engineRef.current.getPathTrace());
         patchState({
           ...stats,
           status: 'ready',
@@ -129,6 +181,9 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       depth: state.depth,
       layoutMode: state.layoutMode,
       typedOnly: state.typedOnly,
+      showHubsAndRaw: state.showHubsAndRaw,
+      colorBy: state.colorBy,
+      pathTraceMode: state.pathTraceMode,
       renderArrows: state.renderArrows,
       renderLabels: state.renderLabels,
       repelForce: state.repelForce,
@@ -139,11 +194,17 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       activeKindFilter: state.activeKindFilter,
       activePlaneFilter: state.activePlaneFilter,
       searchQuery: state.searchQuery,
+      selectedNodeId: state.selectedNodeId,
+      pivotSlug: state.pivotSlug || slug,
     });
   }, [
+    slug,
     state.depth,
     state.layoutMode,
     state.typedOnly,
+    state.showHubsAndRaw,
+    state.colorBy,
+    state.pathTraceMode,
     state.renderArrows,
     state.renderLabels,
     state.repelForce,
@@ -154,6 +215,8 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     state.activeKindFilter,
     state.activePlaneFilter,
     state.searchQuery,
+    state.selectedNodeId,
+    state.pivotSlug,
   ]);
 
   const attachInlineCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
@@ -202,7 +265,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
 
   const closeFullscreen = useCallback(() => {
     setHover(null);
-    patchState({ isFullscreen: false, settingsOpen: false });
+    patchState({ isFullscreen: false, settingsOpen: false, selectedNodeId: null });
   }, [patchState]);
 
   useEffect(() => {
@@ -212,6 +275,11 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       if (cur.settingsOpen) {
         event.preventDefault();
         patchState({ settingsOpen: false });
+        return;
+      }
+      if (cur.isFullscreen && cur.selectedNodeId) {
+        event.preventDefault();
+        patchState({ selectedNodeId: null });
         return;
       }
       if (cur.isFullscreen && cur.searchQuery) {
@@ -239,6 +307,44 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     }
   }, []);
 
+  const handleSelectAndFocusNode = useCallback(
+    (nodeId: string) => {
+      setHover(null);
+      patchState({ selectedNodeId: nodeId, settingsOpen: false });
+      engineRef.current?.focusNodeById(nodeId);
+    },
+    [patchState],
+  );
+
+  const handlePivotNode = useCallback(
+    (nodeId: string) => {
+      setHover(null);
+      patchState({
+        pivotSlug: nodeId,
+        selectedNodeId: null,
+        depth: Math.max($graphUi.get().depth, 1),
+      });
+    },
+    [patchState],
+  );
+
+  const handleResetPivot = useCallback(() => {
+    setHover(null);
+    patchState({ pivotSlug: '', selectedNodeId: null });
+  }, [patchState]);
+
+  const engineNodes: GraphNode[] = engineRef.current?.getNodes() || [];
+  const selectedNode = state.selectedNodeId
+    ? (engineNodes.find((n) => n.id === state.selectedNodeId) ?? null)
+    : null;
+  const nodeConnections = selectedNode
+    ? (engineRef.current?.getNodeConnections(selectedNode.id) ?? { incoming: [], outgoing: [] })
+    : { incoming: [], outgoing: [] };
+  const effectivePivot = state.pivotSlug || slug;
+  const isPivoted = Boolean(state.pivotSlug && state.pivotSlug !== slug);
+  const pivotNode = engineNodes.find((n) => n.id === effectivePivot || n.isCurrent);
+  const pivotTitle = pivotNode?.title || effectivePivot.replace(/^notes\//, '');
+
   const inlineContainerRect = inlineContainerRef.current?.getBoundingClientRect() ?? null;
   const readyAttr = state.status === 'ready' ? 'true' : state.status;
 
@@ -251,8 +357,12 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       data-node-count={String(state.nodeCount)}
       data-link-count={String(state.linkCount)}
       data-typed-link-count={String(state.typedLinkCount)}
+      data-hidden-hub-count={String(state.hiddenHubCount)}
       data-depth-active={String(state.depth)}
       data-layout-mode={state.layoutMode}
+      data-color-by={state.colorBy}
+      data-path-trace-mode={state.pathTraceMode}
+      data-pivot-slug={effectivePivot}
       data-typed-only={String(state.typedOnly)}
     >
       <div className="note-graph-header">
@@ -273,6 +383,40 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
           ))}
         </fieldset>
       </div>
+
+      {state.status === 'ready' && (
+        <GraphSummaryStrip
+          summary={summary}
+          showHubsAndRaw={state.showHubsAndRaw}
+          onTracePrerequisites={() => {
+            setHover(null);
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              pathTraceMode: 'prerequisites',
+              depth: Math.max(state.depth, 2),
+            });
+          }}
+          onTraceImpact={() => {
+            setHover(null);
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              pathTraceMode: 'impact',
+              depth: Math.max(state.depth, 2),
+            });
+          }}
+          onFilterExercises={() => {
+            setHover(null);
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              activeKindFilter: 'problem',
+            });
+          }}
+          onRevealHubs={() => patchState({ showHubsAndRaw: true })}
+        />
+      )}
 
       <p
         role="status"
@@ -363,9 +507,14 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         </div>
       </div>
 
-      <section className="graph-umko-legend" data-graph-legend="" aria-label="فیلتر بر اساس نوع UMKO">
+      <section
+        className="graph-umko-legend"
+        data-graph-legend=""
+        aria-label="فیلتر بر اساس نوع UMKO"
+      >
         {LEGEND_ITEMS.map((item) => {
           const active = state.activeKindFilter === item.kind;
+          const badgeColor = isDark ? item.dark : item.light;
           return (
             <button
               key={item.kind}
@@ -373,10 +522,11 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
               className={`legend-badge${active ? ' is-active' : ''}`}
               data-legend-kind={item.kind}
               aria-pressed={active}
-              style={{ '--badge-c': item.color } as CSSProperties}
+              style={{ '--badge-c': badgeColor } as CSSProperties}
               onClick={() => patchState({ activeKindFilter: active ? null : item.kind })}
             >
-              {item.label}
+              <NodeShapeGlyph shape={item.shape} color={badgeColor} size={10} />
+              <span>{item.label}</span>
             </button>
           );
         })}
@@ -386,11 +536,21 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         state={state}
         isDark={isDark}
         hover={hover}
+        nodes={engineNodes}
+        pathTrace={pathTrace}
+        selectedNode={selectedNode}
+        selectedConnections={nodeConnections}
+        isPivoted={isPivoted}
+        pivotSlug={effectivePivot}
+        pivotTitle={pivotTitle}
         onCanvasRef={attachModalCanvas}
         onPatch={patchState}
         onResetSettings={resetGraphSettings}
         onFitToBounds={handleFitToBounds}
         onFocusFirstMatch={handleFocusFirstMatch}
+        onSelectNode={handleSelectAndFocusNode}
+        onPivot={handlePivotNode}
+        onResetPivot={handleResetPivot}
         onCloseFullscreen={closeFullscreen}
       />
     </section>

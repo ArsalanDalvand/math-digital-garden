@@ -1,6 +1,6 @@
 import { RotateCcw, X } from 'lucide-react';
 import { PLANE_FILTER_ITEMS, toPersianDigits } from '../../lib/graph/schema.ts';
-import type { LayoutMode, RelationPlaneKey } from '../../lib/graph/types.ts';
+import type { ColorByMode, LayoutMode, RelationPlaneKey } from '../../lib/graph/types.ts';
 import type { GraphUiState } from '../../stores/garden.ts';
 
 interface GraphSettingsPopoverProps {
@@ -79,6 +79,19 @@ export function GraphSettingsPopover({
       </label>
 
       <label className="kg-field-label">
+        <span>رنگ‌بندی گره‌ها</span>
+        <select
+          value={state.colorBy}
+          onChange={(e) => onPatch({ colorBy: e.target.value as ColorByMode })}
+          aria-label="رنگ‌بندی گره‌ها"
+        >
+          <option value="kind">بر اساس نوع مفهوم (UMKO)</option>
+          <option value="level">بر اساس سطح دشواری (L1–L5)</option>
+          <option value="chapter">بر اساس فصل و کتاب</option>
+        </select>
+      </label>
+
+      <label className="kg-field-label">
         <span>صفحه معنایی روابط</span>
         <select
           value={state.activePlaneFilter ?? 'all'}
@@ -97,6 +110,15 @@ export function GraphSettingsPopover({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="kg-toggle-row">
+        <input
+          type="checkbox"
+          checked={state.showHubsAndRaw}
+          onChange={(e) => onPatch({ showHubsAndRaw: e.target.checked })}
+        />
+        <span>نمایش نقشه‌راه‌ها و صفحات خام</span>
       </label>
 
       <label className="kg-toggle-row">

@@ -1,5 +1,11 @@
 import { atom, map } from 'nanostores';
-import { DEFAULT_GRAPH_CONFIG, type LayoutMode, type RelationPlaneKey } from '../lib/graph/types.ts';
+import {
+  type ColorByMode,
+  DEFAULT_GRAPH_CONFIG,
+  type LayoutMode,
+  type PathTraceMode,
+  type RelationPlaneKey,
+} from '../lib/graph/types.ts';
 import type { Account } from '../scripts/account-preferences.ts';
 
 export type ThemeMode = 'light' | 'dark';
@@ -13,6 +19,9 @@ export interface GraphUiState {
   depth: number;
   layoutMode: LayoutMode;
   typedOnly: boolean;
+  showHubsAndRaw: boolean;
+  colorBy: ColorByMode;
+  pathTraceMode: PathTraceMode;
   renderArrows: boolean;
   renderLabels: boolean;
   repelForce: number;
@@ -22,11 +31,14 @@ export interface GraphUiState {
   activeKindFilter: string | null;
   activePlaneFilter: RelationPlaneKey | null;
   searchQuery: string;
+  selectedNodeId: string | null;
+  pivotSlug: string;
   isFullscreen: boolean;
   settingsOpen: boolean;
   nodeCount: number;
   linkCount: number;
   typedLinkCount: number;
+  hiddenHubCount: number;
   status: 'idle' | 'loading' | 'ready' | 'error';
   errorMessage: string;
 }
@@ -35,6 +47,9 @@ export const DEFAULT_GRAPH_UI_STATE: GraphUiState = {
   depth: DEFAULT_GRAPH_CONFIG.depth,
   layoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
   typedOnly: DEFAULT_GRAPH_CONFIG.typedOnly,
+  showHubsAndRaw: DEFAULT_GRAPH_CONFIG.showHubsAndRaw,
+  colorBy: DEFAULT_GRAPH_CONFIG.colorBy,
+  pathTraceMode: DEFAULT_GRAPH_CONFIG.pathTraceMode,
   renderArrows: DEFAULT_GRAPH_CONFIG.renderArrows,
   renderLabels: DEFAULT_GRAPH_CONFIG.renderLabels,
   repelForce: DEFAULT_GRAPH_CONFIG.repelForce,
@@ -44,11 +59,14 @@ export const DEFAULT_GRAPH_UI_STATE: GraphUiState = {
   activeKindFilter: null,
   activePlaneFilter: null,
   searchQuery: '',
+  selectedNodeId: null,
+  pivotSlug: '',
   isFullscreen: false,
   settingsOpen: false,
   nodeCount: 0,
   linkCount: 0,
   typedLinkCount: 0,
+  hiddenHubCount: 0,
   status: 'idle',
   errorMessage: '',
 };
@@ -64,6 +82,9 @@ export function resetGraphSettings(): void {
     depth: DEFAULT_GRAPH_CONFIG.depth,
     layoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
     typedOnly: DEFAULT_GRAPH_CONFIG.typedOnly,
+    showHubsAndRaw: DEFAULT_GRAPH_CONFIG.showHubsAndRaw,
+    colorBy: DEFAULT_GRAPH_CONFIG.colorBy,
+    pathTraceMode: DEFAULT_GRAPH_CONFIG.pathTraceMode,
     renderArrows: DEFAULT_GRAPH_CONFIG.renderArrows,
     renderLabels: DEFAULT_GRAPH_CONFIG.renderLabels,
     repelForce: DEFAULT_GRAPH_CONFIG.repelForce,
@@ -73,6 +94,7 @@ export function resetGraphSettings(): void {
     activeKindFilter: null,
     activePlaneFilter: null,
     searchQuery: '',
+    selectedNodeId: null,
   });
 }
 
@@ -103,7 +125,9 @@ export function setAppTheme(theme: ThemeMode, options?: { notify?: boolean }): v
   } catch {}
   $theme.set(theme);
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => root.classList.remove('theme-switching')),
+    );
   } else {
     root.classList.remove('theme-switching');
   }
