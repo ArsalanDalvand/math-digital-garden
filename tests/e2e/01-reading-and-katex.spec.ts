@@ -37,6 +37,8 @@ test.describe('Reading experience, KaTeX BiDi, and theming', () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(article).toBeVisible();
+    const mobileBox = await article.boundingBox();
+    expect(mobileBox?.width).toBeGreaterThanOrEqual(300);
     await assertNoHorizontalOverflow(page);
   });
 });
