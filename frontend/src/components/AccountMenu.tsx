@@ -5,6 +5,7 @@ import {Button} from './ui/button';
 import {UserRound,NotebookPen,GitPullRequest,Settings,LogOut,ChevronDown} from 'lucide-react';
 import {api,ApiError} from '../scripts/api';
 import {applyPreferences,type Account,type Preferences} from '../scripts/account-preferences';
+import {$identity,setAppIdentity,syncThemeFromDom} from '../stores/garden';
 export default function AccountMenu(){
   const [user,setUser]=useState<Account|null>(null);
   const [error,setError]=useState('');
@@ -17,10 +18,10 @@ export default function AccountMenu(){
         const value=await api<Account>('/account');
         if(!active||request!==generation)return;
         current=value;setUser({...value,avatar_url:value.avatar_url?value.avatar_url+'?v='+Date.now():null});
-        applyPreferences(value.preferences);document.dispatchEvent(new CustomEvent('garden:identity',{detail:{id:value.id,role:value.role}}));setError('');
+        applyPreferences(value.preferences);syncThemeFromDom();setAppIdentity(value);setError('');
       }catch(error){
         if(!active||request!==generation)return;
-        if(error instanceof ApiError&&error.status===401){setUser(null);setError('');document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));}
+        if(error instanceof ApiError&&error.status===401){setUser(null);setError('');setAppIdentity(null);}
         else setError('دریافت حساب ممکن نشد.');
       }
     };
@@ -36,7 +37,7 @@ export default function AccountMenu(){
             const result=await api<Account>('/account/preferences',{...preferences,expected_user_id:identity},'PATCH');
             if(!active||request!==generation||current?.id!==identity)continue;
             if(result.id!==identity){void load();continue;}
-            if(!pending){current=result;setUser(previous=>previous?.id===result.id?{...previous,preferences:result.preferences}:previous);applyPreferences(result.preferences);setError('');document.dispatchEvent(new CustomEvent('garden:preference-save',{detail:{state:'saved'}}));}
+            if(!pending){current=result;setUser(previous=>previous?.id===result.id?{...previous,preferences:result.preferences}:previous);applyPreferences(result.preferences);syncThemeFromDom();$identity.set(result);setError('');document.dispatchEvent(new CustomEvent('garden:preference-save',{detail:{state:'saved'}}));}
           }catch{
             if(active&&request===generation&&current?.id===identity&&!pending){setError('ذخیره ترجیحات انجام نشد؛ دوباره تنظیمات را تغییر دهید.');document.dispatchEvent(new CustomEvent('garden:preference-save',{detail:{state:'error'}}));}
           }
@@ -55,7 +56,7 @@ export default function AccountMenu(){
   const name=user?.full_name||user?.email||'حساب کاربری';
   const initial=Array.from(name)[0] || '؟';
   const avatar=user?.avatar_url?<img src={user.avatar_url} alt="" className="account-avatar" width={28} height={28}/>:<span className="account-avatar" aria-hidden="true">{user?initial:<UserRound size={16}/>}</span>;
-  async function logout(){try{await api('/auth/logout',undefined,'POST');document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.assign('/account');}catch{setError('خروج انجام نشد؛ دوباره تلاش کنید.');}}
+  async function logout(){try{await api('/auth/logout',undefined,'POST');setAppIdentity(null);location.assign('/account');}catch{setError('خروج انجام نشد؛ دوباره تلاش کنید.');}}
   if (!user) {
     return (
       <a href="/account" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="ورود یا ثبت‌نام در حساب کاربری">
