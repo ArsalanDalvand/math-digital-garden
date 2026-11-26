@@ -807,11 +807,6 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .workspace-tools .note-graph > p:first-of-type,
-  .mobile-study-body .note-graph > p:first-of-type {
-    display: none;
-  }
-
   .mobile-study-trigger {
     display: none;
   }
@@ -2054,7 +2049,7 @@
       background: oklch(0 0 0 / 0.45);
     }
     .workspace-tools,
-    .desktop-tools-toggle {
+    .document-options .desktop-tools-toggle {
       display: none;
     }
     .document-options .mobile-study-trigger {

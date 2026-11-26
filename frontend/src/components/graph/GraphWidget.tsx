@@ -277,7 +277,8 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       <p
         role="status"
         data-graph-status=""
-        className="text-xs text-muted-foreground mb-2 empty:hidden flex items-center justify-between gap-2"
+        hidden={state.status === 'idle' || state.status === 'ready'}
+        className="text-xs text-muted-foreground mb-2 flex items-center justify-between gap-2"
       >
         {state.status === 'loading' && <span>در حال آماده‌سازی گراف دانش…</span>}
         {state.status === 'error' && (
