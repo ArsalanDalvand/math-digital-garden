@@ -1,4 +1,5 @@
 import {
+  type DragBehavior,
   drag,
   forceCollide,
   forceLink,
@@ -6,16 +7,18 @@ import {
   forceSimulation,
   forceX,
   forceY,
+  type Simulation,
   select,
+  type ZoomBehavior,
+  ZoomTransform,
   zoom,
   zoomIdentity,
-  ZoomTransform,
-  type DragBehavior,
-  type Simulation,
-  type ZoomBehavior,
 } from 'd3';
+import { buildChapterIndexMap, resolveNodeColor } from './color-lens.ts';
 import { computeDagLayout } from './dag-layout.ts';
-import { buildTypedGraphData, classifyRelation } from './schema.ts';
+import { computeNeighborSummary, getLinkIdentityKey, traceLearningPath } from './path-tracer.ts';
+import { buildTypedGraphData, classifyRelation, toPersianDigits } from './schema.ts';
+import { strokeDoubleCircleInnerRing, traceNodeShapePath } from './shapes.ts';
 import {
   DEFAULT_GRAPH_CONFIG,
   type GraphConfig,
@@ -23,7 +26,8 @@ import {
   type GraphNode,
   type GraphStats,
   type HoverTarget,
-  type LayoutMode,
+  type NeighborSummary,
+  type PathTraceResult,
   type RelationPlaneKey,
   type SitemapEntry,
 } from './types.ts';
@@ -53,6 +57,9 @@ export interface EngineCallbacks {
   onHoverChange?: (hover: HoverTarget) => void;
   onNodeSelect?: (node: GraphNode, event?: MouseEvent) => void;
   onStatsChange?: (stats: GraphStats) => void;
+  onSummaryChange?: (summary: NeighborSummary) => void;
+  onPathTraceChange?: (trace: PathTraceResult) => void;
+  onBackgroundClick?: () => void;
 }
 
 export interface EngineStatePatch extends Partial<GraphConfig> {
@@ -60,6 +67,8 @@ export interface EngineStatePatch extends Partial<GraphConfig> {
   activeKindFilter?: string | null;
   activePlaneFilter?: RelationPlaneKey | null;
   searchQuery?: string;
+  selectedNodeId?: string | null;
+  pivotSlug?: string | null;
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -68,7 +77,13 @@ function rectsOverlap(a: Rect, b: Rect): boolean {
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
-  const full = clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean;
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : clean;
   const num = Number.parseInt(full, 16);
   if (Number.isNaN(num)) return [100, 116, 139];
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
@@ -180,6 +195,16 @@ export class KnowledgeGraphEngine {
   private nodes: GraphNode[] = [];
   private links: GraphLink[] = [];
   private typedLinkCount = 0;
+  private hiddenHubCount = 0;
+  private selectedNodeId: string | null = null;
+  private chapterIndexMap = new Map<string, number>();
+  private pathTrace: PathTraceResult = {
+    mode: 'off',
+    startId: '',
+    nodeHops: new Map(),
+    highlightedLinkKeys: new Set(),
+    orderedSteps: [],
+  };
   private simulation: Simulation<GraphNode, GraphLink> | null = null;
   private zoomBehavior: ZoomBehavior<HTMLCanvasElement, unknown> | null = null;
   private dragBehavior: DragBehavior<HTMLCanvasElement, unknown, GraphNode | unknown> | null = null;
@@ -214,7 +239,11 @@ export class KnowledgeGraphEngine {
   private lastViewportH = 0;
   private labelWidthCache = new Map<string, number>();
 
-  constructor(currentPage: string, callbacks: EngineCallbacks = {}, initialConfig: Partial<GraphConfig> = {}) {
+  constructor(
+    currentPage: string,
+    callbacks: EngineCallbacks = {},
+    initialConfig: Partial<GraphConfig> = {},
+  ) {
     this.currentPage = currentPage.replace(/^\/+/, '').replace(/\/+$/, '');
     this.callbacks = callbacks;
     this.config = { ...DEFAULT_GRAPH_CONFIG, ...initialConfig };
@@ -272,8 +301,12 @@ export class KnowledgeGraphEngine {
   public updateState(patch: EngineStatePatch) {
     const prevDepth = this.config.depth;
     const prevExternal = this.config.renderExternal;
+    const prevShowHubs = this.config.showHubsAndRaw;
     const prevLayout = this.config.layoutMode;
     const prevTyped = this.config.typedOnly;
+    const prevColorBy = this.config.colorBy;
+    const prevPathTrace = this.config.pathTraceMode;
+    const prevSelected = this.selectedNodeId;
     const prevRepel = this.config.repelForce;
     const prevLinkDist = this.config.linkDistance;
     const prevCollider = this.config.colliderPadding;
@@ -281,10 +314,13 @@ export class KnowledgeGraphEngine {
 
     if (patch.depth !== undefined) this.config.depth = patch.depth;
     if (patch.renderExternal !== undefined) this.config.renderExternal = patch.renderExternal;
+    if (patch.showHubsAndRaw !== undefined) this.config.showHubsAndRaw = patch.showHubsAndRaw;
     if (patch.renderLabels !== undefined) this.config.renderLabels = patch.renderLabels;
     if (patch.renderArrows !== undefined) this.config.renderArrows = patch.renderArrows;
     if (patch.typedOnly !== undefined) this.config.typedOnly = patch.typedOnly;
     if (patch.layoutMode !== undefined) this.config.layoutMode = patch.layoutMode;
+    if (patch.colorBy !== undefined) this.config.colorBy = patch.colorBy;
+    if (patch.pathTraceMode !== undefined) this.config.pathTraceMode = patch.pathTraceMode;
     if (patch.repelForce !== undefined) this.config.repelForce = patch.repelForce;
     if (patch.colliderPadding !== undefined) this.config.colliderPadding = patch.colliderPadding;
     if (patch.linkDistance !== undefined) this.config.linkDistance = patch.linkDistance;
@@ -292,13 +328,28 @@ export class KnowledgeGraphEngine {
     if (patch.isFullscreen !== undefined) this.isFullscreen = patch.isFullscreen;
     if (patch.activeKindFilter !== undefined) this.activeKindFilter = patch.activeKindFilter;
     if (patch.activePlaneFilter !== undefined) this.activePlaneFilter = patch.activePlaneFilter;
+    if (patch.selectedNodeId !== undefined) this.selectedNodeId = patch.selectedNodeId;
+
+    let pivotChanged = false;
+    if (patch.pivotSlug !== undefined && patch.pivotSlug !== null) {
+      const normalized = patch.pivotSlug.replace(/^\/+/, '').replace(/\/+$/, '');
+      if (normalized && normalized !== this.currentPage) {
+        this.currentPage = normalized;
+        pivotChanged = true;
+      }
+    }
 
     if (patch.searchQuery !== undefined) {
       this.searchQuery = patch.searchQuery.trim().toLowerCase();
       this.updateSearchMatches();
     }
 
-    if (this.config.depth !== prevDepth || this.config.renderExternal !== prevExternal) {
+    if (
+      pivotChanged ||
+      this.config.depth !== prevDepth ||
+      this.config.renderExternal !== prevExternal ||
+      this.config.showHubsAndRaw !== prevShowHubs
+    ) {
       if (Object.keys(this.sitemap).length > 0) {
         this.rebuildSubgraph();
         return;
@@ -338,7 +389,66 @@ export class KnowledgeGraphEngine {
       }
     }
 
+    if (
+      this.config.pathTraceMode !== prevPathTrace ||
+      this.selectedNodeId !== prevSelected ||
+      this.config.colorBy !== prevColorBy
+    ) {
+      this.recomputePathTrace();
+    }
+
     this.scheduleFrame();
+  }
+
+  public setPivot(slug: string) {
+    const normalized = slug.replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!normalized) return;
+    this.currentPage = normalized;
+    this.selectedNodeId = null;
+    if (Object.keys(this.sitemap).length > 0) {
+      this.rebuildSubgraph();
+    }
+  }
+
+  public getNodes(): GraphNode[] {
+    return this.nodes;
+  }
+
+  public getLinks(): GraphLink[] {
+    return this.links;
+  }
+
+  public getNeighborSummary(): NeighborSummary {
+    return computeNeighborSummary(this.nodes, this.links, this.currentPage, this.hiddenHubCount);
+  }
+
+  public getPathTrace(): PathTraceResult {
+    return this.pathTrace;
+  }
+
+  public getNodeConnections(nodeId: string): {
+    incoming: Array<{ node: GraphNode; relation: string; label: string }>;
+    outgoing: Array<{ node: GraphNode; relation: string; label: string }>;
+  } {
+    const incoming: Array<{ node: GraphNode; relation: string; label: string }> = [];
+    const outgoing: Array<{ node: GraphNode; relation: string; label: string }> = [];
+    const seenIn = new Set<string>();
+    const seenOut = new Set<string>();
+
+    for (const l of this.links) {
+      const s = l.source.id;
+      const t = l.target.id;
+      if (s === nodeId && !seenOut.has(t)) {
+        seenOut.add(t);
+        const rel = classifyRelation(l.primaryRel);
+        outgoing.push({ node: l.target, relation: l.primaryRel, label: rel.forward });
+      } else if (t === nodeId && !seenIn.has(s)) {
+        seenIn.add(s);
+        const rel = classifyRelation(l.primaryRel);
+        incoming.push({ node: l.source, relation: l.primaryRel, label: rel.reverse });
+      }
+    }
+    return { incoming, outgoing };
   }
 
   public getMatchingNodes(query: string): GraphNode[] {
@@ -362,7 +472,21 @@ export class KnowledgeGraphEngine {
       nodeCount: this.nodes.length,
       linkCount: this.getVisibleLinks().length,
       typedLinkCount: this.typedLinkCount,
+      hiddenHubCount: this.hiddenHubCount,
     };
+  }
+
+  private emitSummary() {
+    this.callbacks.onSummaryChange?.(this.getNeighborSummary());
+  }
+
+  private recomputePathTrace() {
+    const startId =
+      this.selectedNodeId && this.nodes.some((n) => n.id === this.selectedNodeId)
+        ? this.selectedNodeId
+        : this.currentPage;
+    this.pathTrace = traceLearningPath(this.nodes, this.links, startId, this.config.pathTraceMode);
+    this.callbacks.onPathTraceChange?.(this.pathTrace);
   }
 
   private updateSearchMatches() {
@@ -419,15 +543,18 @@ export class KnowledgeGraphEngine {
   }
 
   private rebuildSubgraph() {
-    const built = buildTypedGraphData(
-      this.sitemap,
-      this.currentPage,
-      this.config.depth,
-      this.config.renderExternal,
-    );
+    const built = buildTypedGraphData(this.sitemap, this.currentPage, this.config.depth, {
+      renderExternal: this.config.renderExternal,
+      showHubsAndRaw: this.config.showHubsAndRaw,
+    });
     this.nodes = built.nodes;
     this.links = built.links;
     this.typedLinkCount = built.typedLinkCount;
+    this.hiddenHubCount = built.stats.hiddenHubCount;
+    this.chapterIndexMap = buildChapterIndexMap(this.nodes);
+    if (this.selectedNodeId && !this.nodes.some((n) => n.id === this.selectedNodeId)) {
+      this.selectedNodeId = null;
+    }
 
     if (this.typedLinkCount === 0 && this.config.typedOnly) {
       this.config.typedOnly = false;
@@ -441,6 +568,8 @@ export class KnowledgeGraphEngine {
     this.layoutAnim = null;
     this.labelWidthCache.clear();
     this.updateSearchMatches();
+    this.recomputePathTrace();
+    this.emitSummary();
     this.emitHover();
     this.emitStats();
 
@@ -543,7 +672,11 @@ export class KnowledgeGraphEngine {
     const baseCollider = Number(this.config.colliderPadding) || 24;
     const baseCenter = Number(this.config.centerForce) || 0.12;
 
-    const effectiveRepel = isSmall ? baseRepel * 2.1 : isMedium ? baseRepel * 1.45 : baseRepel * 0.95;
+    const effectiveRepel = isSmall
+      ? baseRepel * 2.1
+      : isMedium
+        ? baseRepel * 1.45
+        : baseRepel * 0.95;
     const effectiveDist = isSmall
       ? Math.max(74, baseDist * 0.9)
       : isMedium
@@ -615,7 +748,11 @@ export class KnowledgeGraphEngine {
         if (event.type === 'wheel') return true;
         if (event.type === 'dblclick') return false;
         if (event.type === 'touchstart' && event.touches && event.touches.length >= 2) return true;
-        if (event.type === 'mousedown' || event.type === 'pointerdown' || event.type === 'touchstart') {
+        if (
+          event.type === 'mousedown' ||
+          event.type === 'pointerdown' ||
+          event.type === 'touchstart'
+        ) {
           if (event.button && event.button !== 0) return false;
           const pt = this.clientPointToCanvas(event);
           if (pt && this.findNodeAtCanvas(pt[0], pt[1])) return false;
@@ -762,6 +899,45 @@ export class KnowledgeGraphEngine {
         const rect = canvas.getBoundingClientRect();
         const hit = this.findNodeAtCanvas(e.clientX - rect.left, e.clientY - rect.top);
         if (!hit) this.fitToBounds(true);
+      },
+      { signal },
+    );
+
+    let bgDownX = 0;
+    let bgDownY = 0;
+    let bgMoved = false;
+    canvas.addEventListener(
+      'pointerdown',
+      (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        const rect = canvas.getBoundingClientRect();
+        bgDownX = e.clientX - rect.left;
+        bgDownY = e.clientY - rect.top;
+        bgMoved = false;
+      },
+      { signal },
+    );
+    canvas.addEventListener(
+      'pointermove',
+      (e: PointerEvent) => {
+        if (e.buttons === 0) return;
+        const rect = canvas.getBoundingClientRect();
+        if (Math.hypot(e.clientX - rect.left - bgDownX, e.clientY - rect.top - bgDownY) > 5) {
+          bgMoved = true;
+        }
+      },
+      { signal },
+    );
+    canvas.addEventListener(
+      'pointerup',
+      (e: PointerEvent) => {
+        if (e.button !== 0 || bgMoved) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        if (!this.findNodeAtCanvas(mx, my)) {
+          this.callbacks.onBackgroundClick?.();
+        }
       },
       { signal },
     );
@@ -1041,9 +1217,11 @@ export class KnowledgeGraphEngine {
     const ty = this.transform.y;
 
     const visibleLinks = this.getVisibleLinks();
+    const hasPathTrace = this.config.pathTraceMode !== 'off' && this.pathTrace.nodeHops.size > 0;
     const hasFilter = !!(
       this.hoveredNode ||
       this.hoveredLink ||
+      hasPathTrace ||
       this.activeKindFilter ||
       this.activePlaneFilter ||
       this.searchQuery
@@ -1074,6 +1252,15 @@ export class KnowledgeGraphEngine {
       highlightedLinks.add(this.hoveredLink);
       highlightedNodes.add(this.hoveredLink.source.id);
       highlightedNodes.add(this.hoveredLink.target.id);
+    } else if (hasPathTrace) {
+      for (const id of this.pathTrace.nodeHops.keys()) {
+        highlightedNodes.add(id);
+      }
+      for (const l of visibleLinks) {
+        if (this.pathTrace.highlightedLinkKeys.has(getLinkIdentityKey(l))) {
+          highlightedLinks.add(l);
+        }
+      }
     } else if (this.activePlaneFilter) {
       for (const l of visibleLinks) {
         if (l.plane === this.activePlaneFilter) {
@@ -1129,6 +1316,7 @@ export class KnowledgeGraphEngine {
           highlightedLinks.has(link) ||
           (!this.hoveredNode &&
             !this.hoveredLink &&
+            !hasPathTrace &&
             !this.activePlaneFilter &&
             hasFilter &&
             highlightedNodes.has(link.source.id) &&
@@ -1222,12 +1410,13 @@ export class KnowledgeGraphEngine {
 
     const drawNode = (n: GraphNode) => {
       const isHovered = n === this.hoveredNode;
+      const isSelected = n.id === this.selectedNodeId;
       const isEdgeEndpoint =
         !!this.hoveredLink && (this.hoveredLink.source === n || this.hoveredLink.target === n);
       const isActive =
         (!hasFilter || highlightedNodes.has(n.id)) &&
         (!this.config.typedOnly || typedConnectedNodes.has(n.id));
-      const targetScale = isHovered ? 1.24 : isEdgeEndpoint ? 1.15 : 1;
+      const targetScale = isHovered ? 1.24 : isSelected ? 1.18 : isEdgeEndpoint ? 1.15 : 1;
       if (Math.abs(n.hoverScale - targetScale) > 0.005) {
         n.hoverScale += (targetScale - n.hoverScale) * lerpSpeed;
         needsMoreFrames = true;
@@ -1236,39 +1425,44 @@ export class KnowledgeGraphEngine {
       }
 
       const r = n.radius * n.hoverScale;
-      const fillHex = isDark ? n.darkColor : n.lightColor;
+      const fillHex = resolveNodeColor(n, this.config.colorBy, isDark, this.chapterIndexMap);
       const nodeAlpha = isActive
         ? 1
         : this.config.typedOnly && !typedConnectedNodes.has(n.id)
           ? 0.16
           : 1 - 0.82 * this.hoverMix;
 
-      if ((n.isCurrent || isHovered || isEdgeEndpoint) && nodeAlpha > 0.3) {
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, r + (isHovered ? 6 : 5), 0, Math.PI * 2);
-        ctx.fillStyle = rgba(fillHex, isHovered ? 0.24 : isDark ? 0.18 : 0.14);
+      if ((n.isCurrent || isSelected || isHovered || isEdgeEndpoint) && nodeAlpha > 0.3) {
+        traceNodeShapePath(ctx, n.shape, n.x, n.y, r + (isHovered || isSelected ? 6 : 5));
+        ctx.fillStyle = rgba(fillHex, isHovered || isSelected ? 0.24 : isDark ? 0.18 : 0.14);
         ctx.fill();
 
         if (n.isCurrent) {
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, r + 3.2, 0, Math.PI * 2);
+          traceNodeShapePath(ctx, n.shape, n.x, n.y, r + 3.2);
           ctx.strokeStyle = rgba(fillHex, 0.72);
           ctx.lineWidth = Math.min(2, Math.max(1.1, 1.5 * invK));
           ctx.stroke();
         }
       }
 
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r + 1.2, 0, Math.PI * 2);
+      traceNodeShapePath(ctx, n.shape, n.x, n.y, r + 1.3);
       ctx.fillStyle = surfaceBg;
       ctx.fill();
 
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      traceNodeShapePath(ctx, n.shape, n.x, n.y, r);
       ctx.fillStyle = rgba(fillHex, nodeAlpha);
       ctx.fill();
 
-      if (isHovered || isEdgeEndpoint) {
+      if (n.shape === 'double-circle' && nodeAlpha > 0.2) {
+        strokeDoubleCircleInnerRing(ctx, n.x, n.y, r, surfaceBg, Math.max(1.1, 1.45 * invK));
+      }
+
+      if (isSelected) {
+        traceNodeShapePath(ctx, n.shape, n.x, n.y, r + 2.4);
+        ctx.strokeStyle = isDark ? '#60a5fa' : '#2563eb';
+        ctx.lineWidth = Math.min(2.6, Math.max(1.5, 2.2 * invK));
+        ctx.stroke();
+      } else if (isHovered || isEdgeEndpoint) {
         ctx.strokeStyle = isDark ? '#ffffff' : '#0f172a';
         ctx.lineWidth = Math.min(2.2, Math.max(1.2, 1.8 * invK));
         ctx.stroke();
@@ -1276,20 +1470,68 @@ export class KnowledgeGraphEngine {
     };
 
     for (const n of this.nodes) {
-      if (!n.isCurrent && n !== this.hoveredNode && (!hasFilter || !highlightedNodes.has(n.id))) {
+      if (
+        !n.isCurrent &&
+        n.id !== this.selectedNodeId &&
+        n !== this.hoveredNode &&
+        (!hasFilter || !highlightedNodes.has(n.id))
+      ) {
         drawNode(n);
       }
     }
     for (const n of this.nodes) {
-      if (hasFilter && highlightedNodes.has(n.id) && !n.isCurrent && n !== this.hoveredNode) {
+      if (
+        hasFilter &&
+        highlightedNodes.has(n.id) &&
+        !n.isCurrent &&
+        n.id !== this.selectedNodeId &&
+        n !== this.hoveredNode
+      ) {
         drawNode(n);
       }
     }
     const currentNode = this.nodes.find((n) => n.isCurrent);
     if (currentNode && currentNode !== this.hoveredNode) drawNode(currentNode);
+    if (this.selectedNodeId && this.selectedNodeId !== this.currentPage) {
+      const selNode = this.nodes.find((n) => n.id === this.selectedNodeId);
+      if (selNode && selNode !== this.hoveredNode) drawNode(selNode);
+    }
     if (this.hoveredNode) drawNode(this.hoveredNode);
 
     ctx.restore();
+
+    if (hasPathTrace) {
+      const badgeFont = '700 10px Vazirmatn, system-ui, sans-serif';
+      const badgeFill =
+        this.config.pathTraceMode === 'prerequisites'
+          ? isDark
+            ? '#1d4ed8'
+            : '#2563eb'
+          : isDark
+            ? '#047857'
+            : '#059669';
+      ctx.save();
+      ctx.font = badgeFont;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const n of this.nodes) {
+        const hop = this.pathTrace.nodeHops.get(n.id);
+        if (!hop || hop < 1) continue;
+        const bx = n.x * k + tx + n.radius * n.hoverScale * k * 0.8 + 7;
+        const by = n.y * k + ty - n.radius * n.hoverScale * k * 0.8 - 6;
+        if (bx < -20 || bx > w + 20 || by < -20 || by > h + 20) continue;
+        ctx.beginPath();
+        ctx.arc(bx, by, 8.5, 0, Math.PI * 2);
+        ctx.fillStyle = badgeFill;
+        ctx.fill();
+        ctx.strokeStyle = surfaceBg;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(toPersianDigits(hop), bx, by + 0.5);
+      }
+      ctx.restore();
+    }
 
     const placed: Rect[] = [{ x1: 0, y1: 0, x2: 186, y2: 46 }];
     if (this.isFullscreen) {
@@ -1337,10 +1579,12 @@ export class KnowledgeGraphEngine {
         let priority = -1;
         if (n.isCurrent) {
           priority = 1000;
+        } else if (n.id === this.selectedNodeId) {
+          priority = 920;
         } else if ((this.hoveredNode || this.hoveredLink) && highlightedNodes.has(n.id)) {
           priority = 800 + n.degree;
         } else if (
-          (this.searchQuery || this.activeKindFilter || this.activePlaneFilter) &&
+          (hasPathTrace || this.searchQuery || this.activeKindFilter || this.activePlaneFilter) &&
           highlightedNodes.has(n.id)
         ) {
           priority = 700 + n.degree;
@@ -1456,7 +1700,8 @@ export class KnowledgeGraphEngine {
             ctx.strokeStyle = rgba(isDark ? n.darkColor : n.lightColor, 0.48);
             ctx.lineWidth = 1;
             ctx.beginPath();
-            if (typeof ctx.roundRect === 'function') ctx.roundRect(pillX, pillY, pillW, labelHeight, 5);
+            if (typeof ctx.roundRect === 'function')
+              ctx.roundRect(pillX, pillY, pillW, labelHeight, 5);
             else ctx.rect(pillX, pillY, pillW, labelHeight);
             ctx.fill();
             ctx.stroke();

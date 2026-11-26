@@ -206,3 +206,232 @@ test('fetchGraphSitemap deduplicates concurrent fetches and resets cache cleanly
     resetGraphSitemapCache();
   }
 });
+
+import {
+  getKindVisual,
+  isMocOrRoadmap,
+  isRawOcrOrphan,
+} from '../../frontend/src/lib/graph/schema.ts';
+import {
+  computeNeighborSummary,
+  traceLearningPath,
+} from '../../frontend/src/lib/graph/path-tracer.ts';
+import { getPolygonVertices } from '../../frontend/src/lib/graph/shapes.ts';
+import {
+  getColorLensLegend,
+  resolveNodeColor,
+} from '../../frontend/src/lib/graph/color-lens.ts';
+
+test('Phase 4 Feature #1: hides MOC hubs and raw OCR orphans on atomic notes while preserving them on MOCs or when toggled', () => {
+  const sitemap = {
+    'notes/group': {
+      title: 'تعریف گروه',
+      kind: 'concept',
+      links: ['notes/subgroup', 'notes/moc-alg', 'notes/ocr-p12'],
+      rels: { 'notes/subgroup': ['rel_requires'] },
+    },
+    'notes/subgroup': {
+      title: 'زیرگروه نرمال',
+      kind: 'concept',
+      links: [],
+    },
+    'notes/moc-alg': {
+      title: '00-MOC نقشه راه جبر',
+      kind: 'collection',
+      tags: ['#kind:collection', '#sub:roadmap'],
+      links: ['notes/unrelated-hub-target'],
+    },
+    'notes/unrelated-hub-target': {
+      title: 'قضیه نامرتبط از نقشه راه',
+      kind: 'assertion',
+      links: [],
+    },
+    'notes/ocr-p12': {
+      title: 'صفحه-12',
+      kind: '',
+      tags: [],
+      chapter_slug: '00-مراجع و اسناد اولیه',
+      links: [],
+    },
+    'notes/ocr-raw': {
+      title: 'متن خام OCR جزوه - فصل دوم',
+      kind: '',
+      tags: [],
+      links: [],
+    },
+  };
+
+  assert.equal(isMocOrRoadmap(sitemap['notes/moc-alg'], 'notes/moc-alg'), true);
+  assert.equal(isMocOrRoadmap(sitemap['notes/group'], 'notes/group'), false);
+  assert.equal(isRawOcrOrphan(sitemap['notes/ocr-p12'], 'notes/ocr-p12'), true);
+  assert.equal(isRawOcrOrphan(sitemap['notes/ocr-raw'], 'notes/ocr-raw'), true);
+  assert.equal(isRawOcrOrphan(sitemap['notes/subgroup'], 'notes/subgroup'), false);
+
+  // Depth-2 on atomic note hides MOC + OCR and avoids traversing through MOC to unrelated notes
+  const filtered = buildTypedGraphData(sitemap, 'notes/group', 2);
+  const filteredIds = new Set(filtered.nodes.map((n) => n.id));
+  assert.deepEqual(filteredIds, new Set(['notes/group', 'notes/subgroup']));
+  assert.equal(filtered.stats.hiddenHubCount, 2);
+
+  // Explicit opt-in reveals hubs, raw OCR pages, and 2-hop neighbors through the MOC
+  const revealed = buildTypedGraphData(sitemap, 'notes/group', 2, { showHubsAndRaw: true });
+  const revealedIds = new Set(revealed.nodes.map((n) => n.id));
+  assert.equal(revealedIds.has('notes/moc-alg'), true);
+  assert.equal(revealedIds.has('notes/ocr-p12'), true);
+  assert.equal(revealedIds.has('notes/unrelated-hub-target'), true);
+  assert.equal(revealed.stats.hiddenHubCount, 0);
+
+  // When already viewing a MOC page itself, MOCs stay visible by default
+  const onMoc = buildTypedGraphData(sitemap, 'notes/moc-alg', 1);
+  assert.equal(onMoc.nodes.some((n) => n.id === 'notes/moc-alg'), true);
+  assert.equal(onMoc.nodes.some((n) => n.id === 'notes/unrelated-hub-target'), true);
+});
+
+test('Phase 4 Features #2 & #6: traces prerequisite and impact chains safely and summarizes direct neighbors', () => {
+  const sitemap = {
+    'notes/axiom': { title: 'اصل موضوع', kind: 'axiom', links: [] },
+    'notes/def': {
+      title: 'تعریف همریختی',
+      kind: 'concept',
+      links: ['notes/axiom'],
+      rels: { 'notes/axiom': ['rel_depends_def'] },
+    },
+    'notes/thm': {
+      title: 'قضیه یکریختی',
+      kind: 'assertion',
+      links: ['notes/def'],
+      rels: { 'notes/def': ['rel_requires'] },
+    },
+    'notes/cor': {
+      title: 'نتیجه قضیه',
+      kind: 'assertion',
+      links: [],
+      backlinks: ['notes/thm'],
+    },
+    'notes/prob': {
+      title: 'تمرین ۱',
+      kind: 'problem',
+      links: ['notes/thm'],
+      rels: { 'notes/thm': ['rel_applies_theorem'] },
+    },
+    'notes/peer': {
+      title: 'مفهوم متناظر',
+      kind: 'concept',
+      links: ['notes/thm'],
+      rels: { 'notes/thm': ['rel_dual_of'] },
+    },
+  };
+  // Note: add rel_implies from thm -> cor to test forward relation direction too
+  sitemap['notes/thm'].links.push('notes/cor');
+  sitemap['notes/thm'].rels['notes/cor'] = ['rel_implies'];
+
+  const graph = buildTypedGraphData(sitemap, 'notes/thm', 5);
+
+  const prereqTrace = traceLearningPath(graph.nodes, graph.links, 'notes/thm', 'prerequisites');
+  assert.equal(prereqTrace.nodeHops.get('notes/thm'), 0);
+  assert.equal(prereqTrace.nodeHops.get('notes/def'), 1);
+  assert.equal(prereqTrace.nodeHops.get('notes/axiom'), 2);
+  assert.equal(prereqTrace.nodeHops.has('notes/prob'), false);
+  assert.equal(prereqTrace.nodeHops.has('notes/peer'), false);
+  assert.deepEqual(
+    prereqTrace.orderedSteps.map((s) => [s.nodeId, s.hop]),
+    [
+      ['notes/def', 1],
+      ['notes/axiom', 2],
+    ],
+  );
+
+  const impactTrace = traceLearningPath(graph.nodes, graph.links, 'notes/thm', 'impact');
+  assert.equal(impactTrace.nodeHops.get('notes/cor'), 1);
+  assert.equal(impactTrace.nodeHops.get('notes/prob'), 1);
+  assert.equal(impactTrace.nodeHops.has('notes/def'), false);
+
+  const summary = computeNeighborSummary(
+    graph.nodes,
+    graph.links,
+    'notes/thm',
+    graph.stats.hiddenHubCount,
+  );
+  assert.equal(summary.prereqCount, 1);
+  assert.equal(summary.dependentCount, 1);
+  assert.equal(summary.exerciseCount, 1);
+  assert.equal(summary.hiddenHubCount, 0);
+
+  // Cycle resistance on prerequisites trace
+  const cyclic = {
+    'notes/a': { title: 'A', kind: 'concept', links: ['notes/b'], rels: { 'notes/b': ['rel_requires'] } },
+    'notes/b': { title: 'B', kind: 'concept', links: ['notes/a'], rels: { 'notes/a': ['rel_requires'] } },
+  };
+  const cg = buildTypedGraphData(cyclic, 'notes/a', 3);
+  const cTrace = traceLearningPath(cg.nodes, cg.links, 'notes/a', 'prerequisites');
+  assert.equal(cTrace.nodeHops.get('notes/b'), 1);
+  assert.equal(cTrace.orderedSteps.length, 1);
+});
+
+test('Phase 4 Feature #4: maps UMKO kinds to subtle geometric shapes and valid polygon vertices', () => {
+  assert.equal(getKindVisual('concept').shape, 'circle');
+  assert.equal(getKindVisual('axiom').shape, 'double-circle');
+  assert.equal(getKindVisual('theory').shape, 'double-circle');
+  assert.equal(getKindVisual('assertion').shape, 'hexagon');
+  assert.equal(getKindVisual('theorem').shape, 'hexagon');
+  assert.equal(getKindVisual('proof').shape, 'square');
+  assert.equal(getKindVisual('example').shape, 'diamond');
+  assert.equal(getKindVisual('counterexample').shape, 'diamond');
+  assert.equal(getKindVisual('problem').shape, 'triangle');
+  assert.equal(getKindVisual('collection').shape, 'octagon');
+  assert.equal(getKindVisual('').shape, 'circle');
+
+  assert.equal(getPolygonVertices('hexagon', 0, 0, 10).length, 6);
+  assert.equal(getPolygonVertices('diamond', 0, 0, 10).length, 4);
+  assert.equal(getPolygonVertices('triangle', 0, 0, 10).length, 3);
+  assert.equal(getPolygonVertices('octagon', 0, 0, 10).length, 8);
+});
+
+test('Phase 4 Feature #5: resolves Color-By lens palettes across kind, level, and chapter with deterministic legends', () => {
+  const sampleSitemap = {
+    'notes/n1': {
+      title: 'مفهوم ۱',
+      kind: 'concept',
+      level: 'L1_intro',
+      book_slug: 'axler',
+      chapter_slug: 'فصل اول',
+      links: ['notes/n2', 'notes/n3'],
+    },
+    'notes/n2': {
+      title: 'قضیه ۲',
+      kind: 'assertion',
+      level: 'L4_grad_advanced',
+      book_slug: 'axler',
+      chapter_slug: 'فصل دوم',
+      links: [],
+    },
+    'notes/n3': {
+      title: 'مثال ۳',
+      kind: 'example',
+      level: '',
+      book_slug: 'abstract-algebra',
+      chapter_slug: 'فصل اول',
+      links: [],
+    },
+  };
+  const { nodes } = buildTypedGraphData(sampleSitemap, 'notes/n1', 2);
+
+  const kindColor = resolveNodeColor(nodes[0], 'kind', false);
+  assert.equal(kindColor, nodes[0].lightColor);
+
+  const l1Light = resolveNodeColor(nodes[0], 'level', false);
+  const l4Light = resolveNodeColor(nodes[1], 'level', false);
+  const l1Dark = resolveNodeColor(nodes[0], 'level', true);
+  assert.notEqual(l1Light, l4Light);
+  assert.notEqual(l1Light, l1Dark);
+
+  const chLegend = getColorLensLegend(nodes, 'chapter', false);
+  assert.ok(chLegend.length >= 2);
+  const ch1 = resolveNodeColor(nodes[0], 'chapter', false);
+  const ch2 = resolveNodeColor(nodes[1], 'chapter', false);
+  assert.notEqual(ch1, ch2);
+
+  const levelLegend = getColorLensLegend(nodes, 'level', false);
+  assert.ok(levelLegend.some((item) => item.id === 'L1_intro'));
+  assert.ok(levelLegend.some((item) => item.id === 'L4_grad_advanced'));
+});
