@@ -1,4 +1,9 @@
-import { UMKO_KINDS, UMKO_RELATIONS, UMKO_RELATION_PLANES } from '../umko.mjs';
+import {
+  KNOWLEDGE_SCHEMA,
+  UMKO_KINDS,
+  UMKO_RELATIONS,
+  UMKO_RELATION_PLANES,
+} from '../umko.mjs';
 import type {
   GraphLink,
   GraphNode,
@@ -8,76 +13,28 @@ import type {
   SitemapEntry,
 } from './types.ts';
 
-export const DARK_KIND_COLORS: Record<string, string> = {
-  assertion: '#60a5fa',
-  concept: '#2dd4bf',
-  proof: '#94a3b8',
-  problem: '#fb923c',
-  solution: '#34d399',
-  technique: '#fbbf24',
-  hint_ladder: '#f59e0b',
-  problem_archetype: '#e879f9',
-  pitfall: '#fbbf24',
-  visual_lab: '#38bdf8',
-  collection: '#a78bfa',
-  axiom: '#22d3ee',
-  theory: '#818cf8',
-  remark: '#94a3b8',
-  example: '#c084fc',
-  counterexample: '#f87171',
-  property: '#818cf8',
-  algorithm: '#38bdf8',
-  comparison: '#818cf8',
-  code_kernel: '#94a3b8',
-  symbol: '#94a3b8',
-};
+export const DARK_KIND_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(KNOWLEDGE_SCHEMA.kinds).map(([kind, meta]) => [kind, meta.dark || meta.color]),
+);
 
-export const KIND_SIZE_BOOST: Record<string, number> = {
-  collection: 1.4,
-  theory: 1.1,
-  assertion: 0.4,
-  concept: 0.4,
-  visual_lab: 0.4,
-  problem: 0.3,
-  axiom: 0.3,
-  problem_archetype: 0.3,
-  counterexample: 0.2,
-  algorithm: 0.2,
-  comparison: 0.2,
-  pitfall: 0.1,
-  property: 0.1,
-  technique: 0,
-  example: -0.1,
-  solution: -0.2,
-  code_kernel: -0.2,
-  proof: -0.4,
-  symbol: -0.4,
-  hint_ladder: -0.5,
-  remark: -0.6,
-};
+export const KIND_SIZE_BOOST: Record<string, number> = Object.fromEntries(
+  Object.entries(KNOWLEDGE_SCHEMA.kinds).map(([kind, meta]) => [kind, meta.sizeBoost ?? 0]),
+);
 
-export const LEGEND_ITEMS = [
-  { kind: 'assertion', label: 'قضیه', color: '#1d4ed8' },
-  { kind: 'concept', label: 'مفهوم', color: '#0d9488' },
-  { kind: 'problem', label: 'مسئله', color: '#ea580c' },
-  { kind: 'solution', label: 'راه‌حل', color: '#059669' },
-  { kind: 'collection', label: 'نقشه راه', color: '#7c3aed' },
-  { kind: 'visual_lab', label: 'شبیه‌ساز', color: '#0284c7' },
-  { kind: 'pitfall', label: 'دام', color: '#b45309' },
-] as const;
+export const LEGEND_ITEMS: ReadonlyArray<{ kind: string; label: string; color: string }> =
+  KNOWLEDGE_SCHEMA.legendKinds;
 
 export const PLANE_FILTER_ITEMS: Array<{
   key: RelationPlaneKey;
   label: string;
   color: string;
   dash: 'solid' | 'dashed' | 'dotted';
-}> = [
-  { key: 'deduction', label: 'استنتاج', color: '#2563eb', dash: 'solid' },
-  { key: 'structure', label: 'ساختار', color: '#0d9488', dash: 'solid' },
-  { key: 'problem_solving', label: 'مسئله و حل', color: '#ea580c', dash: 'solid' },
-  { key: 'pedagogy', label: 'پیش‌نیاز', color: '#059669', dash: 'dashed' },
-  { key: 'enrichment', label: 'مکمل', color: '#0284c7', dash: 'dotted' },
-];
+}> = KNOWLEDGE_SCHEMA.planeFilters as Array<{
+  key: RelationPlaneKey;
+  label: string;
+  color: string;
+  dash: 'solid' | 'dashed' | 'dotted';
+}>;
 
 const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
 
@@ -86,16 +43,19 @@ export function toPersianDigits(n: number | string): string {
 }
 
 export function getKindVisual(kind: string): KindVisual {
-  const kindsMap = UMKO_KINDS as Record<string, { label: string; color: string }>;
+  const kindsMap = UMKO_KINDS as Record<
+    string,
+    { label: string; color: string; dark?: string; sizeBoost?: number }
+  >;
   const entry = kindsMap[kind];
   if (!entry) {
-    return { label: 'یادداشت', light: '#4f46e5', dark: '#818cf8', sizeBoost: 0 };
+    return KNOWLEDGE_SCHEMA.fallbackKind;
   }
   return {
     label: entry.label,
     light: entry.color,
-    dark: DARK_KIND_COLORS[kind] || entry.color,
-    sizeBoost: KIND_SIZE_BOOST[kind] ?? 0,
+    dark: entry.dark || entry.color,
+    sizeBoost: entry.sizeBoost ?? 0,
   };
 }
 
