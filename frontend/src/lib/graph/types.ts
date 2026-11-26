@@ -10,6 +10,12 @@ export type RelationPlaneKey =
 
 export type LayoutMode = 'force' | 'dag';
 
+export type DagOrientation = 'vertical' | 'horizontal';
+
+export type MasteryStatus = 'unseen' | 'learning' | 'review' | 'mastered';
+
+export type MasteryMap = Record<string, MasteryStatus>;
+
 export type NodeShape =
   | 'circle'
   | 'double-circle'
@@ -19,9 +25,67 @@ export type NodeShape =
   | 'triangle'
   | 'octagon';
 
-export type ColorByMode = 'kind' | 'level' | 'chapter';
+export type ColorByMode = 'kind' | 'level' | 'chapter' | 'mastery';
 
 export type PathTraceMode = 'off' | 'prerequisites' | 'impact';
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export interface DagLaneMeta {
+  rank: number;
+  label: string;
+  startCoord: number;
+  endCoord: number;
+  orientation: DagOrientation;
+}
+
+export interface DagLayoutOptions {
+  currentId?: string;
+  currentIsMoc?: boolean;
+  orientation?: DagOrientation;
+  viewportWidth?: number;
+  viewportHeight?: number;
+}
+
+export interface DagLayoutOutput {
+  positions: Map<string, { x: number; y: number; rank: number }>;
+  lanes: DagLaneMeta[];
+}
+
+export interface ShortestPathStep {
+  id: string;
+  title: string;
+  kind: string;
+  kindLabel: string;
+  lightColor: string;
+  darkColor: string;
+  shape: NodeShape;
+  viaRelationFromPrev: string;
+  relationLabelFromPrev: string;
+}
+
+export interface ShortestPathResult {
+  fromId: string;
+  toId: string;
+  found: boolean;
+  steps: ShortestPathStep[];
+  nodeIds: Set<string>;
+  linkKeys: Set<string>;
+}
+
+export interface TheoremAnatomyResult {
+  focusId: string;
+  premises: GraphNode[];
+  proofsAndRefutations: GraphNode[];
+  applications: GraphNode[];
+  highlightedNodeIds: Set<string>;
+  highlightedLinkKeys: Set<string>;
+}
 
 export interface SitemapEntry {
   title?: string;
@@ -49,6 +113,8 @@ export interface GraphConfig {
   renderArrows: boolean;
   typedOnly: boolean;
   layoutMode: LayoutMode;
+  dagOrientation: DagOrientation;
+  theoremFocusMode: boolean;
   colorBy: ColorByMode;
   pathTraceMode: PathTraceMode;
   labelFontSize: number;
@@ -91,6 +157,10 @@ export interface GraphNode extends SimulationNodeDatum {
   labelAlpha: number;
   hoverScale: number;
   dagRank?: number;
+  pinned?: boolean;
+  isOverflowCluster?: boolean;
+  overflowCount?: number;
+  overflowCategory?: 'prerequisites' | 'dependents' | 'children';
 }
 
 export interface GraphLink extends SimulationLinkDatum<GraphNode> {
@@ -138,6 +208,7 @@ export interface GraphStats {
   linkCount: number;
   typedLinkCount: number;
   hiddenHubCount: number;
+  pinnedCount?: number;
 }
 
 export interface BuildGraphOptions {
@@ -163,6 +234,7 @@ export interface PathTraceResult {
   nodeHops: Map<string, number>;
   highlightedLinkKeys: Set<string>;
   orderedSteps: PathTraceStep[];
+  studyChecklist?: PathTraceStep[];
 }
 
 export interface NeighborSummary {
@@ -204,7 +276,9 @@ export const DEFAULT_GRAPH_CONFIG: GraphConfig = {
   renderLabels: true,
   renderArrows: true,
   typedOnly: false,
-  layoutMode: 'force',
+  layoutMode: 'dag',
+  dagOrientation: 'vertical',
+  theoremFocusMode: false,
   colorBy: 'kind',
   pathTraceMode: 'off',
   labelFontSize: 12,

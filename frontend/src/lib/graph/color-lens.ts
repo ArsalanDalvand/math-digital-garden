@@ -1,5 +1,5 @@
-import { KNOWLEDGE_SCHEMA, LEGEND_ITEMS } from './schema.ts';
-import type { ColorByMode, ColorLegendItem, GraphNode } from './types.ts';
+import { getKindVisual, KNOWLEDGE_SCHEMA, LEGEND_ITEMS, normalizeKind } from './schema.ts';
+import type { ColorByMode, ColorLegendItem, GraphNode, MasteryMap } from './types.ts';
 
 const LEVEL_COLORS: Record<string, { light: string; dark: string; label: string }> = {
   L1_intro: { light: '#16a34a', dark: '#4ade80', label: 'L1 · مقدماتی' },
@@ -10,6 +10,13 @@ const LEVEL_COLORS: Record<string, { light: string; dark: string; label: string 
 };
 
 const LEVEL_UNKNOWN = { light: '#64748b', dark: '#94a3b8', label: 'بدون سطح' };
+
+const MASTERY_COLORS: Record<string, { light: string; dark: string; label: string }> = {
+  mastered: { light: '#16a34a', dark: '#4ade80', label: 'تسلط دارم' },
+  learning: { light: '#2563eb', dark: '#60a5fa', label: 'در حال مطالعه' },
+  review: { light: '#d97706', dark: '#fbbf24', label: 'نیاز به مرور' },
+  unseen: { light: '#64748b', dark: '#94a3b8', label: 'نخوانده' },
+};
 
 const CHAPTER_PALETTE: Array<{ light: string; dark: string }> = [
   { light: '#1d4ed8', dark: '#60a5fa' },
@@ -25,6 +32,20 @@ const CHAPTER_PALETTE: Array<{ light: string; dark: string }> = [
 const BOOK_SHORT_NAMES: Record<string, string> = {
   axler: 'آکسلر',
   'abstract-algebra': 'جبر و ماتریس‌ها',
+};
+
+const KIND_PRIORITY: Record<string, number> = {
+  assertion: 1,
+  concept: 2,
+  axiom: 3,
+  proof: 4,
+  example: 5,
+  counterexample: 6,
+  problem: 7,
+  solution: 8,
+  pitfall: 9,
+  visual_lab: 10,
+  collection: 11,
 };
 
 function fnv1aHash(input: string): number {
@@ -72,15 +93,22 @@ export function buildChapterIndexMap(
   return map;
 }
 
-/** Resolves a node's fill color under the active Color-By analytical lens (`kind` | `level` | `chapter`). */
+/** Resolves a node's fill color under the active Color-By lens (`kind` | `level` | `chapter` | `mastery`). */
 export function resolveNodeColor(
-  node: Pick<GraphNode, 'lightColor' | 'darkColor' | 'level' | 'bookSlug' | 'chapterSlug'>,
+  node: Pick<GraphNode, 'id' | 'lightColor' | 'darkColor' | 'level' | 'bookSlug' | 'chapterSlug'>,
   mode: ColorByMode,
   isDark: boolean,
   chapterIndexMap?: Map<string, number>,
+  masteryMap?: MasteryMap,
 ): string {
   if (mode === 'level') {
     const entry = LEVEL_COLORS[node.level] || LEVEL_UNKNOWN;
+    return isDark ? entry.dark : entry.light;
+  }
+
+  if (mode === 'mastery') {
+    const status = masteryMap?.[node.id] || 'unseen';
+    const entry = MASTERY_COLORS[status] || MASTERY_COLORS.unseen;
     return isDark ? entry.dark : entry.light;
   }
 
@@ -95,15 +123,23 @@ export function resolveNodeColor(
   return isDark ? node.darkColor : node.lightColor;
 }
 
-/** Produces the active Color-By legend entries for HUD and fullscreen docks. */
+/** Returns true when a Color-By lens legend has at most 1 non-empty category in view. */
+export function isLensMonochrome(items: ColorLegendItem[]): boolean {
+  return items.filter((i) => (i.count ?? 1) > 0).length <= 1;
+}
+
+/** Produces the active dynamic Color-By legend entries for HUD and fullscreen docks. */
 export function getColorLensLegend(
   nodes: GraphNode[],
   mode: ColorByMode,
   isDark: boolean,
+  masteryMap?: MasteryMap,
 ): ColorLegendItem[] {
+  const realNodes = nodes.filter((n) => !n.isOverflowCluster);
+
   if (mode === 'level') {
     const counts = new Map<string, number>();
-    for (const n of nodes) {
+    for (const n of realNodes) {
       const key = LEVEL_COLORS[n.level] ? n.level : '__unknown__';
       counts.set(key, (counts.get(key) || 0) + 1);
     }
@@ -129,13 +165,31 @@ export function getColorLensLegend(
     return items;
   }
 
+  if (mode === 'mastery') {
+    const counts = new Map<string, number>();
+    for (const n of realNodes) {
+      const st = masteryMap?.[n.id] || 'unseen';
+      counts.set(st, (counts.get(st) || 0) + 1);
+    }
+    return (['mastered', 'learning', 'review', 'unseen'] as const).map((status) => {
+      const palette = MASTERY_COLORS[status];
+      return {
+        id: status,
+        label: palette.label,
+        color: isDark ? palette.dark : palette.light,
+        shape: 'circle',
+        count: counts.get(status) || 0,
+      };
+    });
+  }
+
   if (mode === 'chapter') {
-    const indexMap = buildChapterIndexMap(nodes);
-    const distinctBooks = new Set(nodes.map((n) => n.bookSlug).filter(Boolean));
+    const indexMap = buildChapterIndexMap(realNodes);
+    const distinctBooks = new Set(realNodes.map((n) => n.bookSlug).filter(Boolean));
     const multiBook = distinctBooks.size > 1;
     const grouped = new Map<string, { label: string; count: number; idx: number }>();
 
-    for (const n of nodes) {
+    for (const n of realNodes) {
       const key = getNodeChapterKey(n);
       const existing = grouped.get(key);
       if (existing) {
@@ -161,10 +215,38 @@ export function getColorLensLegend(
     });
   }
 
-  return LEGEND_ITEMS.map((item) => ({
-    id: item.kind,
-    label: item.label,
-    color: isDark ? item.dark : item.light,
-    shape: item.shape,
-  }));
+  // Dynamic 'kind' legend built from all normalized kinds actually present in visible nodes
+  if (!realNodes.length) {
+    return LEGEND_ITEMS.map((item) => ({
+      id: item.kind,
+      label: item.label,
+      color: isDark ? item.dark : item.light,
+      shape: item.shape,
+    }));
+  }
+
+  const kindCounts = new Map<string, number>();
+  for (const n of realNodes) {
+    const normalized = normalizeKind(n.kind) || '__untyped__';
+    kindCounts.set(normalized, (kindCounts.get(normalized) || 0) + 1);
+  }
+
+  return Array.from(kindCounts.entries())
+    .sort(([ka], [kb]) => {
+      const pa = KIND_PRIORITY[ka] ?? 50;
+      const pb = KIND_PRIORITY[kb] ?? 50;
+      if (pa !== pb) return pa - pb;
+      return ka.localeCompare(kb);
+    })
+    .map(([kindKey, count]) => {
+      const lookup = kindKey === '__untyped__' ? '' : kindKey;
+      const visual = getKindVisual(lookup);
+      return {
+        id: kindKey,
+        label: visual.label,
+        color: isDark ? visual.dark : visual.light,
+        shape: visual.shape,
+        count,
+      };
+    });
 }
