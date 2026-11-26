@@ -47,7 +47,7 @@ function createDOMFixture({ config, garden = [], slug = 'test-note' } = {}) {
 
   const templatePart = source.match(/<section[\s\S]*?<\/section>/)[0]
     .replace('data-config={JSON.stringify(config)}', `data-config="${configJsonEscaped}"`)
-    .replace('data-sitemap={JSON.stringify(graphSitemap(garden))}', `data-sitemap="${sitemapJsonEscaped}"`)
+    .replace('data-graph-url="/api/graph.json"', `data-sitemap="${sitemapJsonEscaped}"`)
     .replace('data-slug={noteHref(slug).slice(1)}', `data-slug="${noteHref(slug).slice(1)}"`);
 
   const script = source.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -431,4 +431,42 @@ test('NoteGraph interaction: depth chips, legend kind filters, error retry, and 
 
   dom.window.close();
   d2.window.close();
+});
+
+test('fetchGraphSitemap deduplicates concurrent requests, caches sitemap, and resets after error', async () => {
+  const { fetchGraphSitemap, resetGraphSitemapCache } = await loadEngineHelpers();
+  assert.equal(typeof fetchGraphSitemap, 'function', 'fetchGraphSitemap must be exported');
+  assert.equal(typeof resetGraphSitemapCache, 'function', 'resetGraphSitemapCache must be exported');
+
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  let failNext = true;
+  try {
+    globalThis.fetch = async (url) => {
+      calls++;
+      assert.equal(url, '/api/graph.json');
+      if (failNext) return new Response(null, { status: 503 });
+      return Response.json({ 'notes/a': { title: 'آ', links: [], backlinks: [] } });
+    };
+
+    resetGraphSitemapCache();
+    await assert.rejects(() => fetchGraphSitemap('/api/graph.json'));
+    assert.equal(calls, 1);
+
+    failNext = false;
+    const [first, second] = await Promise.all([
+      fetchGraphSitemap('/api/graph.json'),
+      fetchGraphSitemap('/api/graph.json'),
+    ]);
+    assert.equal(calls, 2, 'Concurrent calls should deduplicate into a single fetch');
+    assert.equal(first['notes/a'].title, 'آ');
+    assert.strictEqual(first, second);
+
+    const third = await fetchGraphSitemap('/api/graph.json');
+    assert.equal(calls, 2, 'Subsequent calls should hit cache');
+    assert.strictEqual(third, first);
+  } finally {
+    resetGraphSitemapCache();
+    globalThis.fetch = originalFetch;
+  }
 });
