@@ -1,0 +1,606 @@
+/* Mathematical Prose, BiDi/RTL Safety, Callouts, Tables, Mermaid, Obsidian Canvas & GeoGebra */
+
+/* Non-negotiable BiDi/LTR safety for math and code inside RTL Persian prose */
+.katex,
+.katex-display,
+code,
+pre,
+math-field,
+[data-math-field],
+.atomic-display-math,
+.atomic-inline-math {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+}
+
+.katex,
+code,
+pre {
+  text-align: left;
+}
+
+.katex {
+  display: inline-block;
+}
+
+.katex-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 0.5rem;
+}
+
+[data-math-field] math-field {
+  min-width: 12rem;
+  max-width: 100%;
+}
+
+@layer components {
+  .note {
+    max-width: var(--reading-width);
+    font-family: var(--font-reading);
+    font-size: var(--reading-size, 19px);
+    line-height: var(--reading-leading, 2);
+    margin-block: 1.5rem 2rem;
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
+
+  .note p,
+  .note li {
+    font-size: inherit;
+    text-wrap: pretty;
+  }
+
+  .note pre {
+    overflow-x: auto;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    border-radius: var(--radius-control);
+  }
+
+  .note-status,
+  [data-save-status] {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+  }
+
+  .note-status {
+    border-block-end: 1px solid var(--border);
+    padding-block-end: 0.75rem;
+  }
+
+  .wiki-missing,
+  .wiki-ambiguous {
+    text-decoration: underline dashed;
+    color: var(--muted-foreground);
+  }
+
+  mark {
+    background: color-mix(in oklch, oklch(0.84 0.16 92) 32%, transparent);
+    color: inherit;
+    padding: 0.1em 0.3em;
+    border-radius: 0.25rem;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 9999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.85em;
+    text-decoration: none;
+    color: var(--primary-text);
+    transition: background-color var(--motion-fast), border-color var(--motion-fast);
+    margin-inline-end: 0.4rem;
+    margin-block: 0.2rem;
+  }
+
+  .tag:hover {
+    background: var(--surface-hover);
+    border-color: var(--primary);
+  }
+
+  /* Inline note hover preview popover */
+  .inline-note-preview {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    width: min(420px, calc(100vw - 24px));
+    max-height: min(380px, calc(100dvh - 24px));
+    overflow: auto;
+    padding: 1rem;
+    color: var(--popover-foreground);
+    background: var(--popover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 12px 36px oklch(0 0 0 / 0.22);
+    z-index: 70;
+  }
+
+  .inline-note-preview header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-block-end: 0.5rem;
+  }
+
+  .inline-note-preview header a {
+    font-weight: 700;
+    color: var(--primary-text);
+    text-decoration: none;
+  }
+
+  .inline-note-preview header a:hover {
+    text-decoration: underline;
+  }
+
+  .inline-note-preview article {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    padding: 0.875rem;
+    max-height: 22rem;
+    overflow: auto;
+    margin-block: 0.5rem;
+    font-size: 0.9375rem;
+    line-height: 1.85;
+  }
+
+  .note-preview-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-inline: 0.25rem;
+    padding: 0 0.35rem;
+    font-size: 0.85em;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  /* Tables: RTL-correct */
+  .note table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.75rem 0;
+    direction: rtl;
+    display: table;
+    text-align: right;
+    font-family: var(--font-reading);
+    font-size: 0.925rem;
+    line-height: 1.7;
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.08), 0 0 0 1px var(--border);
+  }
+
+  .note .table-scroll,
+  .note .table-wrapper,
+  .note div:has(> table) {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 1.75rem 0;
+    border-radius: var(--radius-panel);
+  }
+
+  .note th,
+  .note td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    vertical-align: middle;
+    font-family: var(--font-reading);
+  }
+
+  .note table th {
+    background: var(--surface-subtle);
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .note table tbody tr:nth-child(even) {
+    background: color-mix(in oklch, var(--foreground) 2.5%, transparent);
+  }
+
+  .note table tbody tr:hover {
+    background: color-mix(in oklch, var(--primary) 7%, transparent);
+    transition: background-color var(--motion-fast) ease;
+  }
+
+  .note table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .note [align='right'] {
+    text-align: end;
+  }
+
+  .note [align='left'] {
+    text-align: start;
+  }
+
+  .note [align='center'] {
+    text-align: center;
+  }
+
+  .note table td a,
+  .note table th a {
+    display: flex;
+    margin-bottom: 4px;
+    line-height: 1.6;
+  }
+
+  .note table td a:last-child,
+  .note table th a:last-child {
+    margin-bottom: 0;
+  }
+
+  @media (max-width: 50rem) {
+    .note th,
+    .note td {
+      padding: 9px 12px;
+      font-size: 0.85rem;
+    }
+  }
+
+  /* Obsidian Callouts & Mathematical Environments */
+  [data-callout] {
+    --callout-color: var(--primary);
+    --callout-bg: color-mix(in srgb, var(--callout-color) 7%, var(--surface));
+    margin-block: 1.5rem;
+    padding: 1.125rem 1.25rem;
+    border: 1px solid var(--border);
+    border-inline-start: 4px solid var(--callout-color);
+    border-radius: var(--radius-lg);
+    background: var(--callout-bg);
+  }
+
+  [data-callout-title] {
+    font-weight: 700;
+    color: var(--callout-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block-end: 0.5rem;
+  }
+
+  details[data-callout] summary[data-callout-title] {
+    cursor: pointer;
+    margin-block-end: 0;
+    user-select: none;
+    min-height: 36px;
+  }
+
+  details[data-callout][open] summary[data-callout-title] {
+    margin-block-end: 0.75rem;
+  }
+
+  [data-callout-body] > :first-child {
+    margin-block-start: 0;
+  }
+
+  [data-callout-body] > :last-child {
+    margin-block-end: 0;
+  }
+
+  [data-callout-type='note'],
+  [data-callout-type='seealso'] {
+    --callout-color: #2563eb;
+  }
+
+  [data-callout-type='abstract'],
+  [data-callout-type='summary'],
+  [data-callout-type='tldr'] {
+    --callout-color: #7c3aed;
+  }
+
+  [data-callout-type='info'],
+  [data-callout-type='todo'] {
+    --callout-color: #0891b2;
+  }
+
+  [data-callout-type='tip'],
+  [data-callout-type='hint'],
+  [data-callout-type='important'],
+  [data-callout-type='warning'],
+  [data-callout-type='caution'],
+  [data-callout-type='attention'] {
+    --callout-color: #d97706;
+  }
+
+  [data-callout-type='success'],
+  [data-callout-type='check'],
+  [data-callout-type='done'] {
+    --callout-color: #16a34a;
+  }
+
+  [data-callout-type='question'],
+  [data-callout-type='help'],
+  [data-callout-type='faq'] {
+    --callout-color: #ea580c;
+  }
+
+  [data-callout-type='failure'],
+  [data-callout-type='fail'],
+  [data-callout-type='missing'] {
+    --callout-color: #dc2626;
+  }
+
+  [data-callout-type='danger'],
+  [data-callout-type='error'],
+  [data-callout-type='bug'] {
+    --callout-color: #e11d48;
+  }
+
+  [data-callout-type='example'] {
+    --callout-color: #9333ea;
+  }
+
+  [data-callout-type='quote'],
+  [data-callout-type='cite'],
+  [data-callout-type='proof'],
+  [data-callout-type='remark'] {
+    --callout-color: #64748b;
+  }
+
+  [data-callout-type='theorem'] {
+    --callout-color: #1d4ed8;
+  }
+
+  [data-callout-type='definition'] {
+    --callout-color: #0d9488;
+  }
+
+  [data-callout-type='lemma'],
+  [data-callout-type='solution'] {
+    --callout-color: #059669;
+  }
+
+  [data-callout-type='corollary'] {
+    --callout-color: #4f46e5;
+  }
+
+  [data-callout-type='axiom'] {
+    --callout-color: #0e7490;
+  }
+
+  [data-callout-type='property'] {
+    --callout-color: #6366f1;
+  }
+
+  [data-callout-type='algorithm'] {
+    --callout-color: #0284c7;
+  }
+
+  [data-callout-type='pitfall'] {
+    --callout-color: #b45309;
+  }
+
+  /* Mermaid Diagrams */
+  .mermaid-diagram {
+    margin-block: 2rem;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .mermaid-chart {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow-x: auto;
+    min-height: 4rem;
+    padding: 1rem 0;
+    direction: ltr;
+  }
+
+  .mermaid-chart svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    font-family: var(--font-reading);
+  }
+
+  .mermaid-details {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted-foreground);
+  }
+
+  .mermaid-error {
+    color: var(--destructive);
+    font-size: 0.875rem;
+  }
+
+  /* Obsidian JSON Canvas */
+  .canvas-diagram {
+    margin-block: 2rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .canvas-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--background);
+    font-size: 0.875rem;
+  }
+
+  .canvas-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .canvas-actions button {
+    min-height: 28px;
+    height: 28px;
+    padding: 0 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+  }
+
+  .canvas-viewport {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    overflow: hidden;
+    cursor: grab;
+    background-color: var(--surface);
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 20px 20px;
+    direction: ltr;
+  }
+
+  .canvas-stage {
+    position: absolute;
+    transform-origin: 0 0;
+  }
+
+  .canvas-edges-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .canvas-edge-path {
+    fill: none;
+    stroke: var(--muted-foreground);
+    stroke-width: 2;
+  }
+
+  .canvas-edge-label {
+    fill: var(--foreground);
+    font-size: 12px;
+    font-family: var(--font-reading);
+    paint-order: stroke;
+    stroke: var(--surface);
+    stroke-width: 3px;
+  }
+
+  .canvas-node {
+    position: absolute;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem;
+    box-shadow: 0 2px 8px oklch(0 0 0 / 0.08);
+    overflow: auto;
+    font-size: 0.9rem;
+    direction: rtl;
+  }
+
+  .canvas-node-group {
+    background: color-mix(in oklch, var(--foreground) 3%, transparent);
+    border-style: dashed;
+    z-index: 0;
+  }
+
+  .canvas-node-file-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .canvas-open-link {
+    font-size: 0.85em;
+    color: var(--primary-text);
+    text-decoration: none;
+  }
+
+  /* GeoGebra */
+  [data-geogebra] {
+    margin: var(--space-6) 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: var(--font-reading);
+    white-space: normal;
+  }
+
+  [data-geogebra] > figcaption {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    margin-block-end: var(--space-2);
+  }
+
+  [data-geogebra-host] {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    direction: ltr;
+  }
+
+  [data-geogebra-host] iframe {
+    display: block;
+    width: 100%;
+    border: 0;
+  }
+
+  [data-geogebra] > button,
+  [data-geogebra] > details,
+  [data-geogebra-status] {
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+
+  [data-geogebra] > details {
+    margin-block-start: var(--space-2);
+  }
+
+  [data-geogebra] > details > summary {
+    color: var(--muted-foreground);
+  }
+
+  [data-geogebra] > button[hidden],
+  [data-geogebra-status]:empty {
+    display: none;
+  }
+
+  /* Media & PDF Embeds */
+  .pdf-embed-wrapper,
+  .audio-embed-wrapper,
+  .video-embed-wrapper {
+    margin-block: 1.5rem;
+  }
+
+  .pdf-embed {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+
+  .audio-embed {
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .video-embed {
+    width: 100%;
+    max-width: 100%;
+  }
+}
