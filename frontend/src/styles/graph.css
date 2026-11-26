@@ -172,7 +172,7 @@
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 20;
+    z-index: 19;
     pointer-events: none;
     max-width: min(290px, calc(100% - 20px));
     padding: 8px 11px;
@@ -843,7 +843,7 @@
     right: 12px;
     top: 64px;
     bottom: 64px;
-    z-index: 20;
+    z-index: 24;
     width: min(370px, calc(100% - 24px));
     display: flex;
     flex-direction: column;
@@ -940,6 +940,7 @@
     border-radius: 7px !important;
     font-size: 0.74rem !important;
     font-weight: 600;
+    white-space: nowrap;
     text-decoration: none !important;
     cursor: pointer;
   }
@@ -967,8 +968,9 @@
   }
   .kg-qp-trace-chip {
     flex: 1;
-    min-height: 25px !important;
-    height: 25px !important;
+    min-width: 0;
+    min-height: 26px !important;
+    height: 26px !important;
     padding: 0 8px !important;
     display: inline-flex;
     align-items: center;
@@ -978,7 +980,8 @@
     border: 1px solid var(--border) !important;
     background: transparent !important;
     color: var(--muted-foreground) !important;
-    font-size: 0.7rem !important;
+    font-size: 0.71rem !important;
+    white-space: nowrap;
     cursor: pointer;
   }
   .kg-qp-trace-chip.is-active {
