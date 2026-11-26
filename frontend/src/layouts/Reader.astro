@@ -14,9 +14,7 @@ import '@fontsource/vazirmatn/500.css';
 import '@fontsource/vazirmatn/600.css';
 import '@fontsource/vazirmatn/700.css';
 import 'katex/dist/katex.min.css';
-import '../styles/custom.css';
-import '../styles/workspace.css';
-import '../styles/shadcn.css';
+import '../styles/app.css';
 interface HeadingItem { depth: number; slug: string; text: string }
 interface Props { title: string; headings?: HeadingItem[]; documentPage?: boolean }
 const {title,documentPage=false}=Astro.props;
@@ -73,10 +71,11 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
  document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
  const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
  function updateThemeLabel(){if(themeToggle)themeToggle.setAttribute('aria-label',document.documentElement.dataset.theme==='dark'?'تغییر به پوستهٔ روشن':'تغییر به پوستهٔ تیره');}
+ function applyDomTheme(next:string){const root=document.documentElement;root.classList.add('theme-switching');root.dataset.theme=next;updateThemeLabel();requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switching')));}
  updateThemeLabel();
- themeToggle?.addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;updateThemeLabel();try{localStorage.setItem('garden-theme',theme)}catch{}document.dispatchEvent(new CustomEvent('garden:theme-setting',{detail:{theme}}));});
+ themeToggle?.addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';applyDomTheme(theme);try{localStorage.setItem('garden-theme',theme)}catch{}document.dispatchEvent(new CustomEvent('garden:theme-setting',{detail:{theme}}));});
  document.addEventListener('garden:preferences',updateThemeLabel);
- const media=matchMedia('(prefers-color-scheme: dark)');media.addEventListener('change',()=>{try{if(localStorage.getItem('garden-theme')==='system'){document.documentElement.dataset.theme=media.matches?'dark':'light';updateThemeLabel();}}catch{}});
+ const media=matchMedia('(prefers-color-scheme: dark)');media.addEventListener('change',()=>{try{if(localStorage.getItem('garden-theme')==='system'){applyDomTheme(media.matches?'dark':'light');}}catch{}});
  document.addEventListener('garden:preference-save',event=>{const state=(event as CustomEvent<{state:string}>).detail.state;const status=document.querySelector<HTMLElement>('[data-theme-save-status]');if(status){status.textContent=state==='saving'?'در حال ذخیره…':state==='saved'?'ترجیحات در حساب ذخیره شد.':'ذخیره در حساب انجام نشد؛ تغییر فعلاً روی این دستگاه است.';status.setAttribute('role',state==='error'?'alert':'status');}});
  const navToggle=document.querySelector<HTMLButtonElement>('[data-nav-toggle]');
  const navigation=document.querySelector<HTMLElement>('#workspace-navigation');

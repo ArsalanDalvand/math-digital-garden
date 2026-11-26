@@ -1,4 +1,3 @@
-import '../styles/account-settings.css';
 import {useEffect,useState} from 'react';
 import {DirectionProvider} from '@base-ui/react/direction-provider';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator} from './ui/dropdown-menu';
@@ -59,7 +58,7 @@ export default function AccountMenu(){
   async function logout(){try{await api('/auth/logout',undefined,'POST');document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.assign('/account');}catch{setError('خروج انجام نشد؛ دوباره تلاش کنید.');}}
   if (!user) {
     return (
-      <a href="/account" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.06] transition-colors" aria-label="ورود یا ثبت‌نام در حساب کاربری">
+      <a href="/account" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="ورود یا ثبت‌نام در حساب کاربری">
         <UserRound size={15} />
         <span>ورود / ثبت‌نام</span>
       </a>
@@ -67,19 +66,19 @@ export default function AccountMenu(){
   }
   return <DirectionProvider direction="rtl"><DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" aria-label={'منوی حساب: '+name}/>}>{avatar}<span className="max-w-32 truncate hidden sm:inline">{name}</span><ChevronDown size={14}/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-64">
     {user?<><div className="flex items-center gap-2.5 px-3 py-2.5">
-      {user.avatar_url?<img src={user.avatar_url} alt="" className="size-8 rounded-full object-cover shrink-0 ring-1 ring-white/10"/>:<span className="size-8 rounded-full bg-violet-500/20 text-violet-300 font-bold text-xs flex items-center justify-center shrink-0">{initial}</span>}
+      {user.avatar_url?<img src={user.avatar_url} alt="" className="size-8 rounded-full object-cover shrink-0 ring-1 ring-border"/>:<span className="size-8 rounded-full bg-primary/15 text-primary font-bold text-xs flex items-center justify-center shrink-0">{initial}</span>}
       <div className="min-w-0 flex-1">
         <strong className="block truncate text-xs font-semibold text-foreground">{name}</strong>
-        <span className="block truncate text-[11px] text-muted-foreground/80 font-mono tracking-tight" dir="ltr">{user.email}</span>
+        <span className="block truncate text-[11px] text-muted-foreground font-mono tracking-tight" dir="ltr">{user.email}</span>
       </div>
     </div>
-    <DropdownMenuSeparator className="my-1 bg-white/[0.08]"/>
+    <DropdownMenuSeparator className="my-1 bg-border"/>
     <DropdownMenuItem onClick={()=>location.assign('/settings/account/profile')} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"><UserRound size={15} className="opacity-70"/>پروفایل من</DropdownMenuItem>
     <DropdownMenuItem onClick={()=>location.assign('/settings/account/preferences')} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"><Settings size={15} className="opacity-70"/>ترجیحات من</DropdownMenuItem>
     <DropdownMenuItem onClick={()=>location.assign('/library')} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"><NotebookPen size={15} className="opacity-70"/>کتابخانه</DropdownMenuItem>
     {user.role==='admin'&&<DropdownMenuItem onClick={()=>location.assign('/review')} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"><GitPullRequest size={15} className="opacity-70"/>بازبینی پیشنهادها</DropdownMenuItem>}
-    <DropdownMenuSeparator className="my-1 bg-white/[0.08]"/>
-    <DropdownMenuItem variant="destructive" onClick={()=>void logout()} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-red-400 focus:text-red-300"><LogOut size={15} className="scale-x-[-1] opacity-80"/>خروج از حساب</DropdownMenuItem></>:
+    <DropdownMenuSeparator className="my-1 bg-border"/>
+    <DropdownMenuItem variant="destructive" onClick={()=>void logout()} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer text-destructive focus:text-destructive"><LogOut size={15} className="scale-x-[-1] opacity-80"/>خروج از حساب</DropdownMenuItem></>:
     <DropdownMenuItem onClick={()=>location.assign('/account')} className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"><UserRound size={15} className="opacity-70"/>ورود / ثبت‌نام</DropdownMenuItem>}
     {error&&<p role="alert" className="px-3 py-2 text-sm">{error}</p>}
   </DropdownMenuContent></DropdownMenu></DirectionProvider>;

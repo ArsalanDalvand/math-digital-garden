@@ -50,7 +50,7 @@ if(root){
   const linkBox=document.createElement('div');
   const feedback=document.createElement('p');
   feedback.setAttribute('role','status');
-  feedback.style.color='var(--sl-color-accent, #a78bfa)';
+  feedback.style.color='var(--primary-text)';
 
   const renderContent=()=>{
    linkBox.replaceChildren();
@@ -63,8 +63,8 @@ if(root){
     input.style.width='100%';
     input.style.padding='8px 10px';
     input.style.margin='8px 0';
-    input.style.background='var(--sl-color-gray-6, rgba(255,255,255,0.05))';
-    input.style.border='1px solid var(--workspace-border, #444)';
+    input.style.background='var(--surface-subtle)';
+    input.style.border='1px solid var(--border)';
     input.style.borderRadius='6px';
     input.style.color='inherit';
 
@@ -143,15 +143,15 @@ if(root){
     formGit.innerHTML=`
      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
       <label>نشانی مخزن گیت (HTTP/HTTPS):
-       <input name="repo_url" type="url" required placeholder="https://github.com/user/my-notes.git" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#222;color:#fff" />
+       <input name="repo_url" type="url" required placeholder="https://github.com/user/my-notes.git" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--border);background:var(--surface-subtle);color:var(--foreground)" />
       </label>
       <label>شاخه مخزن (پیش‌فرض: main):
-       <input name="branch" type="text" value="main" placeholder="main" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#222;color:#fff" />
+       <input name="branch" type="text" value="main" placeholder="main" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--border);background:var(--surface-subtle);color:var(--foreground)" />
       </label>
       <label>نام پوشه در کتابخانه (اختیاری):
-       <input name="title" type="text" placeholder="نام دلخواه یا خالی جهت استفاده از نام مخزن" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#222;color:#fff" />
+       <input name="title" type="text" placeholder="نام دلخواه یا خالی جهت استفاده از نام مخزن" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--border);background:var(--surface-subtle);color:var(--foreground)" />
       </label>
-      <button type="submit" style="padding:10px;border-radius:6px;background:var(--accent,#3b82f6);color:#fff;font-weight:bold;cursor:pointer;margin-top:6px">شروع کلون و ساخت یادداشت‌ها</button>
+      <button type="submit" style="padding:10px;border-radius:6px;background:var(--primary);color:var(--primary-foreground);font-weight:bold;cursor:pointer;margin-top:6px">شروع کلون و ساخت یادداشت‌ها</button>
      </div>
     `;
     formGit.addEventListener('submit',async(e)=>{
@@ -183,9 +183,9 @@ if(root){
        <input name="zip_file" type="file" accept=".zip" required style="width:100%;padding:8px;margin-top:4px" />
       </label>
       <label>نام پوشه در کتابخانه (اختیاری):
-       <input name="title" type="text" placeholder="نام دلخواه یا خالی جهت استفاده از نام فایل" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#222;color:#fff" />
+       <input name="title" type="text" placeholder="نام دلخواه یا خالی جهت استفاده از نام فایل" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid var(--border);background:var(--surface-subtle);color:var(--foreground)" />
       </label>
-      <button type="submit" style="padding:10px;border-radius:6px;background:var(--accent,#3b82f6);color:#fff;font-weight:bold;cursor:pointer;margin-top:6px">آپلود و استخراج زیپ</button>
+      <button type="submit" style="padding:10px;border-radius:6px;background:var(--primary);color:var(--primary-foreground);font-weight:bold;cursor:pointer;margin-top:6px">آپلود و استخراج زیپ</button>
      </div>
     `;
     formZip.addEventListener('submit',async(e)=>{

@@ -1,0 +1,152 @@
+/* Unified Design System Tokens — Light & Dark OKLCH palette (Notion-inspired academic surface) */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Core semantic palette */
+  --background: oklch(0.992 0.002 85);
+  --foreground: oklch(0.24 0.008 255);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+
+  /* Single action hue (academic blue) */
+  --primary: oklch(0.52 0.18 254);
+  --primary-foreground: oklch(1 0 0);
+  --primary-hover: oklch(0.46 0.185 254);
+  --primary-soft: oklch(0.955 0.022 254);
+  --primary-text: oklch(0.44 0.175 254);
+
+  /* Neutral UI roles (shadcn contract: --accent is a quiet hover surface) */
+  --secondary: oklch(0.972 0.003 85);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.968 0.003 85);
+  --muted-foreground: oklch(0.48 0.01 255);
+  --accent: oklch(0.955 0.004 85);
+  --accent-foreground: var(--foreground);
+
+  /* Semantic statuses */
+  --destructive: oklch(0.49 0.19 25);
+  --destructive-foreground: oklch(1 0 0);
+  --destructive-surface: oklch(0.965 0.018 25);
+  --success: oklch(0.42 0.12 150);
+  --success-surface: oklch(0.965 0.018 150);
+  --warning: oklch(0.46 0.11 75);
+  --warning-surface: oklch(0.97 0.024 80);
+
+  /* Surfaces & borders */
+  --surface: oklch(1 0 0);
+  --surface-nav: oklch(1 0 0);
+  --surface-sidebar: oklch(0.976 0.003 85);
+  --surface-subtle: oklch(0.968 0.003 85);
+  --surface-hover: oklch(0.95 0.005 85);
+  --surface-active: oklch(0.925 0.006 85);
+  --surface-elevated: oklch(1 0 0 / 0.94);
+
+  --border: oklch(0.912 0.005 85);
+  --border-strong: oklch(0.82 0.008 255);
+  --control-border: oklch(0.56 0.012 250);
+  --input: var(--border);
+  --ring: oklch(0.56 0.17 254);
+  --selection: oklch(0.93 0.03 254);
+
+  /* Scrollbars */
+  --scrollbar-thumb: oklch(0.3 0 0 / 0.18);
+  --scrollbar-thumb-hover: oklch(0.3 0 0 / 0.34);
+
+  /* Layout & typography scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  --reading-width: 760px;
+  --reading-size: 19px;
+  --reading-leading: 2;
+  --control-height: 44px;
+  --header-height: 58px;
+
+  --font-reading: 'Vazirmatn', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --motion-fast: 150ms;
+
+  /* Compatibility short aliases */
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --workspace-border: var(--border);
+  --surface-container: var(--surface-subtle);
+  --surface-container-high: var(--selection);
+  --state-hover: var(--surface-hover);
+  --danger: var(--destructive);
+  --danger-surface: var(--destructive-surface);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --background: oklch(0.18 0.006 255);
+  --foreground: oklch(0.945 0.004 85);
+  --card: oklch(0.215 0.007 255);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.215 0.007 255);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.72 0.145 252);
+  --primary-foreground: oklch(0.16 0.01 255);
+  --primary-hover: oklch(0.78 0.13 252);
+  --primary-soft: oklch(0.28 0.045 252);
+  --primary-text: oklch(0.77 0.13 252);
+
+  --secondary: oklch(0.255 0.008 255);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.255 0.008 255);
+  --muted-foreground: oklch(0.74 0.01 255);
+  --accent: oklch(0.27 0.009 255);
+  --accent-foreground: var(--foreground);
+
+  --destructive: oklch(0.71 0.17 25);
+  --destructive-foreground: oklch(0.16 0.01 25);
+  --destructive-surface: oklch(0.25 0.03 25);
+  --success: oklch(0.78 0.11 150);
+  --success-surface: oklch(0.25 0.03 150);
+  --warning: oklch(0.8 0.12 80);
+  --warning-surface: oklch(0.26 0.03 80);
+
+  --surface: oklch(0.215 0.007 255);
+  --surface-nav: oklch(0.215 0.007 255);
+  --surface-sidebar: oklch(0.2 0.006 255);
+  --surface-subtle: oklch(0.24 0.007 255);
+  --surface-hover: oklch(0.275 0.009 255);
+  --surface-active: oklch(0.32 0.01 255);
+  --surface-elevated: oklch(0.21 0.007 255 / 0.94);
+
+  --border: oklch(0.315 0.008 255);
+  --border-strong: oklch(0.44 0.012 255);
+  --control-border: oklch(0.66 0.012 255);
+  --input: var(--border);
+  --ring: oklch(0.72 0.145 252);
+  --selection: oklch(0.31 0.045 254);
+
+  --scrollbar-thumb: oklch(0.9 0 0 / 0.2);
+  --scrollbar-thumb-hover: oklch(0.9 0 0 / 0.36);
+}
+
+/* Disable transitions momentarily during theme flip so elements switch together cleanly */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
