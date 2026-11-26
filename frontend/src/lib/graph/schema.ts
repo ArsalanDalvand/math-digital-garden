@@ -90,6 +90,54 @@ export function toPersianDigits(n: number | string): string {
   return String(n).replace(/\d/g, (d) => PERSIAN_DIGITS[Number(d)] ?? d);
 }
 
+/** Formats internal UMKO difficulty keys (`L3_undergrad_core`) into human Persian labels. */
+export function formatLevelLabel(level?: string): string {
+  const clean = (level || '').trim();
+  if (!clean) return '';
+  const levelsMap = KNOWLEDGE_SCHEMA.levels as Record<string, { label?: string; short?: string }>;
+  const entry = levelsMap[clean];
+  if (!entry) return clean;
+  if (entry.label && entry.short) return `${entry.label} (${entry.short})`;
+  return entry.label || entry.short || clean;
+}
+
+const TOOLTIP_LATEX_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\\trianglelefteq\b/g, '⊴'],
+  [/\\trianglerighteq\b/g, '⊵'],
+  [/\\notin\b/g, '∉'],
+  [/\\in\b/g, '∈'],
+  [/\\subseteq\b/g, '⊆'],
+  [/\\subset\b/g, '⊂'],
+  [/\\supseteq\b/g, '⊇'],
+  [/\\neq\b/g, '≠'],
+  [/\\leq\b|\\le\b/g, '≤'],
+  [/\\geq\b|\\ge\b/g, '≥'],
+  [/\\leftrightarrow\b/g, '↔'],
+  [/\\rightarrow\b|\\to\b/g, '→'],
+  [/\\leftarrow\b/g, '←'],
+  [/\\mapsto\b/g, '↦'],
+  [/\\implies\b/g, '⇒'],
+  [/\\iff\b/g, '⇔'],
+  [/\\forall\b/g, '∀'],
+  [/\\exists\b/g, '∃'],
+  [/\\times\b/g, '×'],
+  [/\\cdot\b/g, '·'],
+  [/\\circ\b/g, '∘'],
+  [/\\infty\b/g, '∞'],
+  [/\\mathbb\{([A-Za-z])\}/g, '$1'],
+];
+
+/** Converts inline `$...$` expressions inside hover tooltips into clean readable Unicode text. */
+export function stripRawLatexForTooltip(text?: string): string {
+  if (!text) return '';
+  let out = text.replace(/\$\$/g, '').replace(/\$/g, '');
+  for (const [pattern, replacement] of TOOLTIP_LATEX_REPLACEMENTS) {
+    out = out.replace(pattern, replacement);
+  }
+  out = out.replace(/\\([A-Za-z]+)/g, '$1').replace(/[{}]/g, '');
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 export function getKindVisual(kind: string): KindVisual {
   const kindsMap = UMKO_KINDS as Record<
     string,

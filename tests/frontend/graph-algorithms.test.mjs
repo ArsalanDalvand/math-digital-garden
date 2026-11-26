@@ -435,3 +435,317 @@ test('Phase 4 Feature #5: resolves Color-By lens palettes across kind, level, an
   assert.ok(levelLegend.some((item) => item.id === 'L1_intro'));
   assert.ok(levelLegend.some((item) => item.id === 'L4_grad_advanced'));
 });
+
+import {
+  buildSidebarEgoSubgraph,
+  computeEnhancedDagLayout,
+  extractSectionOrder,
+  getPedagogicalTier,
+} from '../../frontend/src/lib/graph/dag-layout.ts';
+import {
+  findMissingPrerequisites,
+  MASTERY_STORAGE_KEY,
+  setNodeMastery,
+} from '../../frontend/src/lib/graph/mastery.ts';
+import {
+  computeTheoremAnatomy,
+  findShortestPath,
+} from '../../frontend/src/lib/graph/path-tracer.ts';
+import {
+  formatLevelLabel,
+  stripRawLatexForTooltip,
+} from '../../frontend/src/lib/graph/schema.ts';
+
+test('Phase 5 UX #1: pedagogical DAG fallback prevents Axler inversion, anchors MOC as root, and supports horizontal RTL layout', () => {
+  assert.equal(extractSectionOrder('تعریف ۲۰.۱ فضای برداری'), 20.1);
+  assert.equal(extractSectionOrder('تعریف ۱.۳۱ زیرفضا'), 1.31);
+  assert.ok(getPedagogicalTier('concept') < getPedagogicalTier('assertion'));
+  assert.ok(getPedagogicalTier('assertion') < getPedagogicalTier('proof'));
+  assert.ok(getPedagogicalTier('proof') < getPedagogicalTier('problem'));
+
+  // Weakly-typed Axler graph where subspace (1.31) appears first in links to vector space (1.20)
+  const axlerLike = {
+    'notes/vec': {
+      title: 'تعریف ۱.۲۰ فضای برداری',
+      kind: 'concept',
+      links: ['notes/subspace', 'notes/prob1'],
+    },
+    'notes/subspace': {
+      title: 'تعریف ۱.۳۱ زیرفضا',
+      kind: 'concept',
+      links: ['notes/prob1'],
+    },
+    'notes/prob1': {
+      title: 'تمرین ۱ بخش ۱',
+      kind: 'problem',
+      links: [],
+    },
+  };
+  const gAxler = buildTypedGraphData(axlerLike, 'notes/vec', 2);
+  const resVert = computeEnhancedDagLayout(gAxler.nodes, gAxler.links, {
+    currentId: 'notes/vec',
+    orientation: 'vertical',
+  });
+  const pVec = resVert.positions.get('notes/vec');
+  const pSub = resVert.positions.get('notes/subspace');
+  const pProb = resVert.positions.get('notes/prob1');
+  assert.ok(pVec && pSub && pProb);
+  assert.ok(pVec.rank <= pSub.rank, 'Earlier section concept 1.20 must not sit below 1.31');
+  assert.ok(pVec.rank < pProb.rank, 'Concept must rank strictly above exercise');
+  assert.ok(pVec.y < pProb.y);
+
+  // Horizontal RTL layout places foundational ranks on the right (higher x) flowing left (lower x)
+  const resHoriz = computeEnhancedDagLayout(gAxler.nodes, gAxler.links, {
+    currentId: 'notes/vec',
+    orientation: 'horizontal',
+  });
+  const hVec = resHoriz.positions.get('notes/vec');
+  const hProb = resHoriz.positions.get('notes/prob1');
+  assert.ok(hVec && hProb);
+  assert.ok(hVec.x > hProb.x, 'RTL horizontal DAG puts prerequisite concepts to the right of exercises');
+  assert.ok(resHoriz.lanes.length >= 2);
+
+  // MOC star-hub puts MOC at rank 0 (top/root), not crushed under 40 children
+  const mocChildren = Array.from({ length: 40 }, (_, i) => `notes/ex-${i}`);
+  const mocSitemap = {
+    'notes/moc-hub': {
+      title: '04-MOC حل تمرینات',
+      kind: 'collection',
+      links: mocChildren,
+    },
+    ...Object.fromEntries(
+      mocChildren.map((id, i) => [id, { title: `تمرین ${i + 1}`, kind: 'problem', links: [] }]),
+    ),
+  };
+  const gMoc = buildTypedGraphData(mocSitemap, 'notes/moc-hub', 1);
+  const resMoc = computeEnhancedDagLayout(gMoc.nodes, gMoc.links, {
+    currentId: 'notes/moc-hub',
+    currentIsMoc: true,
+    viewportWidth: 1200,
+    viewportHeight: 760,
+  });
+  const pHub = resMoc.positions.get('notes/moc-hub');
+  const pEx0 = resMoc.positions.get('notes/ex-0');
+  assert.ok(pHub && pEx0);
+  assert.equal(pHub.rank, 0, 'MOC root must sit at rank 0');
+  assert.ok(pEx0.rank > pHub.rank && pEx0.y > pHub.y, 'MOC children must sit below MOC root');
+});
+
+test('Phase 5 UX #2: buildSidebarEgoSubgraph caps dense neighborhoods and synthesizes overflow cluster nodes', () => {
+  const preIds = Array.from({ length: 10 }, (_, i) => `notes/pre-${i}`);
+  const depIds = Array.from({ length: 12 }, (_, i) => `notes/dep-${i}`);
+  const atomicDense = {
+    'notes/core': {
+      title: 'مفهوم مرکزی',
+      kind: 'concept',
+      links: preIds,
+      backlinks: depIds,
+      rels: Object.fromEntries(preIds.map((id) => [id, ['rel_requires']])),
+    },
+    ...Object.fromEntries(
+      preIds.map((id, i) => [id, { title: `پیش‌نیاز ${i}`, kind: 'concept', links: [] }]),
+    ),
+    ...Object.fromEntries(
+      depIds.map((id, i) => [
+        id,
+        {
+          title: `قضیه ${i}`,
+          kind: i % 2 === 0 ? 'assertion' : 'problem',
+          links: ['notes/core'],
+          rels: { 'notes/core': ['rel_requires'] },
+        },
+      ]),
+    ),
+  };
+  const gDense = buildTypedGraphData(atomicDense, 'notes/core', 1);
+  const ego = buildSidebarEgoSubgraph(gDense.nodes, gDense.links, 'notes/core', false);
+  assert.ok(ego.nodes.length <= 15, `Sidebar Ego-DAG must cap <= 15 nodes (got ${ego.nodes.length})`);
+  assert.ok(ego.nodes.some((n) => n.isCurrent && n.id === 'notes/core'));
+  const clusters = ego.nodes.filter((n) => n.isOverflowCluster);
+  assert.ok(clusters.length >= 1, 'Dense neighborhood must synthesize overflow cluster node(s)');
+  const totalHidden = clusters.reduce((s, c) => s + (c.overflowCount || 0), 0);
+  assert.equal(ego.nodes.length - clusters.length + totalHidden, gDense.nodes.length);
+
+  // 115-node MOC in sidebar collapses to <= 8 nodes + 1 overflow cluster node
+  const hubKids = Array.from({ length: 114 }, (_, i) => `notes/k-${i}`);
+  const hugeMoc = {
+    'notes/big-moc': { title: '04-MOC حل تمرینات', kind: 'collection', links: hubKids },
+    ...Object.fromEntries(
+      hubKids.map((id, i) => [id, { title: `تمرین ${i}`, kind: 'problem', links: [] }]),
+    ),
+  };
+  const gHuge = buildTypedGraphData(hugeMoc, 'notes/big-moc', 1);
+  const mocEgo = buildSidebarEgoSubgraph(gHuge.nodes, gHuge.links, 'notes/big-moc', true);
+  assert.ok(mocEgo.nodes.length <= 8, `Huge MOC sidebar should stay <= 8 nodes (got ${mocEgo.nodes.length})`);
+  const hubCluster = mocEgo.nodes.find((n) => n.isOverflowCluster);
+  assert.ok(hubCluster && (hubCluster.overflowCount || 0) >= 100);
+});
+
+test('Phase 5 UX #3: Study Checklist order, Concept Bridge shortest path, and Theorem Anatomy', () => {
+  const sitemap = {
+    'notes/axiom': { title: 'اصل موضوع', kind: 'axiom', links: [] },
+    'notes/def': {
+      title: 'تعریف همریختی',
+      kind: 'concept',
+      links: ['notes/axiom'],
+      rels: { 'notes/axiom': ['rel_depends_def'] },
+    },
+    'notes/thm': {
+      title: 'قضیه یکریختی',
+      kind: 'assertion',
+      links: ['notes/def', 'notes/plain-jump'],
+      backlinks: ['notes/proof1', 'notes/counter', 'notes/prob'],
+      rels: { 'notes/def': ['rel_requires'] },
+    },
+    'notes/proof1': {
+      title: 'اثبات قضیه یکریختی',
+      kind: 'proof',
+      links: ['notes/thm'],
+      rels: { 'notes/thm': ['rel_proves'] },
+    },
+    'notes/counter': {
+      title: 'مثال نقض فرض اضافی',
+      kind: 'counterexample',
+      links: ['notes/thm'],
+      rels: { 'notes/thm': ['rel_refutes'] },
+    },
+    'notes/prob': {
+      title: 'تمرین ۱',
+      kind: 'problem',
+      links: ['notes/thm'],
+      rels: { 'notes/thm': ['rel_applies_theorem'] },
+    },
+    'notes/plain-jump': {
+      title: 'یادداشت متفرقه',
+      kind: 'remark',
+      links: ['notes/axiom'],
+    },
+  };
+  const g = buildTypedGraphData(sitemap, 'notes/thm', 4);
+  const prereq = traceLearningPath(g.nodes, g.links, 'notes/thm', 'prerequisites');
+  assert.deepEqual(
+    prereq.studyChecklist.map((s) => s.nodeId),
+    ['notes/axiom', 'notes/def'],
+    'Study checklist must order deepest foundation first before immediate prereqs',
+  );
+
+  // Concept Bridge prefers typed path axiom -> def -> thm over 2-hop plain remark shortcut?
+  // Note: weight(typed)=1 + 1 = 2.0 < weight(untyped)=1.6 + 1.6 = 3.2!
+  const bridge = findShortestPath(sitemap, 'notes/axiom', 'notes/thm');
+  assert.equal(bridge.found, true);
+  assert.deepEqual(
+    bridge.steps.map((s) => s.id),
+    ['notes/axiom', 'notes/def', 'notes/thm'],
+  );
+  const unreachable = findShortestPath(
+    { 'notes/a': { title: 'A', links: [] }, 'notes/b': { title: 'B', links: [] } },
+    'notes/a',
+    'notes/b',
+  );
+  assert.equal(unreachable.found, false);
+  assert.equal(unreachable.steps.length, 0);
+
+  // Theorem Anatomy partitions premises, proofs/counterexamples, and applications
+  const anatomy = computeTheoremAnatomy(g.nodes, g.links, 'notes/thm');
+  assert.equal(anatomy.premises.some((n) => n.id === 'notes/def'), true);
+  assert.equal(anatomy.proofsAndRefutations.some((n) => n.id === 'notes/proof1'), true);
+  assert.equal(anatomy.proofsAndRefutations.some((n) => n.id === 'notes/counter'), true);
+  assert.equal(anatomy.applications.some((n) => n.id === 'notes/prob'), true);
+});
+
+test('Phase 5 UX #4: Persian level formatting, LaTeX tooltip cleanup, dynamic legend, and Mastery Overlay', () => {
+  assert.equal(formatLevelLabel('L3_undergrad_core'), 'هسته کارشناسی (L3)');
+  assert.equal(formatLevelLabel(''), '');
+
+  const cleaned = stripRawLatexForTooltip('گروه $N \\trianglelefteq G$ برای هر $a \\in N$');
+  assert.equal(cleaned.includes('$'), false);
+  assert.equal(cleaned.includes('\\trianglelefteq'), false);
+  assert.ok(cleaned.includes('⊴') && cleaned.includes('∈'));
+
+  const sitemap = {
+    'notes/a': { title: 'تعریف', kind: 'concept', level: 'L3_undergrad_core', links: ['notes/b', 'notes/c'] },
+    'notes/b': { title: 'اثبات', kind: 'proof', level: 'L3_undergrad_core', links: [] },
+    'notes/c': { title: 'مثال نقض', kind: 'counterexample', level: 'L3_undergrad_core', links: [] },
+  };
+  const g = buildTypedGraphData(sitemap, 'notes/a', 2);
+  const dynLegend = getColorLensLegend(g.nodes, 'kind', false);
+  assert.ok(dynLegend.some((i) => i.id === 'proof' && i.count === 1), 'Dynamic legend must include proof');
+  assert.ok(
+    dynLegend.some((i) => i.id === 'counterexample' && i.count === 1),
+    'Dynamic legend must include counterexample',
+  );
+
+  // Mastery storage helper & missing prerequisites
+  assert.equal(typeof MASTERY_STORAGE_KEY, 'string');
+  let mastery = {};
+  mastery = setNodeMastery(mastery, 'notes/a', 'mastered');
+  mastery = setNodeMastery(mastery, 'notes/b', 'review');
+  const masteryLegend = getColorLensLegend(g.nodes, 'mastery', false, mastery);
+  assert.equal(masteryLegend.find((i) => i.id === 'mastered')?.count, 1);
+  assert.equal(masteryLegend.find((i) => i.id === 'unseen')?.count, 1);
+
+  const trace = {
+    mode: 'prerequisites',
+    startId: 'notes/x',
+    nodeHops: new Map([
+      ['notes/x', 0],
+      ['notes/a', 1],
+      ['notes/b', 2],
+    ]),
+    highlightedLinkKeys: new Set(),
+    orderedSteps: [
+      {
+        nodeId: 'notes/a',
+        title: 'A',
+        kind: 'concept',
+        kindLabel: 'مفهوم',
+        lightColor: '#000',
+        darkColor: '#fff',
+        shape: 'circle',
+        hop: 1,
+        viaRelation: '',
+      },
+      {
+        nodeId: 'notes/b',
+        title: 'B',
+        kind: 'concept',
+        kindLabel: 'مفهوم',
+        lightColor: '#000',
+        darkColor: '#fff',
+        shape: 'circle',
+        hop: 2,
+        viaRelation: '',
+      },
+    ],
+    studyChecklist: [
+      {
+        nodeId: 'notes/b',
+        title: 'B',
+        kind: 'concept',
+        kindLabel: 'مفهوم',
+        lightColor: '#000',
+        darkColor: '#fff',
+        shape: 'circle',
+        hop: 2,
+        viaRelation: '',
+      },
+      {
+        nodeId: 'notes/a',
+        title: 'A',
+        kind: 'concept',
+        kindLabel: 'مفهوم',
+        lightColor: '#000',
+        darkColor: '#fff',
+        shape: 'circle',
+        hop: 1,
+        viaRelation: '',
+      },
+    ],
+  };
+  const missing = findMissingPrerequisites(trace, mastery);
+  assert.deepEqual(
+    missing.map((s) => s.nodeId),
+    ['notes/b'],
+    'Mastered prerequisites should be excluded from missing prerequisite gaps',
+  );
+});
