@@ -1,61 +1,24 @@
 ---
 import { noteHref } from '../lib/markdown.mjs';
-interface Props { slug: string }
-const { slug } = Astro.props;
-// UMKO v1.1 Semantic Knowledge Graph Configuration
-const config = {
-  depth: 1,
-  prefetchPages: false,
-  renderExternal: false,
-  renderLabels: true,
-  renderArrows: true,
-  typedOnly: false,
-  layoutMode: 'force',
-  labelFontSize: 12,
-  linkDistance: 120,
-  repelForce: 150,
-  centerForce: 0.12,
-  colliderPadding: 24,
-  actions: ['reset-zoom', 'fullscreen', 'typed-only', 'render-arrows', 'settings'],
-};
----
-<section data-note-graph class="note-graph" aria-label="گراف ارتباط یادداشت‌ها">
-  <div class="note-graph-header">
-    <h2>گراف ارتباط یادداشت‌ها</h2>
-    <div class="graph-depth-quickbar">
-      <span class="depth-label">شعاع:</span>
-      <button type="button" class="depth-chip active" data-depth="1" title="همسایگان مستقیم (عمق ۱)">۱ گام</button>
-      <button type="button" class="depth-chip" data-depth="2" title="دو لایه ارتباطی (عمق ۲)">۲ گام</button>
-      <button type="button" class="depth-chip" data-depth="5" title="کل پایگاه دانش">سراسری</button>
-    </div>
-  </div>
-  <p>برای مطالعه، نودها را انتخاب کنید. <a href="/search">فهرست متنی همهٔ یادداشت‌ها</a></p>
-  <button type="button" class="garden-secondary" data-load-graph>نمایش گراف ارتباطات</button>
-  <p role="status" data-graph-status></p>
-  <div class="graph-stage-slot" data-graph-slot></div>
-  <template data-graph-template>
-    <graph-component
-      data-config={JSON.stringify(config)}
-      data-graph-url="/api/graph.json"
-      data-slug={noteHref(slug).slice(1)}
-      data-debug="false"
-      data-trailing-slashes="false"
-    ></graph-component>
-  </template>
-  <div class="graph-umko-legend" aria-label="راهنمای دسته‌بندی گره‌های گراف">
-    <span class="legend-badge" data-legend-kind="assertion" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #1d4ed8">قضیه</span>
-    <span class="legend-badge" data-legend-kind="concept" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #0d9488">مفهوم</span>
-    <span class="legend-badge" data-legend-kind="problem" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #ea580c">مسئله</span>
-    <span class="legend-badge" data-legend-kind="solution" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #059669">راه‌حل</span>
-    <span class="legend-badge" data-legend-kind="collection" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #7c3aed">نقشه راه</span>
-    <span class="legend-badge" data-legend-kind="visual_lab" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #0284c7">شبیه‌ساز</span>
-    <span class="legend-badge" data-legend-kind="pitfall" role="button" tabindex="0" aria-pressed="false" style="--badge-c: #b45309">دام</span>
-  </div>
-  <noscript>برای گراف تعاملی جاوااسکریپت را فعال کنید؛ فهرست پیوندها در ادامه در دسترس است.</noscript>
-</section>
+import GraphWidget from './graph/GraphWidget';
 
-<style>
-  .note-graph-header {
+interface Props {
+  slug: string;
+}
+
+const { slug } = Astro.props;
+const targetSlug = noteHref(slug).slice(1);
+---
+<GraphWidget slug={targetSlug} graphUrl="/api/graph.json" client:idle />
+<noscript>
+  <p class="text-xs text-muted-foreground mt-2">
+    برای مشاهده گراف تعاملی دانش جاوااسکریپت را فعال کنید.
+    <a href="/search" class="text-primary underline underline-offset-4">فهرست متنی یادداشت‌ها</a>
+  </p>
+</noscript>
+
+<style is:global>
+  .note-graph .note-graph-header {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -146,18 +109,11 @@ const config = {
     border-color: color-mix(in srgb, var(--badge-c) 55%, var(--border));
     background: color-mix(in srgb, var(--badge-c) 10%, transparent);
   }
-  .legend-badge.is-active {
+  .note-graph .legend-badge.is-active {
     color: var(--foreground);
     font-weight: 600;
     border-color: var(--badge-c);
     background: color-mix(in srgb, var(--badge-c) 18%, transparent);
-  }
-</style>
-
-<style is:global>
-  .note-graph graph-component {
-    display: block;
-    width: 100%;
   }
   .note-graph .kg-container {
     position: relative;
@@ -695,84 +651,3 @@ const config = {
     }
   }
 </style>
-
-<script>
-  const bound = new WeakSet<HTMLElement>();
-
-  function bindGraphs() {
-    for (const host of document.querySelectorAll<HTMLElement>('[data-note-graph]')) {
-      if (bound.has(host)) continue;
-      bound.add(host);
-      const button = host.querySelector<HTMLButtonElement>('[data-load-graph]')!;
-      const status = host.querySelector<HTMLElement>('[data-graph-status]')!;
-      let pending = false;
-
-      if (typeof host.querySelectorAll === 'function') {
-        host.querySelectorAll<HTMLButtonElement>('[data-depth]').forEach(chip => {
-          chip.addEventListener('click', () => {
-            host.querySelectorAll('[data-depth]').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            const depth = Number(chip.dataset.depth);
-            const g = host.querySelector('graph-component') as any;
-            if (g && g.config) {
-              g.config.depth = depth;
-              g.full_refresh?.();
-            } else if (button && !button.hidden) {
-              button.click();
-            }
-          });
-        });
-
-        host.querySelectorAll<HTMLElement>('[data-legend-kind]').forEach(badge => {
-          const toggle = () => {
-            const g = host.querySelector('graph-component') as any;
-            if (!g || typeof g.setKindFilter !== 'function') return;
-            const kind = badge.dataset.legendKind || '';
-            const isAlready = badge.classList.contains('is-active');
-            g.setKindFilter(isAlready ? null : kind);
-          };
-          badge.addEventListener('click', toggle);
-          badge.addEventListener('keydown', (e: KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              toggle();
-            }
-          });
-        });
-      }
-
-      button.addEventListener('click', async () => {
-        if (pending) return;
-        pending = true;
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-        status.textContent = 'در حال بارگذاری گراف…';
-        try {
-          const { GraphComponent } = await import('../scripts/graph-component');
-          if (!host.isConnected) return;
-          const slot = host.querySelector<HTMLElement>('[data-graph-slot]');
-          const mountTarget = slot && typeof slot.append === 'function' ? slot : host;
-          mountTarget.append(host.querySelector<HTMLTemplateElement>('[data-graph-template]')!.content.cloneNode(true));
-          if (!customElements.get('graph-component')) customElements.define('graph-component', GraphComponent);
-          button.hidden = true;
-          status.textContent = '';
-        } catch {
-          button.hidden = false;
-          button.textContent = 'تلاش مجدد';
-          status.textContent = 'بارگذاری گراف ناموفق بود؛ دوباره تلاش کنید. فهرست متنی پیوندها همچنان در دسترس است.';
-        } finally {
-          pending = false;
-          button.disabled = false;
-          button.removeAttribute('aria-busy');
-        }
-      });
-
-      // Defer graph activation so article reading is never blocked.
-      button.hidden = true;
-      setTimeout(() => button.click(), 0);
-    }
-  }
-
-  bindGraphs();
-  document.addEventListener('astro:page-load', bindGraphs);
-</script>
