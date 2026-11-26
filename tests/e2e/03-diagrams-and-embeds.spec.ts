@@ -16,7 +16,7 @@ test.describe('Diagrams, KaTeX embeds, and interactive visuals', () => {
 
     const article = page.locator('article.note[data-ai-scope="canonical"]');
     await expect(article).toBeVisible();
-    const heading = article.locator('h1').or(page.locator('main h1')).first();
+    const heading = page.getByRole('heading', { level: 1 });
     await expect(heading).toBeVisible();
   });
 });
