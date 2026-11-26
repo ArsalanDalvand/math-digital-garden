@@ -13,7 +13,7 @@ export const atomicMath=StateField.define<{decorations:any,isolates:any}>({
  create:build,update:(value,tr)=>tr.docChanged||tr.selection||tr.reconfigured?build(tr.state):value,
  provide:field=>[EditorView.decorations.from(field,v=>v.decorations),EditorView.bidiIsolatedRanges.from(field,v=>v.isolates)]
 });
-function build(state:any){const raw=state.doc.toString(),ranges:any[]=[],isolates:any[]=[];const readOnly=state.facet(readOnlyFacet);const selection=state.selection.main;const re=/(?<![\\$])\$\$([\s\S]+?)\$\$|(?<![\\$])\$([^$\n]+?)\$(?!\$)/g;let match;
+function build(state:any){const raw=state.doc.toString(),ranges:any[]=[],isolates:any[]=[];const readOnly=state.facet(readOnlyFacet);const selection=state.selection.main;const re=/(?<![\\$])\$\$([\s\S]+?)\$\$|(?<![\\$])\$([^$\n]+?)\$(?!\$)/g;let match:RegExpExecArray|null;
  while((match=re.exec(raw))){const from=match.index,to=from+match[0].length;let code=false;let node:import('@lezer/common').SyntaxNode|null=syntaxTree(state).resolveInner(from,1);for(;node;node=node.parent){if(/Code|Fenced/.test(node.name)){code=true;break}}if(code)continue;
  const display=match[1]!==undefined;const first=state.doc.lineAt(from),last=state.doc.lineAt(to);
  isolates.push(Decoration.mark({bidiIsolate:Direction.LTR}).range(from,to));
