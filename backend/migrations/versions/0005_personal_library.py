@@ -48,6 +48,33 @@ def upgrade():
                 ),
             )
             op.create_index("ix_library_comments_item_id", "library_comments", ["item_id"])
+        elif model is LibraryAttachment:
+            # Freeze the original schema; later storage columns belong to migration 0012.
+            op.create_table(
+                "library_attachments",
+                sa.Column("id", sa.Uuid(), primary_key=True),
+                sa.Column(
+                    "item_id",
+                    sa.Uuid(),
+                    sa.ForeignKey("library_items.id", ondelete="CASCADE"),
+                    nullable=False,
+                ),
+                sa.Column(
+                    "user_id",
+                    sa.Uuid(),
+                    sa.ForeignKey("users.id", ondelete="CASCADE"),
+                    nullable=False,
+                ),
+                sa.Column("filename", sa.String(255), nullable=False),
+                sa.Column("data", sa.LargeBinary(), nullable=False),
+                sa.Column("published", sa.Boolean(), nullable=False),
+            )
+            op.create_index(
+                "ix_library_attachments_item_id", "library_attachments", ["item_id"]
+            )
+            op.create_index(
+                "ix_library_attachments_user_id", "library_attachments", ["user_id"]
+            )
         else:
             model.__table__.create(op.get_bind())
 
