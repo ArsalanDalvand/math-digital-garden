@@ -30,6 +30,7 @@ from backend.app.models import (
     User,
     UserNoteFork,
 )
+from backend.app.note_indexing import build_note_lookup, sync_note_index
 
 router = APIRouter(prefix="/api")
 limiter = Limiter(key_func=get_remote_address)
@@ -543,6 +544,20 @@ async def decide(
         note.current_content, note.current_hash = merged, digest(merged)
         note.updated_at = datetime.now(UTC)
         await invalidate_vectors(db, note.id, None)
+        all_notes = (
+            await db.execute(
+                select(
+                    CanonicalNote.id,
+                    CanonicalNote.slug,
+                    CanonicalNote.title,
+                    CanonicalNote.relative_path,
+                    CanonicalNote.frontmatter,
+                )
+            )
+        ).all()
+        resolve_slug = build_note_lookup(all_notes)
+        slug_to_id = {row.slug: row.id for row in all_notes}
+        await sync_note_index(db, note, resolve_slug, slug_to_id)
     p.status = {
         "approve": "approved",
         "reject": "rejected",

@@ -20,6 +20,7 @@ from backend.app.account_settings import router as account_router
 from backend.app.config import settings
 from backend.app.database import get_engine, get_session
 from backend.app.dify import router as dify_router
+from backend.app.discovery import router as discovery_router
 from backend.app.library import router as library_router
 from backend.app.models import CanonicalNote
 from backend.app.rag import router as rag_router
@@ -181,6 +182,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 app.include_router(workspace_router)
 app.include_router(account_router)
 app.include_router(library_router)
+app.include_router(discovery_router)
 
 
 @app.middleware("http")

@@ -33,6 +33,7 @@ def load_knowledge_schema() -> dict[str, Any]:
 
 KNOWLEDGE_SCHEMA: dict[str, Any] = load_knowledge_schema()
 UMKO_KINDS: dict[str, dict[str, Any]] = KNOWLEDGE_SCHEMA["kinds"]
+UMKO_LEVELS: dict[str, dict[str, Any]] = KNOWLEDGE_SCHEMA["levels"]
 UMKO_RELATIONS: dict[str, dict[str, Any]] = KNOWLEDGE_SCHEMA["relations"]
 UMKO_RELATION_PLANES: dict[str, dict[str, Any]] = KNOWLEDGE_SCHEMA["relationPlanes"]
 

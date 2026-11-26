@@ -1,8 +1,10 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -15,6 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -50,6 +53,52 @@ class CanonicalNote(Base):
     current_content: Mapped[str] = mapped_column(Text)
     current_hash: Mapped[str] = mapped_column(String(64))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    frontmatter: Mapped[dict[str, Any]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR().with_variant(Text(), "sqlite"),
+        nullable=True,
+        default=None,
+    )
+    rendered_html: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    render_meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    render_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class NoteEdge(Base):
+    __tablename__ = "note_edges"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_note_id",
+            "target_note_id",
+            "relation_type",
+            "edge_source",
+            name="uq_note_edges_quad",
+        ),
+        Index("idx_note_edges_source", "source_note_id", "relation_type"),
+        Index("idx_note_edges_target", "target_note_id", "relation_type"),
+        Index("idx_note_edges_relation", "relation_type"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, default=uuid4, server_default=text("gen_random_uuid()")
+    )
+    source_note_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_notes.id", ondelete="CASCADE")
+    )
+    target_note_id: Mapped[UUID] = mapped_column(
+        ForeignKey("canonical_notes.id", ondelete="CASCADE")
+    )
+    relation_type: Mapped[str] = mapped_column(Text)
+    edge_source: Mapped[str] = mapped_column(Text, default="wikilink", server_default="wikilink")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AuthSession(Base):
