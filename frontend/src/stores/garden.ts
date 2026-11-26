@@ -1,8 +1,12 @@
 import { atom, map } from 'nanostores';
+import { loadMasteryMap, saveMasteryMap, setNodeMastery } from '../lib/graph/mastery.ts';
 import {
   type ColorByMode,
+  type DagOrientation,
   DEFAULT_GRAPH_CONFIG,
   type LayoutMode,
+  type MasteryMap,
+  type MasteryStatus,
   type PathTraceMode,
   type RelationPlaneKey,
 } from '../lib/graph/types.ts';
@@ -18,6 +22,10 @@ export interface ActiveNoteRef {
 export interface GraphUiState {
   depth: number;
   layoutMode: LayoutMode;
+  sidebarLayoutMode: LayoutMode;
+  fullscreenLayoutMode: LayoutMode;
+  dagOrientation: DagOrientation;
+  theoremFocusMode: boolean;
   typedOnly: boolean;
   showHubsAndRaw: boolean;
   colorBy: ColorByMode;
@@ -32,13 +40,18 @@ export interface GraphUiState {
   activePlaneFilter: RelationPlaneKey | null;
   searchQuery: string;
   selectedNodeId: string | null;
+  bridgeTargetId: string | null;
+  practiceListOpen: boolean;
+  bridgePanelOpen: boolean;
   pivotSlug: string;
+  masteryMap: MasteryMap;
   isFullscreen: boolean;
   settingsOpen: boolean;
   nodeCount: number;
   linkCount: number;
   typedLinkCount: number;
   hiddenHubCount: number;
+  pinnedCount: number;
   status: 'idle' | 'loading' | 'ready' | 'error';
   errorMessage: string;
 }
@@ -46,6 +59,10 @@ export interface GraphUiState {
 export const DEFAULT_GRAPH_UI_STATE: GraphUiState = {
   depth: DEFAULT_GRAPH_CONFIG.depth,
   layoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+  sidebarLayoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+  fullscreenLayoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+  dagOrientation: DEFAULT_GRAPH_CONFIG.dagOrientation,
+  theoremFocusMode: DEFAULT_GRAPH_CONFIG.theoremFocusMode,
   typedOnly: DEFAULT_GRAPH_CONFIG.typedOnly,
   showHubsAndRaw: DEFAULT_GRAPH_CONFIG.showHubsAndRaw,
   colorBy: DEFAULT_GRAPH_CONFIG.colorBy,
@@ -60,13 +77,18 @@ export const DEFAULT_GRAPH_UI_STATE: GraphUiState = {
   activePlaneFilter: null,
   searchQuery: '',
   selectedNodeId: null,
+  bridgeTargetId: null,
+  practiceListOpen: false,
+  bridgePanelOpen: false,
   pivotSlug: '',
+  masteryMap: loadMasteryMap(),
   isFullscreen: false,
   settingsOpen: false,
   nodeCount: 0,
   linkCount: 0,
   typedLinkCount: 0,
   hiddenHubCount: 0,
+  pinnedCount: 0,
   status: 'idle',
   errorMessage: '',
 };
@@ -76,11 +98,23 @@ export const $identity = atom<Account | null>(null);
 export const $activeNote = atom<ActiveNoteRef | null>(null);
 export const $graphUi = map<GraphUiState>({ ...DEFAULT_GRAPH_UI_STATE });
 
+export function setGraphNodeMastery(nodeId: string, status: MasteryStatus): void {
+  const cur = $graphUi.get();
+  const nextMap = setNodeMastery(cur.masteryMap, nodeId, status);
+  saveMasteryMap(nextMap);
+  $graphUi.set({ ...cur, masteryMap: nextMap });
+}
+
 export function resetGraphSettings(): void {
+  const cur = $graphUi.get();
   $graphUi.set({
-    ...$graphUi.get(),
+    ...cur,
     depth: DEFAULT_GRAPH_CONFIG.depth,
     layoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+    sidebarLayoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+    fullscreenLayoutMode: DEFAULT_GRAPH_CONFIG.layoutMode,
+    dagOrientation: DEFAULT_GRAPH_CONFIG.dagOrientation,
+    theoremFocusMode: DEFAULT_GRAPH_CONFIG.theoremFocusMode,
     typedOnly: DEFAULT_GRAPH_CONFIG.typedOnly,
     showHubsAndRaw: DEFAULT_GRAPH_CONFIG.showHubsAndRaw,
     colorBy: DEFAULT_GRAPH_CONFIG.colorBy,
@@ -95,6 +129,9 @@ export function resetGraphSettings(): void {
     activePlaneFilter: null,
     searchQuery: '',
     selectedNodeId: null,
+    bridgeTargetId: null,
+    practiceListOpen: false,
+    bridgePanelOpen: false,
   });
 }
 
