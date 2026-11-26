@@ -1,28 +1,84 @@
 ---
 import { noteHref } from '../lib/markdown.mjs';
-type Note = Awaited<ReturnType<typeof import('../lib/markdown.mjs').buildKnowledge>>[number];
-interface Props { garden: Note[]; slugs: string[]; title: string; direction: 'outgoing' | 'incoming'; currentSlug: string }
-const { garden, slugs, title, direction, currentSlug } = Astro.props;
-const notes = slugs.map((slug)=>garden.find((note)=>note.slug===slug)).filter((note): note is Note => !!note);
+type Note = {
+  slug: string;
+  title: string;
+  previewHtml?: string;
+  referencePreviews?: Record<string, string>;
+};
+interface Props {
+  garden?: Note[];
+  bySlug?: Map<string, Note>;
+  slugs: string[];
+  title: string;
+  direction: 'outgoing' | 'incoming';
+  currentSlug: string;
+}
+const { garden = [], bySlug, slugs, title, direction, currentSlug } = Astro.props;
+const resolveNote = (slug: string) => bySlug?.get(slug) ?? garden.find((note) => note.slug === slug);
+const notes = slugs.map(resolveNote).filter((note): note is Note => !!note);
 const incoming = direction === 'incoming';
-const groups = [notes.slice(0,5), notes.slice(5)];
+const groups = [notes.slice(0, 5), notes.slice(5)];
 ---
 <section class="connection-section" aria-label={title}>
   <h2>{title} <span class="connection-count">{notes.length.toLocaleString('fa-IR')}</span></h2>
   <p class="connection-hint">{incoming ? 'یادداشت‌هایی که به این صفحه پیوند داده‌اند.' : 'یادداشت‌هایی که از این صفحه به آن‌ها پیوند داده شده است.'}</p>
-  {notes.length ? groups.map((group,index)=> {
+  {notes.length ? groups.map((group, index) => {
     const Tag = index ? 'details' : 'div';
     return group.length > 0 && <Tag class={index ? 'connections-more' : undefined}>
       {index > 0 && <summary><span class="more-closed">نمایش {group.length.toLocaleString('fa-IR')} مورد دیگر</span><span class="more-open">نمایش کمتر</span></summary>}
-      <ul class="connection-list">{group.map((note)=><li>
-        <a class="connection-link" href={noteHref(note.slug)}>{note.title}</a>
-        <details class="connection-preview"><summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
-          <article class="connection-excerpt" set:html={incoming ? note.referencePreviews[currentSlug] || note.previewHtml : note.previewHtml} />
-        </details>
-      </li>)}</ul>
+      <ul class="connection-list">{group.map((note) => {
+        const preloaded = incoming ? note.referencePreviews?.[currentSlug] || note.previewHtml : note.previewHtml;
+        return <li>
+          <a class="connection-link" href={noteHref(note.slug)}>{note.title}</a>
+          {preloaded ? (
+            <details class="connection-preview"><summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
+              <article class="connection-excerpt" set:html={preloaded} />
+            </details>
+          ) : (
+            <details class="connection-preview" data-preview-slug={note.slug} data-preview-ref={incoming ? currentSlug : ''}>
+              <summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
+              <article class="connection-excerpt" data-preview-body>در حال آماده‌سازی پیش‌نمایش…</article>
+            </details>
+          )}
+        </li>;
+      })}</ul>
     </Tag>;
   }) : <p class="connection-empty">{incoming ? 'هنوز یادداشت دیگری به این صفحه پیوند نداده است.' : 'در متن این یادداشت هنوز پیوندی به یادداشت دیگری وجود ندارد.'}</p>}
 </section>
+<script>
+  const connPreviewCache = new Map<string, string>();
+  for (const details of document.querySelectorAll<HTMLDetailsElement>('details.connection-preview[data-preview-slug]')) {
+    if (details.dataset.previewBound === 'true') continue;
+    details.dataset.previewBound = 'true';
+    details.addEventListener('toggle', async () => {
+      if (!details.open || details.dataset.previewLoaded === 'true') return;
+      const slug = details.dataset.previewSlug;
+      const ref = details.dataset.previewRef || '';
+      const body = details.querySelector<HTMLElement>('[data-preview-body]');
+      if (!slug || !body) return;
+      const key = `${slug}|${ref}`;
+      if (connPreviewCache.has(key)) {
+        body.innerHTML = connPreviewCache.get(key) || '';
+        details.dataset.previewLoaded = 'true';
+        return;
+      }
+      body.textContent = 'در حال بارگذاری…';
+      try {
+        const url = `/api/note-preview/${encodeURIComponent(slug)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('unavailable');
+        const data = (await res.json()) as { html?: string };
+        const html = data.html || '';
+        connPreviewCache.set(key, html);
+        body.innerHTML = html;
+        details.dataset.previewLoaded = 'true';
+      } catch {
+        body.textContent = 'پیش‌نمایش موقتاً در دسترس نیست.';
+      }
+    });
+  }
+</script>
 <style>
   .connection-section{font-size:.875rem;line-height:1.7;min-width:0}
   .connection-section + .connection-section{margin-block-start:var(--space-6)}

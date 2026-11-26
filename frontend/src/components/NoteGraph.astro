@@ -1,8 +1,7 @@
 ---
-import { graphSitemap } from '../lib/graph.mjs';
-import { noteHref, buildKnowledge } from '../lib/markdown.mjs';
-interface Props { garden: Awaited<ReturnType<typeof buildKnowledge>>; slug: string }
-const { garden, slug } = Astro.props;
+import { noteHref } from '../lib/markdown.mjs';
+interface Props { slug: string }
+const { slug } = Astro.props;
 // UMKO v1.1 Semantic Knowledge Graph Configuration
 const config = {
   depth: 1,
@@ -37,7 +36,7 @@ const config = {
   <template data-graph-template>
     <graph-component
       data-config={JSON.stringify(config)}
-      data-sitemap={JSON.stringify(graphSitemap(garden))}
+      data-graph-url="/api/graph.json"
       data-slug={noteHref(slug).slice(1)}
       data-debug="false"
       data-trailing-slashes="false"

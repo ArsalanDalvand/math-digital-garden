@@ -1,23 +1,22 @@
 ---
-import {folderTree} from '../../lib/folder-tree.mjs';
 import Reader from '../../layouts/Reader.astro';
 import WorkspaceNote from '../../components/WorkspaceNote.astro';
 import CanonicalActions from '../../components/CanonicalActions.astro';
-import Tutor from '../../components/Tutor.astro';
 import GeoGebra from '../../components/GeoGebra.astro';
-import { buildKnowledge } from '../../lib/markdown.mjs';
-import { fetchCatalogue } from '../../lib/catalogue.mjs';
+import { getKnowledgeIndex } from '../../lib/catalogue.mjs';
+import { renderSingleNote, type RenderedNote } from '../../lib/markdown.mjs';
 import Connections from '../../components/Connections.astro';
 import NoteGraph from '../../components/NoteGraph.astro';
 import InlinePreviews from '../../components/InlinePreviews.astro';
 import NoteProperties from '../../components/NoteProperties.astro';
 import SemanticConnections from '../../components/SemanticConnections.astro';
-let garden: Awaited<ReturnType<typeof buildKnowledge>> = [];
-let current: (typeof garden)[number] | undefined;
+
+let bySlug: Awaited<ReturnType<typeof getKnowledgeIndex>>['bySlug'] = new Map();
+let current: RenderedNote | undefined;
 const slug = Astro.params.slug ?? '';
 let title = 'یادداشت در دسترس نیست';
 let html = '';
-let aiHash = ''; 
+let aiHash = '';
 let message = '';
 if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
   Astro.response.status = 404;
@@ -41,11 +40,10 @@ if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
       }
       title = note.title;
       aiHash = note.current_hash;
-      const catalogue = await fetchCatalogue();
-      const notes = catalogue.map(item => item.slug === slug ? {...note, slug} : item);
-      if (!notes.some(item => item.slug === slug)) notes.push({...note, slug});
-      garden = await buildKnowledge(notes);
-      current = garden.find((item)=>item.slug===slug);
+      const index = await getKnowledgeIndex({ ...note, slug });
+      bySlug = index.bySlug;
+      const indexedCurrent = index.bySlug.get(slug);
+      current = indexedCurrent ? await renderSingleNote(indexedCurrent, index) : undefined;
       html = current?.html ?? '';
     }
   } catch {
@@ -54,13 +52,13 @@ if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
   }
 }
 ---
-<Reader title={title} headings={current?.headings} sidebar={folderTree(garden)}>
+<Reader title={title} headings={current?.headings}>
   {message ? <p role="status">{message}</p> : <><div class="note-meta"><span class="note-status">نسخهٔ رسمی</span></div>{current && <NoteProperties note={current} />}
-    <WorkspaceNote slug={slug} /><script type="application/json" data-note-link-index set:html={JSON.stringify(garden.map(n=>({slug:n.slug,title:n.title,aliases:n.aliases}))).replace(/</g,"\u003c")} /><article class="note" data-ai-scope="canonical" data-ai-hash={aiHash} set:html={html} /><GeoGebra />
+    <WorkspaceNote slug={slug} /><article class="note" data-ai-scope="canonical" data-ai-hash={aiHash} set:html={html} /><GeoGebra />
 
     <CanonicalActions slug={slug} title={title}/>
-    {current && <><InlinePreviews slugs={current.outgoing} garden={garden} /><SemanticConnections note={current} garden={garden} /><div class="note-connections"><Connections title="پیوندهای این یادداشت" direction="outgoing" currentSlug={current.slug} slugs={current.outgoing} garden={garden} /><Connections title="ارجاعات به این یادداشت" direction="incoming" currentSlug={current.slug} slugs={current.backlinks} garden={garden} /></div></>}</>}
-  <div slot="tools">{!message && <>{current && <NoteGraph slug={slug} garden={garden} />}<Tutor slug={slug} /></>}</div>
+    {current && <><InlinePreviews /><SemanticConnections note={current} bySlug={bySlug} /><div class="note-connections"><Connections title="پیوندهای این یادداشت" direction="outgoing" currentSlug={current.slug} slugs={current.outgoing} bySlug={bySlug} /><Connections title="ارجاعات به این یادداشت" direction="incoming" currentSlug={current.slug} slugs={current.backlinks} bySlug={bySlug} /></div></>}</>}
+  <div slot="tools">{!message && current && <NoteGraph slug={slug} />}</div>
 </Reader>
 <style>
   .note-connections{border-block-start:1px solid var(--workspace-border);margin-block-start:2rem;padding-block-start:1.5rem}

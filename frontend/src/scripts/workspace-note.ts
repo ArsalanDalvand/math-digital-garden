@@ -30,7 +30,22 @@ for(const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]'
   const article=document.querySelector<HTMLElement>('article.note:not([data-live-preview])')!;
   const canonicalHtml=article.innerHTML;
   const displayedCanonicalRaw=article.dataset.aiRaw, displayedCanonicalHash=article.dataset.aiHash!;
-  const links: {slug:string,title:string,aliases:string[]}[]=JSON.parse(document.querySelector('[data-note-link-index]')?.textContent||'[]');const resolveLink=(target:string)=>{const name=target.split('#')[0].replace(/\.md$/,'');return links.find(n=>[n.slug,n.title,...n.aliases].includes(name))};
+  type LinkEntry = {slug:string,title:string,aliases:string[]};
+  let links: LinkEntry[] = JSON.parse(document.querySelector('[data-note-link-index]')?.textContent||'[]');
+  let linksPromise: Promise<LinkEntry[]> | undefined;
+  const ensureLinks = (): Promise<LinkEntry[]> => {
+    if (links.length > 0) return Promise.resolve(links);
+    if (linksPromise) return linksPromise;
+    linksPromise = fetch('/api/link-index.json', { credentials: 'same-origin' })
+      .then(async (res) => (res.ok ? ((await res.json()) as LinkEntry[]) : []))
+      .then((rows) => {
+        if (Array.isArray(rows)) links = rows;
+        return links;
+      })
+      .catch(() => links);
+    return linksPromise;
+  };
+  const resolveLink=(target:string, list = links)=>{const name=target.split('#')[0].replace(/\.md$/,'');return list.find(n=>[n.slug,n.title,...n.aliases].includes(name))};
   const mode=new Compartment();
   let view:EditorView|undefined;
   let raw='', frontmatter='', hash='', canonical='', dirty=false, stopped=false, hasFork=false, previewSeq=0;
@@ -92,7 +107,7 @@ for(const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]'
     try {
       if(view){activateEditor({article,panel,indicator:document.querySelector('.note-status')});modeSwitch(false);syncOriginal();context(article,'personal',raw,hash,dirty);view.focus();return;}
       const visibleRaw=article.dataset.aiRaw;
-      await load();
+      await Promise.all([load(), ensureLinks()]);
       if(visibleRaw!==undefined)raw=visibleRaw;else if(readingOriginal)raw=canonical;
 
       const [{EditorView,basicSetup},{markdown,markdownLanguage},{EditorState},{MathfieldElement},{Table,TaskList}]=await editorModules;
@@ -121,7 +136,7 @@ for(const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]'
       frontmatter=splitEditorMarkdown(raw).frontmatter;
       previews.prepare(raw);
       view=new EditorView({parent:root.querySelector('[data-editor]')!,doc:raw.slice(frontmatter.length),
-        extensions:[basicSetup,markdown({base:markdownLanguage,extensions:[Table,TaskList,highlightMarkdown]}),atomicEditorTheme,atomicMarkdownSyntax,inlinePreview(),imageBlocks(),tables(),wikiLinks({resolve:async target=>{const n=resolveLink(target);return n?{target,label:n.title,status:"resolved"}:null},suggest:async q=>links.filter(n=>n.title.includes(q)).slice(0,10).map(n=>({target:n.title,label:n.title})),onOpen:target=>{const n=resolveLink(target);if(n)location.href="/notes/"+encodeURIComponent(n.slug)}}),atomicMath,blockPreview(previewHtml),mode.of(readOnlyExtension(false)),EditorView.lineWrapping,
+        extensions:[basicSetup,markdown({base:markdownLanguage,extensions:[Table,TaskList,highlightMarkdown]}),atomicEditorTheme,atomicMarkdownSyntax,inlinePreview(),imageBlocks(),tables(),wikiLinks({resolve:async target=>{const list=await ensureLinks();const n=resolveLink(target,list);return n?{target,label:n.title,status:"resolved"}:null},suggest:async q=>(await ensureLinks()).filter(n=>n.title.includes(q)).slice(0,10).map(n=>({target:n.title,label:n.title})),onOpen:target=>{const n=resolveLink(target);if(n)location.href="/notes/"+encodeURIComponent(n.slug)}}),atomicMath,blockPreview(previewHtml),mode.of(readOnlyExtension(false)),EditorView.lineWrapping,
           EditorView.perLineTextDirection.of(true),EditorState.tabSize.of(2),
           EditorView.contentAttributes.of({'aria-label':'متن خام Markdown',dir:'rtl'}),
           EditorView.updateListener.of(update=>{
