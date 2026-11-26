@@ -9,7 +9,6 @@ import NoteOutline from '../components/NoteOutline.astro';
 import AccountMenu from '../components/AccountMenu';
 import LibraryNavigation from '../components/LibraryNavigation.astro';
 import {BookOpen,Search,PanelRightClose,PanelLeft,SunMoon,GitPullRequest,Ellipsis,House} from 'lucide-react';
-import type { StarlightPageProps } from '@astrojs/starlight/components/StarlightPage.astro';
 import '@fontsource/vazirmatn/400.css';
 import '@fontsource/vazirmatn/500.css';
 import '@fontsource/vazirmatn/600.css';
@@ -18,7 +17,8 @@ import 'katex/dist/katex.min.css';
 import '../styles/custom.css';
 import '../styles/workspace.css';
 import '../styles/shadcn.css';
-interface Props {title:string; headings?:StarlightPageProps['headings']; sidebar?:StarlightPageProps['sidebar'];documentPage?:boolean}
+interface HeadingItem { depth: number; slug: string; text: string }
+interface Props { title: string; headings?: HeadingItem[]; documentPage?: boolean }
 const {title,documentPage=false}=Astro.props;
 const tools=Astro.slots.has('tools');
 const note=tools||documentPage;

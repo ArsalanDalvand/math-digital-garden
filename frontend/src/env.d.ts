@@ -1,1 +1,1 @@
-import '@astrojs/starlight';
+/// <reference types="astro/client" />
