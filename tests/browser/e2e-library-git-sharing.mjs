@@ -125,18 +125,18 @@ try {
   assert.equal(personalNote.hasActions, true, 'Personal note actions must render');
   record(`4. Created and opened personal note at ${personalNote.path}`);
 
-  // 5. Verify AI Study Assistant UI renders on a canonical note
+  // 5. Verify legacy AI Study Assistant UI is disabled/hidden on canonical notes (Phase 1)
   browser('open', base + '/notes/axler-2debc85d452ad205');
-  browser('wait', '.study-assistant');
+  browser('wait', 'graph-component[data-graph-ready="true"]');
   const assistantUi = evaluate(`(() => ({
-    hasHeader: !!document.querySelector('.study-assistant header'),
-    hasTextarea: !!document.querySelector('.assistant-composer textarea'),
-    hasSubmit: !!document.querySelector('.assistant-composer button[type="submit"], .assistant-composer button'),
+    hasStudyAssistant: !!document.querySelector('.study-assistant'),
+    hasChatForm: !!document.querySelector('[data-chat-form]'),
+    hasGraph: !!document.querySelector('graph-component[data-graph-ready="true"]'),
   }))()`);
-  assert.equal(assistantUi.hasHeader, true, 'Study Assistant header must be present');
-  assert.equal(assistantUi.hasTextarea, true, 'Study Assistant composer textarea must be present');
-  assert.equal(assistantUi.hasSubmit, true, 'Study Assistant send button must be present');
-  record('5. Verified AI Study Assistant composer UI on /sample');
+  assert.equal(assistantUi.hasStudyAssistant, false, 'Legacy Study Assistant UI must be hidden in Phase 1');
+  assert.equal(assistantUi.hasChatForm, false, 'Legacy AI chat form must be hidden in Phase 1');
+  assert.equal(assistantUi.hasGraph, true, 'Knowledge graph must still render cleanly without Study Assistant');
+  record('5. Verified legacy AI Study Assistant UI is hidden and Knowledge Graph renders on canonical note');
 
   const pageErrors = browser('errors')?.errors || [];
   assert.equal(pageErrors.length, 0, `No critical page errors allowed: ${JSON.stringify(pageErrors)}`);
