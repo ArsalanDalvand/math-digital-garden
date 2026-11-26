@@ -4,8 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 
 const require = createRequire(new URL('../../frontend/package.json', import.meta.url));
-const graphRequire = createRequire(require.resolve('starlight-site-graph'));
-const { parseDocument, DomUtils } = await import(graphRequire.resolve('htmlparser2'));
+const { JSDOM } = await import(require.resolve('jsdom'));
 const { App } = await import(require.resolve('astro/app'));
 const server = new URL('../../frontend/dist/server/', import.meta.url);
 const file = (await readdir(server)).find((name) => /^manifest_.*\.mjs$/.test(name));
@@ -29,7 +28,7 @@ Object.assign(manifest, {
   serverIslandMap: new Map(),
   renderers,
   actions: () => import(new URL('noop-entrypoint.mjs', server)),
-  middleware: () => import(new URL('_astro-internal_middleware.mjs', server)),
+  middleware: () => import(new URL('_noop-middleware.mjs', server)),
 });
 const app = new App(manifest);
 const raw = await readFile(new URL('../fixtures/cantor.md', import.meta.url), 'utf8');
@@ -53,8 +52,8 @@ test('Database note renders through the built SSR route', async () => {
   assert.match(html, /katex-display/);
   assert.match(html, /<details/);
   assert.match(html, /dir="rtl"/);
-  const document = parseDocument(html);
-  assert.equal(DomUtils.findAll(node=>node.name === 'img' && 'onerror' in node.attribs, document.children).length, 0);
+  const dom = new JSDOM(html);
+  assert.equal(dom.window.document.querySelectorAll('img[onerror]').length, 0);
   assert.match(html, /<title>&lt;\/title&gt;&lt;img onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<title><\/title>/);
 });

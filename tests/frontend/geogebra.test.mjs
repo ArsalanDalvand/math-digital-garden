@@ -3,20 +3,18 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {createRequire} from 'node:module';
 const require=createRequire(new URL('../../frontend/package.json',import.meta.url));
-const graphRequire=createRequire(require.resolve('starlight-site-graph'));
-const {parseDocument,DomUtils}=await import(graphRequire.resolve('htmlparser2'));
+const {JSDOM}=await import(require.resolve('jsdom'));
 
 test('Sandbox document preserves less-than commands, cannot close its script and reports vendor readiness',async()=>{
   const {geogebraFrame}=await import('../../frontend/src/lib/geogebra.mjs');
   const config={appName:'graphing',width:700,height:450,caption:'رسم',commands:['f(x)=If[x<0,-x,x]','a="</script>"']};
   const html=geogebraFrame(config,'test-token');
-  const nodes=parseDocument(html);
-  const scripts=DomUtils.findAll(n=>n.name==='script',nodes.children);
+  const scripts=new JSDOM(html).window.document.querySelectorAll('script');
   assert.equal(scripts.length,2);
   const messages=[],commands=[],events={};let options,injected;
   const status={textContent:''};const context={innerWidth:700,addEventListener:(type,fn)=>{events[type]=fn;},window:{},document:{getElementById:()=>status},parent:{postMessage:x=>messages.push(x)},setTimeout:()=>{},GGBApplet:class{constructor(p){options=p;}inject(id){injected=id;}}};
   context.window=context;
-  vm.runInNewContext(DomUtils.textContent(scripts[0]),context);
+  vm.runInNewContext(scripts[0].textContent||'',context);
   context.boot();
   assert.equal(injected,'plot');
   assert.equal(options.preventFocus,true);
@@ -35,11 +33,11 @@ test('Sandbox document preserves less-than commands, cannot close its script and
 
 test('A stalled GeoGebra load reports an error and leaves the original note usable',async()=>{
   const {geogebraFrame}=await import('../../frontend/src/lib/geogebra.mjs');
-  const nodes=parseDocument(geogebraFrame({appName:'graphing',width:700,height:450,caption:'',commands:[]},'test'));
-  const script=DomUtils.findAll(n=>n.name==='script',nodes.children)[0];
+  const script=new JSDOM(geogebraFrame({appName:'graphing',width:700,height:450,caption:'',commands:[]},'test')).window.document.querySelector('script');
+  assert.ok(script);
   const messages=[];let timeout;const status={textContent:''};
   const context={addEventListener:()=>{},window:{},document:{getElementById:()=>status},parent:{postMessage:x=>messages.push(x)},setTimeout:fn=>timeout=fn};context.window=context;
-  vm.runInNewContext(DomUtils.textContent(script),context);timeout();
+  vm.runInNewContext(script.textContent||'',context);timeout();
   assert.equal(messages[0].status,'failed');
   assert.match(status.textContent,/بارگذاری/);
 });
