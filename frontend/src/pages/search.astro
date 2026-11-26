@@ -1,27 +1,105 @@
 ---
 import Reader from '../layouts/Reader.astro';
-import { fetchCatalogue } from '../lib/catalogue.mjs';
+import { searchCatalogue } from '../lib/catalogue.mjs';
 import { paginateCatalogue, cataloguePageHref } from '../lib/catalogue-pagination.mjs';
 import { noteMetadata, noteHref } from '../lib/markdown.mjs';
 import { UMKO_KINDS, UMKO_TRACKS, UMKO_LEVELS } from '../lib/umko.mjs';
+
+export const prerender = false;
+
+interface SearchDisplayItem {
+  slug: string;
+  title: string;
+  slogan_fa: string;
+  kind: string;
+  level: string;
+  tracks: string[];
+  tags: string[];
+  snippet: string;
+}
+
 const q = Astro.url.searchParams.get('q') ?? '';
 const tag = Astro.url.searchParams.get('tag') ?? '';
 const track = Astro.url.searchParams.get('track') ?? '';
 const kind = Astro.url.searchParams.get('kind') ?? '';
-let notes: ReturnType<typeof noteMetadata> = [];
+const book = Astro.url.searchParams.get('book') ?? '';
+const rawPage = Astro.url.searchParams.get('page') ?? '1';
+const parsedPage = /^\d+$/.test(rawPage) ? Number(rawPage) : 1;
+const requestedPage = Math.max(1, Number.isSafeInteger(parsedPage) ? parsedPage : 1);
+const pageSize = 20;
+
+let items: SearchDisplayItem[] = [];
+let totalCount = 0;
+let currentPage = requestedPage;
+let totalPages = 1;
+let tags: string[] = tag ? [tag] : [];
+let availableTracks: string[] = Object.keys(UMKO_TRACKS);
+let availableKinds: string[] = Object.keys(UMKO_KINDS);
 let message = '';
-if(q.length > 200 || tag.length > 200) { Astro.response.status=400; message='عبارت جست‌وجو بیش از حد طولانی است.'; }
-else try { notes=noteMetadata(await fetchCatalogue(q)); } catch {Astro.response.status=503; message='دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';}
-const tags=[...new Set([...notes.flatMap((note)=>note.tags), ...(tag ? [tag] : [])])].sort();
-const availableTracks=[...new Set(notes.flatMap((n)=>Array.isArray(n.tracks) ? n.tracks : []))].sort();
-const availableKinds=[...new Set(notes.map((n)=>n.kind).filter(Boolean))].sort();
 
-let results = notes;
-if (tag) results = results.filter((note) => note.tags.includes(tag));
-if (track) results = results.filter((note) => Array.isArray(note.tracks) && note.tracks.includes(track));
-if (kind) results = results.filter((note) => note.kind === kind);
+if (q.length > 200 || tag.length > 200) {
+  Astro.response.status = 400;
+  message = 'عبارت جست‌وجو بیش از حد طولانی است.';
+} else {
+  try {
+    const res = await searchCatalogue({
+      q,
+      tag,
+      track,
+      kind,
+      book,
+      limit: pageSize,
+      offset: (requestedPage - 1) * pageSize,
+    });
+    if (res.mode === 'indexed') {
+      totalCount = res.total;
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      currentPage = Math.min(requestedPage, totalPages);
+      const indexedItems = (res.items || []) as Array<Record<string, unknown>>;
+      items = indexedItems.map((item) => ({
+        slug: String(item.slug || ''),
+        title: String(item.title || ''),
+        slogan_fa: String(item.slogan || ''),
+        kind: String(item.kind || ''),
+        level: String(item.level || ''),
+        tracks: Array.isArray(item.tracks) ? item.tracks.map(String) : [],
+        tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+        snippet: String(item.snippet || ''),
+      }));
+      tags = [...new Set([...items.flatMap((n) => n.tags), ...(tag ? [tag] : [])])].sort();
+    } else {
+      const notes = noteMetadata(res.notes || []);
+      tags = [...new Set([...notes.flatMap((note) => note.tags), ...(tag ? [tag] : [])])].sort();
+      availableTracks = [...new Set(notes.flatMap((n) => (Array.isArray(n.tracks) ? n.tracks : [])))].sort();
+      availableKinds = [...new Set(notes.map((n) => n.kind).filter(Boolean))].sort();
 
-const pagination = paginateCatalogue(results, Astro.url.searchParams.get('page') ?? '1');
+      let filtered = notes;
+      if (tag) filtered = filtered.filter((note) => note.tags.includes(tag));
+      if (track) filtered = filtered.filter((note) => Array.isArray(note.tracks) && note.tracks.includes(track));
+      if (kind) filtered = filtered.filter((note) => note.kind === kind);
+      if (book) filtered = filtered.filter((note) => note.book_slug === book);
+
+      const pagination = paginateCatalogue(filtered, rawPage);
+      totalCount = pagination.total;
+      currentPage = pagination.page;
+      totalPages = pagination.pages;
+      items = pagination.items.map((note) => ({
+        slug: note.slug,
+        title: note.title,
+        slogan_fa: note.slogan_fa || '',
+        kind: note.kind || '',
+        level: note.level || '',
+        tracks: Array.isArray(note.tracks) ? note.tracks : [],
+        tags: Array.isArray(note.tags) ? note.tags : [],
+        snippet: '',
+      }));
+    }
+  } catch {
+    Astro.response.status = 503;
+    message = 'دریافت یادداشت موقتاً امکان‌پذیر نیست. دوباره تلاش کنید.';
+  }
+}
+
 const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toString()}`;
 ---
 <Reader title="جست‌وجو و پایگاه دانش">
@@ -65,8 +143,8 @@ const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toStri
       <p role="status">{message}</p>
       <a href={retryHref} data-od-id="search-retry">تلاش دوباره با همین فیلترها</a>
     </div> : <>
-      <p role="status">{results.length ? `${results.length.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}</p>
-      {results.length ? <ul class="catalogue-list">{pagination.items.map((note)=><li class="garden-panel" data-od-id={`search-note-${note.slug}`}>
+      <p role="status">{totalCount ? `${totalCount.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}</p>
+      {items.length ? <ul class="catalogue-list">{items.map((note)=><li class="garden-panel" data-od-id={`search-note-${note.slug}`}>
         <h2><a href={noteHref(note.slug)}>{note.title}</a></h2>
         {note.slogan_fa && <p class="note-slogan-search">«{note.slogan_fa}»</p>}
         <div class="note-result-badges">
@@ -74,12 +152,13 @@ const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toStri
           {note.level && <span class="badge-mini">🎓 {UMKO_LEVELS[note.level]?.label || note.level}</span>}
           {note.tracks?.map((t: string) => <span class="badge-mini">🎯 {UMKO_TRACKS[t] || t}</span>)}
         </div>
+        {note.snippet && <p class="note-snippet">{note.snippet}</p>}
         {note.tags.length > 0 && <p class="note-summary">موضوع: {note.tags.join('، ')}</p>}
       </li>)}</ul> : <p>عبارت کوتاه‌تر یا برچسب دیگری انتخاب کنید. برای آشنایی با محیط می‌توانید <a href="/sample">یادداشت نمونه را بخوانید</a>.</p>}
-      {pagination.pages > 1 && <nav class="garden-row catalogue-pagination" aria-label="صفحه‌های نتایج" data-od-id="catalogue-pagination">
-        {pagination.page > 1 && <a href={cataloguePageHref(q, tag, pagination.page - 1)}>نتایج قبلی</a>}
-        <span>صفحهٔ {pagination.page.toLocaleString('fa-IR')} از {pagination.pages.toLocaleString('fa-IR')}</span>
-        {pagination.page < pagination.pages && <a href={cataloguePageHref(q, tag, pagination.page + 1)}>نتایج بعدی</a>}
+      {totalPages > 1 && <nav class="garden-row catalogue-pagination" aria-label="صفحه‌های نتایج" data-od-id="catalogue-pagination">
+        {currentPage > 1 && <a href={cataloguePageHref(q, tag, currentPage - 1, { track, kind, book })}>نتایج قبلی</a>}
+        <span>صفحهٔ {currentPage.toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}</span>
+        {currentPage < totalPages && <a href={cataloguePageHref(q, tag, currentPage + 1, { track, kind, book })}>نتایج بعدی</a>}
       </nav>}
     </>}
   </section>
@@ -92,6 +171,7 @@ const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toStri
   .note-slogan-search { margin-block: var(--space-1) var(--space-2); font-size: 0.9rem; color: var(--primary-text); font-style: italic; }
   .note-result-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: var(--space-1); }
   .badge-mini { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); }
+  .note-snippet { margin-block: var(--space-2) 0; color: var(--foreground); font-size: 0.9rem; line-height: 1.65; opacity: 0.9; overflow-wrap: anywhere; }
   .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted-foreground); overflow-wrap: anywhere; font-size: 0.85rem; }
   form select { inline-size: 100%; }
   .catalogue-pagination { justify-content: space-between; margin-block: var(--space-6); }

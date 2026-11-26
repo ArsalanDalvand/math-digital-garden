@@ -1,8 +1,55 @@
 ---
 import Reader from '../layouts/Reader.astro';
-import {BookOpen, Search, Sparkles, Share2, Compass, Layers, ArrowLeft} from 'lucide-react';
-export const prerender = true;
+import { fetchBooks } from '../lib/catalogue.mjs';
+import { noteHref } from '../lib/markdown.mjs';
+import { BookOpen, Search, Sparkles, Share2, Compass } from 'lucide-react';
+
+export const prerender = false;
+
 const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
+
+const FALLBACK_BOOKS = [
+  {
+    book_slug: 'axler',
+    title: 'جبر خطی آکسلر (Linear Algebra Done Right)',
+    edition: 'ویرایش چهارم ۲۰۲۴',
+    description:
+      'مرجع کامل مفاهیم، قضایا، برهان‌های ریاضی و تمرینات کتاب آکسلر، شامل فضاهای برداری، پایه‌ها و بعد، ترکیب‌های خطی، زیرفضاها، جمع مستقیم و فرمول گراسمان.',
+    note_count: 0,
+    entry_slug: 'axler-2debc85d452ad205',
+    entry_label: 'نقشه راه جامع',
+    highlights: [
+      { label: 'فصل ۱: فضاهای برداری', slug: 'axler-e4a02d4295df7fb9' },
+      { label: 'فصل ۲: بعد متناهی', slug: 'axler-e3c2143b75ca96b1' },
+      { label: 'حل تمرینات', slug: 'axler-9bafd064aa1cbbd2' },
+      { label: 'تجسم‌های هندسی', slug: 'axler-a354fd365fa3e3ed' },
+    ],
+  },
+  {
+    book_slug: 'abstract-algebra',
+    title: 'مبانی جبر و ماتریس‌ها (Abstract Algebra & Matrices)',
+    edition: 'نسخهٔ رسمی',
+    description:
+      'مرجع ساختاریافتهٔ مفاهیم ساختارهای جبری، نیم‌گروه‌ها، کاتالوگ مثال‌ها، عناصر همانی و معکوس، توان‌ها، شرکت‌پذیری تعمیم‌یافته، زیرنیم‌گروه‌ها، مسائل و قضایا.',
+    note_count: 0,
+    entry_slug: 'alg-232009403065653b',
+    entry_label: 'نقشه راه کلان',
+    highlights: [
+      { label: 'فصل ۱: نیم‌گروه‌ها', slug: 'alg-d317c2026b6ac291' },
+      { label: 'حل مسئله و تمرینات', slug: 'alg-1fb1b4082fe0dc00' },
+      { label: 'اثبات‌های صوری', slug: 'alg-d04e2d30d5997348' },
+      { label: 'گراف وابستگی', slug: 'alg-64aca55db469823c' },
+    ],
+  },
+];
+
+const booksData = await fetchBooks().catch(() => null);
+const activeBooks = booksData?.books?.length ? booksData.books : FALLBACK_BOOKS;
+if (booksData?.books?.length) {
+  Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+} else {
+  Astro.response.headers.set('Cache-Control', 'no-store');
+}
 ---
 <Reader title={brandName}>
   <div class="home-container">
@@ -25,61 +72,42 @@ const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_
     <section class="kb-section" aria-labelledby="kb-heading">
       <div class="section-header">
         <h2 id="kb-heading" class="section-title">پایگاه‌های دانش تخصصی</h2>
-        <p class="section-subtitle">مخازن و جزوات ساختاریافته متصل به گراف مفاهیم و یادداشت‌های اتمیک</p>
+        <p class="section-subtitle">
+          {booksData?.total_notes
+            ? `${booksData.total_notes.toLocaleString('fa-IR')} یادداشت اتمیک متصل در گراف مفاهیم`
+            : 'مخازن و جزوات ساختاریافته متصل به گراف مفاهیم و یادداشت‌های اتمیک'}
+        </p>
       </div>
 
       <div class="kb-grid">
-        <!-- Card 1: Linear Algebra Axler (Active) -->
-        <article class="kb-card active-card">
-          <div class="card-glow" aria-hidden="true"></div>
-          <div class="card-header">
-            <span class="badge active-badge">فعال · ۲۲۳ یادداشت</span>
-            <span class="card-tag">ویرایش چهارم ۲۰۲۴</span>
-          </div>
-          <h3 class="card-title">
-            <a href="/notes/axler-2debc85d452ad205">جبر خطی آکسلر (Linear Algebra Done Right)</a>
-          </h3>
-          <p class="card-desc">
-            مرجع کامل مفاهیم، قضایا، برهان‌های ریاضی و تمرینات کتاب آکسلر، شامل فضاهای برداری، پایه‌ها و بعد، ترکیب‌های خطی، زیرفضاها، جمع مستقیم و فرمول گراسمان.
-          </p>
-          <div class="card-actions">
-            <a href="/notes/axler-2debc85d452ad205" class="action-btn primary-btn">
-              <Compass size={14} aria-hidden="true" />
-              <span>نقشه راه جامع</span>
-            </a>
-            <a href="/notes/axler-e4a02d4295df7fb9" class="action-btn secondary-btn">فصل ۱: فضاهای برداری</a>
-            <a href="/notes/axler-e3c2143b75ca96b1" class="action-btn secondary-btn">فصل ۲: بعد متناهی</a>
-            <a href="/notes/axler-9bafd064aa1cbbd2" class="action-btn secondary-btn">حل تمرینات</a>
-            <a href="/notes/axler-a354fd365fa3e3ed" class="action-btn secondary-btn">تجسم‌های هندسی</a>
-          </div>
-        </article>
+        {activeBooks.map((book) => (
+          <article class="kb-card active-card" data-book-slug={book.book_slug}>
+            <div class="card-glow" aria-hidden="true"></div>
+            <div class="card-header">
+              <span class="badge active-badge">
+                {book.note_count > 0
+                  ? `فعال · ${book.note_count.toLocaleString('fa-IR')} یادداشت`
+                  : 'فعال'}
+              </span>
+              {book.edition && <span class="card-tag">{book.edition}</span>}
+            </div>
+            <h3 class="card-title">
+              <a href={noteHref(book.entry_slug)}>{book.title}</a>
+            </h3>
+            {book.description && <p class="card-desc">{book.description}</p>}
+            <div class="card-actions">
+              <a href={noteHref(book.entry_slug)} class="action-btn primary-btn">
+                <Compass size={14} aria-hidden="true" />
+                <span>{book.entry_label || 'شروع مطالعه'}</span>
+              </a>
+              {(book.highlights || []).map((item) => (
+                <a href={noteHref(item.slug)} class="action-btn secondary-btn">{item.label}</a>
+              ))}
+            </div>
+          </article>
+        ))}
 
-        <!-- Card 2: Abstract Algebra and Matrices (Active) -->
-        <article class="kb-card active-card">
-          <div class="card-glow" aria-hidden="true"></div>
-          <div class="card-header">
-            <span class="badge active-badge">فعال · ۳۰۰ یادداشت</span>
-            <span class="card-tag">نسخهٔ رسمی</span>
-          </div>
-          <h3 class="card-title">
-            <a href="/notes/alg-232009403065653b">مبانی جبر و ماتریس‌ها (Abstract Algebra & Matrices)</a>
-          </h3>
-          <p class="card-desc">
-            مرجع ساختاریافتهٔ مفاهیم ساختارهای جبری، نیم‌گروه‌ها، کاتالوگ مثال‌ها، عناصر همانی و معکوس، توان‌ها، شرکت‌پذیری تعمیم‌یافته، زیرنیم‌گروه‌ها، مسائل و قضایا.
-          </p>
-          <div class="card-actions">
-            <a href="/notes/alg-232009403065653b" class="action-btn primary-btn">
-              <Compass size={14} aria-hidden="true" />
-              <span>نقشه راه کلان</span>
-            </a>
-            <a href="/notes/alg-d317c2026b6ac291" class="action-btn secondary-btn">فصل ۱: نیم‌گروه‌ها</a>
-            <a href="/notes/alg-1fb1b4082fe0dc00" class="action-btn secondary-btn">حل مسئله و تمرینات</a>
-            <a href="/notes/alg-d04e2d30d5997348" class="action-btn secondary-btn">اثبات‌های صوری</a>
-            <a href="/notes/alg-64aca55db469823c" class="action-btn secondary-btn">گراف وابستگی</a>
-          </div>
-        </article>
-
-        <!-- Card 3: Calculus 3 (Coming Soon) -->
+        <!-- Coming Soon Placeholder -->
         <article class="kb-card coming-card">
           <div class="card-header">
             <span class="badge coming-badge">به‌زودی</span>

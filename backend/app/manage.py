@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from backend.app.content_sync import atomic_bytes
 from backend.app.database import get_session
 from backend.app.models import CanonicalNote, ChangeProposal, User
+from backend.app.note_indexing import reindex_all_notes
 from backend.app.rag import index_content
 from backend.app.workspace import invalidate_vectors, sync_approved
 
@@ -158,6 +159,11 @@ async def run(args: argparse.Namespace) -> None:
                 added += int(inserted is not None)
                 conflicts += int(inserted is None)
             count = copy_assets(root, update=update_mode)
+            index_stats = {"notes": 0, "edges": 0}
+            if (added or updated) and hasattr(db, "scalars") and hasattr(db, "execute"):
+                if hasattr(db, "flush"):
+                    await db.flush()
+                index_stats = await reindex_all_notes(db)
             await db.commit()
             print(
                 json.dumps(
@@ -167,6 +173,8 @@ async def run(args: argparse.Namespace) -> None:
                         "unchanged": unchanged,
                         "conflicts": conflicts,
                         "assets": count,
+                        "indexed_notes": index_stats["notes"],
+                        "indexed_edges": index_stats["edges"],
                     },
                     ensure_ascii=False,
                 )
@@ -207,6 +215,10 @@ async def run(args: argparse.Namespace) -> None:
                     print(f"{p.id}: {p.sync_status}")
                     if p.sync_status != "synced":
                         break
+        elif args.command == "reindex-notes":
+            stats = await reindex_all_notes(db)
+            await db.commit()
+            print(json.dumps(stats, ensure_ascii=False))
 
 
 def main() -> None:
@@ -227,6 +239,7 @@ def main() -> None:
     index = sub.add_parser("index")
     index.add_argument("--slug")
     sub.add_parser("export")
+    sub.add_parser("reindex-notes")
     try:
         asyncio.run(run(parser.parse_args()))
     except (ValueError, OSError, HTTPException):
