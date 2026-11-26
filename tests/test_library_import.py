@@ -3,13 +3,19 @@
 import io
 import os
 import socket
+import subprocess
 import tempfile
 import zipfile
 
 import pytest
 from fastapi import HTTPException
 
-from backend.app.library_import import extract_zip_archive, validate_git_url
+from backend.app.library_import import (
+    clone_git_repo,
+    extract_zip_archive,
+    validate_git_branch,
+    validate_git_url,
+)
 
 
 def test_validate_git_url_rejects_unsafe_schemes():
@@ -80,3 +86,66 @@ def test_extract_zip_archive_rejects_zip_slip():
             extract_zip_archive(buf.getvalue(), tmp_dir)
         assert exc.value.status_code == 400
         assert "نامعتبر" in exc.value.detail
+
+
+@pytest.mark.parametrize(
+    "branch",
+    [
+        "",
+        "   ",
+        "--upload-pack=evil",
+        "-u",
+        "-b",
+        "feature/foo..bar",
+        "branch.lock",
+        "main@{0}",
+        "/leading",
+        "trailing/",
+        "bad branch",
+        "bad~1",
+        "bad\x00branch",
+        "a" * 256,
+    ],
+)
+def test_validate_git_branch_rejects_unsafe_names(branch):
+    with pytest.raises(HTTPException) as exc:
+        validate_git_branch(branch)
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize("branch", ["main", "feature/phase-1", "v1.0.0", "docs_sync"])
+def test_validate_git_branch_accepts_safe_names(branch):
+    assert validate_git_branch(branch) == branch
+
+
+def test_clone_git_repo_rejects_dash_branch_and_hardens_git_argv(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if "rev-parse" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="deadbeef\n", stderr="")
+        if "-b" in cmd:
+            return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="missing branch")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(HTTPException) as exc:
+        clone_git_repo(
+            "https://example.org/repo.git", "--upload-pack=touch /tmp/pwn", str(tmp_path)
+        )
+    assert exc.value.status_code == 400
+    assert calls == []
+
+    sha = clone_git_repo("https://example.org/repo.git", "main", str(tmp_path / "repo"))
+    assert sha == "deadbeef"
+    assert len(calls) == 3
+
+    for clone_cmd in calls[:2]:
+        assert "core.hooksPath=/dev/null" in clone_cmd
+        assert "core.symlinks=false" in clone_cmd
+        assert "--" in clone_cmd
+        sep_idx = clone_cmd.index("--")
+        assert clone_cmd[sep_idx + 1 :] == ["https://example.org/repo.git", str(tmp_path / "repo")]
+    assert "core.hooksPath=/dev/null" in calls[2]

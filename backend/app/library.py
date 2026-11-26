@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import Field, field_validator
 from sqlalchemy import and_, insert, literal, or_, select, update
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.library_import import (
     clone_git_repo,
@@ -848,7 +849,7 @@ async def public_note(item_id: UUID, note_id: UUID, db: DB):
 
 @router.post("/import/git", status_code=201)
 async def import_git(body: GitImportRequest, db: DB, user: Me, _: Writes):
-    validate_git_url(body.repo_url)
+    await run_in_threadpool(validate_git_url, body.repo_url)
 
     title = body.title
     if not title:
@@ -875,7 +876,9 @@ async def import_git(body: GitImportRequest, db: DB, user: Me, _: Writes):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         clone_dir = os.path.join(tmp_dir, "repo")
-        commit_sha = clone_git_repo(body.repo_url, body.branch, clone_dir)
+        commit_sha = await run_in_threadpool(
+            clone_git_repo, body.repo_url, body.branch, clone_dir
+        )
         stats = await ingest_directory_to_library(
             db, user.id, clone_dir, root_folder, is_sync=False
         )
@@ -928,7 +931,7 @@ async def import_zip(body: ZipImportRequest, db: DB, user: Me, _: Writes):
     await db.flush()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        extract_zip_archive(zip_bytes, tmp_dir)
+        await run_in_threadpool(extract_zip_archive, zip_bytes, tmp_dir)
         stats = await ingest_directory_to_library(
             db, user.id, tmp_dir, root_folder, is_sync=False
         )
@@ -955,7 +958,7 @@ async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
     if git_source is None:
         raise HTTPException(404, "منبع گیت برای این پوشه یافت نشد.")
 
-    validate_git_url(git_source.repo_url)
+    await run_in_threadpool(validate_git_url, git_source.repo_url)
 
     git_source.sync_status = "syncing"
     await db.commit()
@@ -963,7 +966,9 @@ async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
             clone_dir = os.path.join(tmp_dir, "repo")
-            commit_sha = clone_git_repo(git_source.repo_url, git_source.branch, clone_dir)
+            commit_sha = await run_in_threadpool(
+                clone_git_repo, git_source.repo_url, git_source.branch, clone_dir
+            )
             stats = await ingest_directory_to_library(
                 db, user.id, clone_dir, root_folder, is_sync=True
             )

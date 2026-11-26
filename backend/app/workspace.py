@@ -52,7 +52,7 @@ def write_guard(request: Request) -> None:
         "http://localhost",
         "http://localhost:4321",
         "http://127.0.0.1:4321",
-        "http://192.168.1.191",
+        *settings.allowed_extra_origins,
     }
     if origin and origin.rstrip("/") not in allowed:
         raise HTTPException(403, "Origin not allowed")
