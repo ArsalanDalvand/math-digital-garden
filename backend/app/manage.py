@@ -12,11 +12,14 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
+from backend.app.config import settings
 from backend.app.content_sync import atomic_bytes
 from backend.app.database import get_session
+from backend.app.library_models import LibraryAttachment
 from backend.app.models import CanonicalNote, ChangeProposal, User
 from backend.app.note_indexing import reindex_all_notes
 from backend.app.rag import index_content
+from backend.app.storage import save_attachment_bytes
 from backend.app.workspace import invalidate_vectors, sync_approved
 
 
@@ -84,12 +87,25 @@ ASSET_EXTENSIONS = {
 
 
 def copy_assets(root: Path, update: bool = False) -> int:
-    public = Path(__file__).resolve().parents[2] / "frontend/public"
+    vault_root_cfg = settings.vault_assets_dir.strip()
+    if vault_root_cfg:
+        assets_base = Path(vault_root_cfg)
+        assets_base.mkdir(parents=True, exist_ok=True)
+        dest_root = assets_base / root.name
+        manifest = assets_base / "manifest.json"
+        prefix = "vault/"
+    else:
+        public = Path(__file__).resolve().parents[2] / "frontend/public"
+        assets_base = public / "vault"
+        dest_root = assets_base / root.name
+        manifest = public.parent / "src/lib/vault-assets.json"
+        prefix = "vault/"
+
     count = 0
     for path in visible_files(root):
         if path.suffix.lower() not in ASSET_EXTENSIONS:
             continue
-        destination = public / "vault" / root.name / path.relative_to(root)
+        destination = dest_root / path.relative_to(root)
         if any(p.is_symlink() for p in [destination, *destination.parents]):
             raise ValueError("Asset destination contains a symlink")
         data = path.read_bytes()
@@ -105,8 +121,11 @@ def copy_assets(root: Path, update: bool = False) -> int:
         if not destination.exists():
             atomic_bytes(destination, data)
         count += 1
-    manifest = public.parent / "src/lib/vault-assets.json"
-    assets = [p.relative_to(public).as_posix() for p in visible_files(public / "vault")]
+    assets = [
+        f"{prefix}{p.relative_to(assets_base).as_posix()}"
+        for p in visible_files(assets_base)
+        if p != manifest
+    ]
     manifest.write_text(json.dumps(assets, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return count
 
@@ -219,6 +238,28 @@ async def run(args: argparse.Namespace) -> None:
             stats = await reindex_all_notes(db)
             await db.commit()
             print(json.dumps(stats, ensure_ascii=False))
+        elif args.command == "migrate-attachments":
+            if not settings.attachments_dir:
+                raise ValueError("ATTACHMENTS_DIR must be configured before migrating attachments")
+            rows = (
+                await db.scalars(
+                    select(LibraryAttachment).where(LibraryAttachment.data.is_not(None))
+                )
+            ).all()
+            migrated = 0
+            for att in rows:
+                if att.data is None:
+                    continue
+                key, digest_hex, size_bytes = save_attachment_bytes(
+                    settings.attachments_dir, att.data
+                )
+                att.storage_key = key
+                att.sha256 = digest_hex
+                att.size_bytes = size_bytes
+                att.data = None
+                migrated += 1
+            await db.commit()
+            print(json.dumps({"migrated": migrated}, ensure_ascii=False))
 
 
 def main() -> None:
@@ -240,6 +281,7 @@ def main() -> None:
     index.add_argument("--slug")
     sub.add_parser("export")
     sub.add_parser("reindex-notes")
+    sub.add_parser("migrate-attachments")
     try:
         asyncio.run(run(parser.parse_args()))
     except (ValueError, OSError, HTTPException):

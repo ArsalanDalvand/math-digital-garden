@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Integer,
     LargeBinary,
     String,
     Text,
@@ -73,7 +74,10 @@ class LibraryAttachment(Base):
     )
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
-    data: Mapped[bytes] = mapped_column(LargeBinary)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     published: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
