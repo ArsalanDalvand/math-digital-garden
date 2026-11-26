@@ -1,5 +1,11 @@
 import type { CSSProperties } from 'react';
-import { classifyRelation, getPlaneLabel, toPersianDigits } from '../../lib/graph/schema.ts';
+import {
+  classifyRelation,
+  formatLevelLabel,
+  getPlaneLabel,
+  stripRawLatexForTooltip,
+  toPersianDigits,
+} from '../../lib/graph/schema.ts';
 import type { HoverTarget } from '../../lib/graph/types.ts';
 
 interface GraphTooltipProps {
@@ -7,10 +13,17 @@ interface GraphTooltipProps {
   isDark: boolean;
   isFullscreen: boolean;
   containerRect: DOMRect | null;
+  hidden?: boolean;
 }
 
-export function GraphTooltip({ hover, isDark, isFullscreen, containerRect }: GraphTooltipProps) {
-  if (!hover) return null;
+export function GraphTooltip({
+  hover,
+  isDark,
+  isFullscreen,
+  containerRect,
+  hidden = false,
+}: GraphTooltipProps) {
+  if (!hover || hidden) return null;
 
   const width = containerRect?.width || 360;
   const height = containerRect?.height || 256;
@@ -36,6 +49,8 @@ export function GraphTooltip({ hover, isDark, isFullscreen, containerRect }: Gra
   if (hover.type === 'node') {
     const { node, directRelation } = hover;
     const accent = isDark ? node.darkColor : node.lightColor;
+    const levelLabel = formatLevelLabel(node.level);
+    const cleanSlogan = stripRawLatexForTooltip(node.slogan);
 
     return (
       <div
@@ -51,12 +66,12 @@ export function GraphTooltip({ hover, isDark, isFullscreen, containerRect }: Gra
           </span>
           <span className="kg-tooltip-meta">
             {toPersianDigits(node.degree)} پیوند
-            {node.level ? ` · ${node.level}` : ''}
+            {levelLabel ? ` · ${levelLabel}` : ''}
           </span>
         </div>
         <div className="kg-tooltip-title">{node.title}</div>
         {directRelation && <div className="kg-tooltip-rel">{directRelation}</div>}
-        {isFullscreen && node.slogan && <div className="kg-tooltip-slogan">{node.slogan}</div>}
+        {isFullscreen && cleanSlogan && <div className="kg-tooltip-slogan">{cleanSlogan}</div>}
       </div>
     );
   }

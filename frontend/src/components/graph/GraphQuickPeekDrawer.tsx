@@ -1,15 +1,19 @@
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
+  CheckCircle2,
   Crosshair,
   ExternalLink,
   GitBranch,
+  RotateCw,
+  Route,
   Sparkles,
   X,
 } from 'lucide-react';
 import { type CSSProperties, useEffect, useState } from 'react';
-import { getPlaneLabel, toPersianDigits } from '../../lib/graph/schema.ts';
-import type { GraphNode, PathTraceMode } from '../../lib/graph/types.ts';
+import { formatLevelLabel, getPlaneLabel, toPersianDigits } from '../../lib/graph/schema.ts';
+import type { GraphNode, MasteryStatus, PathTraceMode } from '../../lib/graph/types.ts';
 import { NodeShapeGlyph } from './NodeShapeGlyph.tsx';
 
 export interface NoteConnectionItem {
@@ -31,6 +35,7 @@ interface GraphQuickPeekDrawerProps {
   node: GraphNode;
   isDark: boolean;
   pathTraceMode: PathTraceMode;
+  masteryStatus: MasteryStatus;
   connections: {
     incoming: NoteConnectionItem[];
     outgoing: NoteConnectionItem[];
@@ -39,24 +44,29 @@ interface GraphQuickPeekDrawerProps {
   onPivot: (nodeId: string) => void;
   onSelectNeighbor: (nodeId: string) => void;
   onSetPathTrace: (mode: PathTraceMode) => void;
+  onSetMastery: (nodeId: string, status: MasteryStatus) => void;
+  onBridgeToNode?: (nodeId: string) => void;
 }
 
 const previewCache = new Map<string, NotePreviewPayload>();
 
 /**
- * RTL slide-over drawer rendered inside fullscreen Graph mode. Fetches rendered
- * note preview HTML on-demand without leaving the graph, exposes pivot/re-center
- * and direct study-path tracing actions, and lists clickable typed neighbors.
+ * RTL slide-over drawer rendered inside fullscreen Graph mode. Displays Persian UMKO
+ * badges, interactive mastery marking, Concept Bridge shortcut, rendered math preview,
+ * Pivot/Re-center action, and clickable typed neighbor connections.
  */
 export function GraphQuickPeekDrawer({
   node,
   isDark,
   pathTraceMode,
+  masteryStatus,
   connections,
   onClose,
   onPivot,
   onSelectNeighbor,
   onSetPathTrace,
+  onSetMastery,
+  onBridgeToNode,
 }: GraphQuickPeekDrawerProps) {
   const bareSlug = node.id.replace(/^notes\//, '');
   const [preview, setPreview] = useState<NotePreviewPayload | null>(
@@ -107,6 +117,7 @@ export function GraphQuickPeekDrawer({
   const hasConnections = connections.outgoing.length > 0 || connections.incoming.length > 0;
   const sloganText = node.slogan || preview?.slogan || '';
   const showSlogan = Boolean(sloganText) && (!sloganText.includes('$') || !preview?.html);
+  const levelLabel = formatLevelLabel(node.level);
 
   return (
     <aside
@@ -123,7 +134,7 @@ export function GraphQuickPeekDrawer({
             <NodeShapeGlyph shape={node.shape} color={accent} size={12} />
             <span>{node.kindLabel}</span>
           </span>
-          {node.level && <span className="kg-qp-meta-badge">{node.level}</span>}
+          {levelLabel && <span className="kg-qp-meta-badge">{levelLabel}</span>}
           {node.chapterSlug && <span className="kg-qp-meta-badge">{node.chapterSlug}</span>}
         </div>
         <button
@@ -142,6 +153,31 @@ export function GraphQuickPeekDrawer({
         <h3 className="kg-qp-title">{node.title}</h3>
         {showSlogan && <p className="kg-qp-slogan">{sloganText}</p>}
       </div>
+
+      <fieldset className="kg-qp-mastery-row" aria-label="وضعیت تسلط من">
+        {(
+          [
+            ['mastered', 'تسلط دارم', CheckCircle2],
+            ['learning', 'در حال مطالعه', BookOpen],
+            ['review', 'نیاز به مرور', RotateCw],
+          ] as const
+        ).map(([statusKey, label, Icon]) => {
+          const active = masteryStatus === statusKey;
+          return (
+            <button
+              key={statusKey}
+              type="button"
+              className={`kg-qp-mastery-btn kg-mastery-${statusKey}${active ? ' is-active' : ''}`}
+              data-mastery-btn={statusKey}
+              aria-pressed={active}
+              onClick={() => onSetMastery(node.id, active ? 'unseen' : statusKey)}
+            >
+              <Icon size={11} aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </fieldset>
 
       <div className="kg-qp-actions">
         <button
@@ -178,6 +214,18 @@ export function GraphQuickPeekDrawer({
           <Sparkles size={12} aria-hidden="true" />
           <span>مسیر کاربردها</span>
         </button>
+        {!node.isCurrent && onBridgeToNode && (
+          <button
+            type="button"
+            className="kg-qp-trace-chip"
+            data-graph-bridge-to
+            onClick={() => onBridgeToNode(node.id)}
+            title="پیدا کردن کوتاه‌ترین زنجیره از یادداشت اصلی تا این گره"
+          >
+            <Route size={12} aria-hidden="true" />
+            <span>پل تا اینجا</span>
+          </button>
+        )}
       </fieldset>
 
       <div className="kg-qp-body">
@@ -190,7 +238,6 @@ export function GraphQuickPeekDrawer({
           {!loading && !errorMsg && preview?.html && (
             <div
               className="kg-qp-preview note"
-              // Server-rendered sanitized KaTeX/Remark note preview HTML from /api/note-preview/[slug]
               dangerouslySetInnerHTML={{ __html: preview.html }}
             />
           )}

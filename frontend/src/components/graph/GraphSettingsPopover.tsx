@@ -1,6 +1,11 @@
 import { RotateCcw, X } from 'lucide-react';
 import { PLANE_FILTER_ITEMS, toPersianDigits } from '../../lib/graph/schema.ts';
-import type { ColorByMode, LayoutMode, RelationPlaneKey } from '../../lib/graph/types.ts';
+import type {
+  ColorByMode,
+  DagOrientation,
+  LayoutMode,
+  RelationPlaneKey,
+} from '../../lib/graph/types.ts';
 import type { GraphUiState } from '../../stores/garden.ts';
 
 interface GraphSettingsPopoverProps {
@@ -70,13 +75,35 @@ export function GraphSettingsPopover({
         <span>حالت چیدمان</span>
         <select
           value={state.layoutMode}
-          onChange={(e) => onPatch({ layoutMode: e.target.value as LayoutMode })}
+          onChange={(e) => {
+            const next = e.target.value as LayoutMode;
+            onPatch(
+              state.isFullscreen
+                ? { layoutMode: next, fullscreenLayoutMode: next }
+                : { layoutMode: next, sidebarLayoutMode: next },
+            );
+          }}
           aria-label="حالت چیدمان گراف"
         >
-          <option value="force">شبکه فیزیکی (Force)</option>
           <option value="dag">سلسله‌مراتب پیش‌نیازی (DAG)</option>
+          <option value="force">شبکه فیزیکی (Force)</option>
         </select>
       </label>
+
+      {state.layoutMode === 'dag' && (
+        <label className="kg-field-label">
+          <span>جهت چیدمان DAG</span>
+          <select
+            data-settings-orientation
+            value={state.dagOrientation}
+            onChange={(e) => onPatch({ dagOrientation: e.target.value as DagOrientation })}
+            aria-label="جهت چیدمان DAG"
+          >
+            <option value="vertical">عمودی (مبانی به کاربرد)</option>
+            <option value="horizontal">افقی راست‌به‌چپ (RTL)</option>
+          </select>
+        </label>
+      )}
 
       <label className="kg-field-label">
         <span>رنگ‌بندی گره‌ها</span>
@@ -86,6 +113,7 @@ export function GraphSettingsPopover({
           aria-label="رنگ‌بندی گره‌ها"
         >
           <option value="kind">بر اساس نوع مفهوم (UMKO)</option>
+          <option value="mastery">بر اساس وضعیت یادگیری من</option>
           <option value="level">بر اساس سطح دشواری (L1–L5)</option>
           <option value="chapter">بر اساس فصل و کتاب</option>
         </select>

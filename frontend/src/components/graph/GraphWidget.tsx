@@ -2,18 +2,29 @@ import { useStore } from '@nanostores/react';
 import { Maximize2, RefreshCw, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { KnowledgeGraphEngine } from '../../lib/graph/canvas-engine.ts';
-import { fetchGraphSitemap, LEGEND_ITEMS, toPersianDigits } from '../../lib/graph/schema.ts';
+import { getColorLensLegend } from '../../lib/graph/color-lens.ts';
+import {
+  fetchGraphSitemap,
+  getKindVisual,
+  inferSemanticKind,
+  toPersianDigits,
+  truncateLabel,
+} from '../../lib/graph/schema.ts';
 import type {
   GraphNode,
   HoverTarget,
   NeighborSummary,
   PathTraceResult,
+  SafeAreaInsets,
+  ShortestPathResult,
+  TheoremAnatomyResult,
 } from '../../lib/graph/types.ts';
 import {
   $graphUi,
   $theme,
   type GraphUiState,
   resetGraphSettings,
+  setGraphNodeMastery,
   syncThemeFromDom,
 } from '../../stores/garden.ts';
 import { GraphFullscreenModal } from './GraphFullscreenModal.tsx';
@@ -40,6 +51,7 @@ const EMPTY_TRACE: PathTraceResult = {
   nodeHops: new Map(),
   highlightedLinkKeys: new Set(),
   orderedSteps: [],
+  studyChecklist: [],
 };
 
 export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: GraphWidgetProps) {
@@ -51,6 +63,8 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
   const [reloadTick, setReloadTick] = useState(0);
   const [summary, setSummary] = useState<NeighborSummary>(EMPTY_SUMMARY);
   const [pathTrace, setPathTrace] = useState<PathTraceResult>(EMPTY_TRACE);
+  const [shortestPath, setShortestPath] = useState<ShortestPathResult | null>(null);
+  const [theoremAnatomy, setTheoremAnatomy] = useState<TheoremAnatomyResult | null>(null);
 
   const inlineContainerRef = useRef<HTMLDivElement | null>(null);
   const inlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -63,6 +77,10 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     $graphUi.set({ ...$graphUi.get(), ...patch });
   }, []);
 
+  const effectiveLayoutMode = state.isFullscreen
+    ? state.fullscreenLayoutMode
+    : state.sidebarLayoutMode;
+
   if (!engineRef.current) {
     const initial = $graphUi.get();
     engineRef.current = new KnowledgeGraphEngine(
@@ -71,17 +89,60 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         onHoverChange: (nextHover) => setHover(nextHover),
         onStatsChange: (stats) => {
           const prev = $graphUi.get();
+          const nextPinned = stats.pinnedCount ?? prev.pinnedCount;
           if (
             prev.nodeCount !== stats.nodeCount ||
             prev.linkCount !== stats.linkCount ||
             prev.typedLinkCount !== stats.typedLinkCount ||
-            prev.hiddenHubCount !== stats.hiddenHubCount
+            prev.hiddenHubCount !== stats.hiddenHubCount ||
+            prev.pinnedCount !== nextPinned
           ) {
-            $graphUi.set({ ...prev, ...stats });
+            $graphUi.set({ ...prev, ...stats, pinnedCount: nextPinned });
           }
         },
         onSummaryChange: (nextSummary) => setSummary(nextSummary),
         onPathTraceChange: (nextTrace) => setPathTrace(nextTrace),
+        onPinnedCountChange: (pinnedCount) => patchState({ pinnedCount }),
+        onShortestPathChange: (nextPath) => {
+          setShortestPath(nextPath);
+          if (nextPath?.found && $graphUi.get().depth < 5) {
+            const visibleIds = new Set((engineRef.current?.getFullNodes() || []).map((n) => n.id));
+            if (nextPath.steps.some((step) => !visibleIds.has(step.id))) {
+              patchState({ depth: 5 });
+            }
+          }
+        },
+        onTheoremAnatomyChange: (nextAnatomy) => setTheoremAnatomy(nextAnatomy),
+        onOverflowClusterClick: (category) => {
+          setHover(null);
+          const cur = $graphUi.get();
+          if (category === 'prerequisites') {
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              fullscreenLayoutMode: 'dag',
+              layoutMode: 'dag',
+              pathTraceMode: 'prerequisites',
+              depth: Math.max(cur.depth, 2),
+            });
+          } else if (category === 'dependents') {
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              fullscreenLayoutMode: 'dag',
+              layoutMode: 'dag',
+              pathTraceMode: 'impact',
+              depth: Math.max(cur.depth, 2),
+            });
+          } else {
+            patchState({
+              isFullscreen: true,
+              settingsOpen: false,
+              fullscreenLayoutMode: 'dag',
+              layoutMode: 'dag',
+            });
+          }
+        },
         onBackgroundClick: () => {
           const cur = $graphUi.get();
           if (cur.isFullscreen && cur.selectedNodeId) {
@@ -105,7 +166,9 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       },
       {
         depth: initial.depth,
-        layoutMode: initial.layoutMode,
+        layoutMode: initial.sidebarLayoutMode,
+        dagOrientation: initial.dagOrientation,
+        theoremFocusMode: initial.theoremFocusMode,
         typedOnly: initial.typedOnly,
         showHubsAndRaw: initial.showHubsAndRaw,
         colorBy: initial.colorBy,
@@ -132,6 +195,10 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         isFullscreen: false,
         settingsOpen: false,
         selectedNodeId: null,
+        bridgePanelOpen: false,
+        bridgeTargetId: null,
+        practiceListOpen: false,
+        theoremFocusMode: false,
         pivotSlug: '',
       });
       engine?.destroy();
@@ -144,7 +211,17 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     const engine = engineRef.current;
     if (!engine) return;
 
-    patchState({ status: 'loading', errorMessage: '', pivotSlug: '', selectedNodeId: null });
+    patchState({
+      status: 'loading',
+      errorMessage: '',
+      pivotSlug: '',
+      selectedNodeId: null,
+      bridgeTargetId: null,
+      bridgePanelOpen: false,
+      practiceListOpen: false,
+      theoremFocusMode: false,
+      pinnedCount: 0,
+    });
 
     fetchGraphSitemap(graphUrl)
       .then((sitemap) => {
@@ -153,8 +230,11 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         const stats = engineRef.current.getStats();
         setSummary(engineRef.current.getNeighborSummary());
         setPathTrace(engineRef.current.getPathTrace());
+        setShortestPath(engineRef.current.getShortestPath());
+        setTheoremAnatomy(engineRef.current.getTheoremAnatomy());
         patchState({
           ...stats,
+          pinnedCount: stats.pinnedCount ?? 0,
           status: 'ready',
           errorMessage: '',
         });
@@ -179,7 +259,9 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
   useEffect(() => {
     engineRef.current?.updateState({
       depth: state.depth,
-      layoutMode: state.layoutMode,
+      layoutMode: effectiveLayoutMode,
+      dagOrientation: state.dagOrientation,
+      theoremFocusMode: state.theoremFocusMode,
       typedOnly: state.typedOnly,
       showHubsAndRaw: state.showHubsAndRaw,
       colorBy: state.colorBy,
@@ -195,12 +277,16 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       activePlaneFilter: state.activePlaneFilter,
       searchQuery: state.searchQuery,
       selectedNodeId: state.selectedNodeId,
+      masteryMap: state.masteryMap,
+      bridgeTargetId: state.bridgeTargetId,
       pivotSlug: state.pivotSlug || slug,
     });
   }, [
     slug,
     state.depth,
-    state.layoutMode,
+    effectiveLayoutMode,
+    state.dagOrientation,
+    state.theoremFocusMode,
     state.typedOnly,
     state.showHubsAndRaw,
     state.colorBy,
@@ -216,6 +302,8 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     state.activePlaneFilter,
     state.searchQuery,
     state.selectedNodeId,
+    state.masteryMap,
+    state.bridgeTargetId,
     state.pivotSlug,
   ]);
 
@@ -265,7 +353,14 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
 
   const closeFullscreen = useCallback(() => {
     setHover(null);
-    patchState({ isFullscreen: false, settingsOpen: false, selectedNodeId: null });
+    patchState({
+      isFullscreen: false,
+      settingsOpen: false,
+      selectedNodeId: null,
+      bridgePanelOpen: false,
+      practiceListOpen: false,
+      layoutMode: $graphUi.get().sidebarLayoutMode,
+    });
   }, [patchState]);
 
   useEffect(() => {
@@ -280,6 +375,11 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       if (cur.isFullscreen && cur.selectedNodeId) {
         event.preventDefault();
         patchState({ selectedNodeId: null });
+        return;
+      }
+      if (cur.isFullscreen && (cur.bridgePanelOpen || cur.practiceListOpen)) {
+        event.preventDefault();
+        patchState({ bridgePanelOpen: false, practiceListOpen: false });
         return;
       }
       if (cur.isFullscreen && cur.searchQuery) {
@@ -333,17 +433,66 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
     patchState({ pivotSlug: '', selectedNodeId: null });
   }, [patchState]);
 
-  const engineNodes: GraphNode[] = engineRef.current?.getNodes() || [];
-  const selectedNode = state.selectedNodeId
-    ? (engineNodes.find((n) => n.id === state.selectedNodeId) ?? null)
-    : null;
+  const handleSafeAreaChange = useCallback((insets: SafeAreaInsets) => {
+    engineRef.current?.setSafeArea(insets);
+  }, []);
+
+  const handleUnpinAll = useCallback(() => {
+    engineRef.current?.unpinAllNodes();
+    patchState({ pinnedCount: 0 });
+  }, [patchState]);
+
+  const fullNodes: GraphNode[] = engineRef.current?.getFullNodes() || [];
+  const activeNodes: GraphNode[] = engineRef.current?.getNodes() || [];
+  const sitemapData = engineRef.current?.getSitemap() || {};
+  let selectedNode: GraphNode | null = null;
+  if (state.selectedNodeId) {
+    selectedNode =
+      activeNodes.find((n) => n.id === state.selectedNodeId) ??
+      fullNodes.find((n) => n.id === state.selectedNodeId) ??
+      null;
+    if (!selectedNode && sitemapData[state.selectedNodeId]) {
+      const raw = sitemapData[state.selectedNodeId];
+      const kind = inferSemanticKind(raw);
+      const vis = getKindVisual(kind);
+      const title = raw.title || state.selectedNodeId.replace(/^notes\//, '');
+      selectedNode = {
+        id: state.selectedNodeId,
+        title,
+        shortTitle: truncateLabel(title, 22),
+        fullShortTitle: truncateLabel(title, 30),
+        kind,
+        kindLabel: vis.label,
+        shape: vis.shape,
+        level: raw.level || '',
+        bookSlug: raw.book_slug || '',
+        chapterSlug: raw.chapter_slug || '',
+        slogan: raw.slogan || '',
+        tags: raw.tags || [],
+        isCurrent: false,
+        degree: (raw.links?.length || 0) + (raw.backlinks?.length || 0),
+        outCount: raw.links?.length || 0,
+        inCount: raw.backlinks?.length || 0,
+        radius: 7,
+        lightColor: vis.light,
+        darkColor: vis.dark,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        labelAlpha: 1,
+        hoverScale: 1,
+      };
+    }
+  }
   const nodeConnections = selectedNode
     ? (engineRef.current?.getNodeConnections(selectedNode.id) ?? { incoming: [], outgoing: [] })
     : { incoming: [], outgoing: [] };
   const effectivePivot = state.pivotSlug || slug;
   const isPivoted = Boolean(state.pivotSlug && state.pivotSlug !== slug);
-  const pivotNode = engineNodes.find((n) => n.id === effectivePivot || n.isCurrent);
+  const pivotNode = fullNodes.find((n) => n.id === effectivePivot || n.isCurrent);
   const pivotTitle = pivotNode?.title || effectivePivot.replace(/^notes\//, '');
+  const sidebarLegendItems = getColorLensLegend(fullNodes, 'kind', isDark);
 
   const inlineContainerRect = inlineContainerRef.current?.getBoundingClientRect() ?? null;
   const readyAttr = state.status === 'ready' ? 'true' : state.status;
@@ -358,8 +507,10 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       data-link-count={String(state.linkCount)}
       data-typed-link-count={String(state.typedLinkCount)}
       data-hidden-hub-count={String(state.hiddenHubCount)}
+      data-pinned-count={String(state.pinnedCount)}
       data-depth-active={String(state.depth)}
-      data-layout-mode={state.layoutMode}
+      data-layout-mode={effectiveLayoutMode}
+      data-dag-orientation={state.dagOrientation}
       data-color-by={state.colorBy}
       data-path-trace-mode={state.pathTraceMode}
       data-pivot-slug={effectivePivot}
@@ -393,6 +544,10 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
             patchState({
               isFullscreen: true,
               settingsOpen: false,
+              fullscreenLayoutMode: 'dag',
+              layoutMode: 'dag',
+              bridgePanelOpen: false,
+              practiceListOpen: false,
               pathTraceMode: 'prerequisites',
               depth: Math.max(state.depth, 2),
             });
@@ -402,6 +557,10 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
             patchState({
               isFullscreen: true,
               settingsOpen: false,
+              fullscreenLayoutMode: 'dag',
+              layoutMode: 'dag',
+              bridgePanelOpen: false,
+              practiceListOpen: false,
               pathTraceMode: 'impact',
               depth: Math.max(state.depth, 2),
             });
@@ -411,7 +570,9 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
             patchState({
               isFullscreen: true,
               settingsOpen: false,
-              activeKindFilter: 'problem',
+              bridgePanelOpen: false,
+              practiceListOpen: true,
+              layoutMode: state.fullscreenLayoutMode,
             });
           }}
           onRevealHubs={() => patchState({ showHubsAndRaw: true })}
@@ -444,9 +605,22 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         <div
           ref={inlineContainerRef}
           className="kg-container slsg-graph-container"
-          data-layout-mode={state.layoutMode}
+          data-layout-mode={effectiveLayoutMode}
         >
           <div className="kg-actions slsg-graph-action-container">
+            <button
+              type="button"
+              className={`kg-action-btn kg-action-text-btn${state.sidebarLayoutMode === 'dag' ? ' is-active' : ''}`}
+              data-sidebar-layout={state.sidebarLayoutMode}
+              aria-label="تغییر چیدمان گراف کناری بین DAG و شبکه"
+              title="تغییر بین چیدمان سلسله‌مراتبی DAG و شبکه فیزیکی"
+              onClick={() => {
+                const next = state.sidebarLayoutMode === 'dag' ? 'force' : 'dag';
+                patchState({ sidebarLayoutMode: next, layoutMode: next });
+              }}
+            >
+              <span>{state.sidebarLayoutMode === 'dag' ? 'DAG' : 'شبکه'}</span>
+            </button>
             <button
               type="button"
               className="kg-action-btn slsg-graph-action-button"
@@ -477,7 +651,11 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
               title="نمای تمام‌صفحه"
               onClick={() => {
                 setHover(null);
-                patchState({ isFullscreen: true, settingsOpen: false });
+                patchState({
+                  isFullscreen: true,
+                  settingsOpen: false,
+                  layoutMode: state.fullscreenLayoutMode,
+                });
               }}
             >
               <Maximize2 size={14} aria-hidden="true" />
@@ -498,7 +676,7 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
           {!state.isFullscreen && (
             <GraphSettingsPopover
               open={state.settingsOpen}
-              state={state}
+              state={{ ...state, layoutMode: effectiveLayoutMode }}
               onPatch={patchState}
               onReset={resetGraphSettings}
               onClose={() => patchState({ settingsOpen: false })}
@@ -512,20 +690,19 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         data-graph-legend=""
         aria-label="فیلتر بر اساس نوع UMKO"
       >
-        {LEGEND_ITEMS.map((item) => {
-          const active = state.activeKindFilter === item.kind;
-          const badgeColor = isDark ? item.dark : item.light;
+        {sidebarLegendItems.map((item) => {
+          const active = state.activeKindFilter === item.id;
           return (
             <button
-              key={item.kind}
+              key={item.id}
               type="button"
               className={`legend-badge${active ? ' is-active' : ''}`}
-              data-legend-kind={item.kind}
+              data-legend-kind={item.id}
               aria-pressed={active}
-              style={{ '--badge-c': badgeColor } as CSSProperties}
-              onClick={() => patchState({ activeKindFilter: active ? null : item.kind })}
+              style={{ '--badge-c': item.color } as CSSProperties}
+              onClick={() => patchState({ activeKindFilter: active ? null : item.id })}
             >
-              <NodeShapeGlyph shape={item.shape} color={badgeColor} size={10} />
+              <NodeShapeGlyph shape={item.shape} color={item.color} size={10} />
               <span>{item.label}</span>
             </button>
           );
@@ -533,11 +710,14 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
       </section>
 
       <GraphFullscreenModal
-        state={state}
+        state={{ ...state, layoutMode: effectiveLayoutMode }}
         isDark={isDark}
         hover={hover}
-        nodes={engineNodes}
+        nodes={fullNodes}
+        sitemap={sitemapData}
         pathTrace={pathTrace}
+        shortestPath={shortestPath}
+        theoremAnatomy={theoremAnatomy}
         selectedNode={selectedNode}
         selectedConnections={nodeConnections}
         isPivoted={isPivoted}
@@ -551,6 +731,9 @@ export default function GraphWidget({ slug, graphUrl = '/api/graph.json' }: Grap
         onSelectNode={handleSelectAndFocusNode}
         onPivot={handlePivotNode}
         onResetPivot={handleResetPivot}
+        onSafeAreaChange={handleSafeAreaChange}
+        onUnpinAll={handleUnpinAll}
+        onSetMastery={setGraphNodeMastery}
         onCloseFullscreen={closeFullscreen}
       />
     </section>
