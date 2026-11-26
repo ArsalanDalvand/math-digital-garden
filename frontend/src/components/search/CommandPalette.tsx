@@ -35,16 +35,27 @@ export function CommandPalette() {
   }, []);
 
   useEffect(() => {
+    const win = window as { __gardenOpenCmdkQueued?: boolean };
+    document.documentElement.dataset.cmdkReady = 'true';
+    if (win.__gardenOpenCmdkQueued) {
+      win.__gardenOpenCmdkQueued = false;
+      setOpen(true);
+    }
+
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setOpen((prev) => !prev);
       }
     };
-    const onCustomOpen = () => openPalette();
+    const onCustomOpen = () => {
+      win.__gardenOpenCmdkQueued = false;
+      openPalette();
+    };
     window.addEventListener('keydown', onKeyDown);
     document.addEventListener('garden:open-command-palette', onCustomOpen);
     return () => {
+      document.documentElement.removeAttribute('data-cmdk-ready');
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('garden:open-command-palette', onCustomOpen);
     };
