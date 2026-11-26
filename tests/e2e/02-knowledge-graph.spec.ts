@@ -70,6 +70,9 @@ test.describe('Modular Knowledge Graph (React + Canvas + Portal)', () => {
 
     const sheet = page.locator('[data-slot="sheet-content"]');
     await expect(sheet).toBeVisible();
+    const sheetZIndex = await sheet.evaluate((el) => Number.parseInt(getComputedStyle(el).zIndex, 10));
+    expect(sheetZIndex).toBeGreaterThanOrEqual(70);
+    await expect(sheet.getByText('ابزارهای مطالعه')).toBeVisible();
 
     const graphSection = sheet.locator('[data-note-graph]');
     await expect(graphSection).toHaveAttribute('data-graph-ready', 'true', { timeout: 15_000 });
