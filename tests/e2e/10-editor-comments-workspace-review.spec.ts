@@ -1,7 +1,21 @@
+import { test as baseTest, type Page } from '@playwright/test';
 import { assertNoHorizontalOverflow, expect, test } from './fixtures.ts';
 
 const TEST_NOTE_SLUG = 'axler-2d7afb5de78c939e';
 const TEST_NOTE_URL = `/notes/${TEST_NOTE_SLUG}`;
+
+async function openNoteCommand(page: Page, command: 'comments' | 'share' | 'attachments') {
+  const topBtn = page.locator(`[data-note-extra-actions] [data-library-command="${command}"]`);
+  if (await topBtn.isVisible()) {
+    await topBtn.click();
+    return;
+  }
+  const morePanel = page.locator('#workspace-more-panel');
+  if (!(await morePanel.isVisible())) {
+    await page.locator('[data-more-toggle]').click();
+  }
+  await page.locator(`[data-note-more] [data-library-command="${command}"]:visible`).click();
+}
 
 const MOCK_ACCOUNT = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -63,7 +77,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
 
     await page.setViewportSize({ width: 1280, height: 860 });
     await page.goto(TEST_NOTE_URL, { waitUntil: 'networkidle' });
-    await page.locator('[data-note-extra-actions] [data-library-command="comments"]').click();
+    await openNoteCommand(page, 'comments');
     const dialog = page.locator('dialog[data-library-dialog]');
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('data-dialog-mode', 'sheet');
@@ -72,116 +86,165 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await expect(dialog).toBeHidden();
   });
 
-  test('editor split preview, rebase banner MergeView, and 409 conflict recovery work cleanly', async ({
-    page,
-  }) => {
-    await mockPreviewAndLinks(page);
+  baseTest(
+    'editor split preview, rebase banner MergeView, and 409 conflict recovery work cleanly',
+    async ({ page }) => {
+      const pageErrors: string[] = [];
+      const unexpectedConsoleErrors: string[] = [];
+      page.on('pageerror', (err) => pageErrors.push(err.message));
+      page.on('console', (msg) => {
+        if (msg.type() !== 'error') return;
+        const locUrl = msg.location()?.url || '';
+        const text = msg.text();
+        if (text.includes('409') && locUrl.includes(`/api/notes/${TEST_NOTE_SLUG}/fork`)) return;
+        unexpectedConsoleErrors.push(`${text}${locUrl ? ` (${locUrl})` : ''}`);
+      });
 
-    const baseContent = '---\ntitle: تست\n---\nخط اول رسمی';
-    const forkContent = '---\ntitle: تست\n---\nخط اول ویرایش‌شده $x^2$';
-    const newCanonical = '---\ntitle: تست\n---\nخط اول رسمی\nخط تازه رسمی';
+      await mockPreviewAndLinks(page);
 
-    let canonicalState = { content: newCanonical, current_hash: HASH_V2 };
-    let forkState: any = {
-      id: 'fork-1',
-      base_hash: HASH_V1,
-      base_content: baseContent,
-      custom_content: forkContent,
-      current_hash: HASH_FORK,
-    };
-    let simulateConflict = true;
+      const baseContent = '---\ntitle: تست\n---\nخط اول رسمی';
+      const forkContent = '---\ntitle: تست\n---\nخط اول ویرایش‌شده $x^2$';
+      const newCanonical = '---\ntitle: تست\n---\nخط اول رسمی\nخط تازه رسمی';
 
-    await page.route('**/api/auth/session', (route) =>
-      route.fulfill({ json: { authenticated: true, account: MOCK_ACCOUNT } }),
-    );
-    await page.route('**/api/workspace', (route) =>
-      route.fulfill({ json: { forks: [], bookmarks: [] } }),
-    );
-    await page.route(`**/api/workspace/notes/${TEST_NOTE_SLUG}`, (route) =>
-      route.fulfill({
-        json: {
-          canonical: { slug: TEST_NOTE_SLUG, title: 'تست', ...canonicalState },
-          fork: forkState,
-        },
-      }),
-    );
-    await page.route(`**/api/library/canonical/${TEST_NOTE_SLUG}**`, (route) =>
-      route.fulfill({
-        status: 404,
-        json: { detail: 'Not found' },
-      }),
-    );
-    await page.route(`**/api/notes/${TEST_NOTE_SLUG}/fork/rebase`, async (route) => {
-      const payload = route.request().postDataJSON();
-      forkState = {
-        ...forkState,
-        base_hash: payload.canonical_hash,
-        base_content: canonicalState.content,
-        custom_content: payload.content,
-        current_hash: HASH_SAVED,
+      const canonicalState = { content: newCanonical, current_hash: HASH_V2 };
+      let forkState: {
+        id: string;
+        base_hash: string;
+        base_content: string;
+        custom_content: string;
+        current_hash: string;
+      } = {
+        id: 'fork-1',
+        base_hash: HASH_V1,
+        base_content: baseContent,
+        custom_content: forkContent,
+        current_hash: HASH_FORK,
       };
-      await route.fulfill({ json: forkState });
-    });
-    await page.route(`**/api/notes/${TEST_NOTE_SLUG}/fork`, async (route) => {
-      const payload = route.request().postDataJSON();
-      if (simulateConflict) {
-        simulateConflict = false;
+      let simulateConflict = true;
+
+      await page.route('**/api/auth/session', (route) =>
+        route.fulfill({ json: { authenticated: true, account: MOCK_ACCOUNT } }),
+      );
+      await page.route('**/api/workspace', (route) =>
+        route.fulfill({ json: { forks: [], bookmarks: [] } }),
+      );
+      await page.route('**/api/library/items?*', (route) => route.fulfill({ json: [] }));
+      await page.route(`**/api/workspace/notes/${TEST_NOTE_SLUG}`, (route) =>
+        route.fulfill({
+          json: {
+            canonical: { slug: TEST_NOTE_SLUG, title: 'تست', ...canonicalState },
+            fork: forkState,
+          },
+        }),
+      );
+      await page.route(`**/api/library/canonical/${TEST_NOTE_SLUG}`, (route) =>
+        route.fulfill({
+          json: {
+            id: 'item-1',
+            title: 'تست',
+            content: forkState.custom_content,
+            current_hash: forkState.current_hash,
+            visibility: 'private',
+            share_token: '',
+            verified: false,
+          },
+        }),
+      );
+      await page.route('**/api/library/items/item-1**', (route) => {
+        const u = route.request().url();
+        if (u.endsWith('/favorite')) return route.fulfill({ json: { favorite: false } });
+        if (u.endsWith('/watch')) return route.fulfill({ json: { watching: false, updated: false } });
+        return route.fulfill({
+          json: {
+            id: 'item-1',
+            title: 'تست',
+            content: forkState.custom_content,
+            current_hash: forkState.current_hash,
+            visibility: 'private',
+            share_token: '',
+            verified: false,
+            updated_at: '2026-11-26T10:00:00Z',
+          },
+        });
+      });
+      await page.route(`**/api/notes/${TEST_NOTE_SLUG}/fork/rebase`, async (route) => {
+        const payload = route.request().postDataJSON();
         forkState = {
           ...forkState,
-          custom_content: '---\ntitle: تست\n---\nنسخهٔ جدید روی سرور',
+          base_hash: payload.canonical_hash,
+          base_content: canonicalState.content,
+          custom_content: payload.content,
           current_hash: HASH_SAVED,
         };
-        await route.fulfill({
-          status: 409,
-          json: { detail: 'Content changed; reload before saving' },
-        });
-        return;
-      }
-      forkState = {
-        ...forkState,
-        custom_content: payload.content,
-        current_hash: 'e'.repeat(64),
-      };
-      await route.fulfill({ json: forkState });
-    });
+        await route.fulfill({ json: forkState });
+      });
+      await page.route(`**/api/notes/${TEST_NOTE_SLUG}/fork`, async (route) => {
+        const payload = route.request().postDataJSON();
+        if (simulateConflict) {
+          simulateConflict = false;
+          forkState = {
+            ...forkState,
+            custom_content: '---\ntitle: تست\n---\nنسخهٔ جدید روی سرور',
+            current_hash: HASH_SAVED,
+          };
+          await route.fulfill({
+            status: 409,
+            json: { detail: 'Content changed; reload before saving' },
+          });
+          return;
+        }
+        forkState = {
+          ...forkState,
+          custom_content: payload.content,
+          current_hash: 'e'.repeat(64),
+        };
+        await route.fulfill({ json: forkState });
+      });
 
-    await page.goto(TEST_NOTE_URL, { waitUntil: 'networkidle' });
+      await page.goto(TEST_NOTE_URL, { waitUntil: 'networkidle' });
 
-    // Rebase banner appears immediately after fork load when fork.base_hash !== canonical.current_hash
-    const syncBanner = page.locator('[data-sync-banner]');
-    await expect(syncBanner).toBeVisible();
-    await expect(syncBanner).toHaveAttribute('data-banner-mode', 'rebase');
+      // Rebase banner appears immediately after fork load when fork.base_hash !== canonical.current_hash
+      const syncBanner = page.locator('[data-sync-banner]');
+      await expect(syncBanner).toBeVisible();
+      await expect(syncBanner).toHaveAttribute('data-banner-mode', 'rebase');
 
-    // Open rebase MergeView and sync cleanly
-    await page.locator('[data-sync-banner-action]').click();
-    const mergeDialog = page.locator('[data-merge-dialog]');
-    await expect(mergeDialog).toBeVisible();
-    await expect(mergeDialog.locator('.cm-mergeView .cm-editor')).toHaveCount(2);
-    await page.locator('[data-merge-apply]').click();
-    await expect(mergeDialog).toBeHidden();
-    await expect(syncBanner).toBeHidden();
+      // Open rebase MergeView and sync cleanly
+      await page.locator('[data-sync-banner-action]').click();
+      const mergeDialog = page.locator('[data-merge-dialog]');
+      await expect(mergeDialog).toBeVisible();
+      await expect(mergeDialog.locator('.cm-mergeView .cm-editor')).toHaveCount(2);
+      await page.locator('[data-merge-apply]').click();
+      await expect(mergeDialog).toBeHidden();
+      await expect(syncBanner).toBeHidden();
 
-    // Enter edit mode and toggle Split Preview
-    await page.locator('[data-edit]').click();
-    await expect(page.locator('[data-editor] .cm-editor')).toBeVisible();
-    await expect(page.locator('[data-editor-stats]')).toContainText('واژه');
+      // Enter edit mode and toggle Split Preview
+      await page.locator('[data-edit]').click();
+      await expect(page.locator('[data-editor] .cm-editor')).toBeVisible();
+      await expect(page.locator('[data-editor-stats]')).toContainText('واژه');
 
-    const splitBtn = page.locator('[data-toolbar-split]');
-    await splitBtn.click();
-    await expect(page.locator('.editor-workspace-grid')).toHaveAttribute('data-editor-layout', 'split');
-    await expect(page.locator('[data-live-preview] .katex')).toBeVisible();
+      const splitBtn = page.locator('[data-toolbar-split]');
+      await splitBtn.click();
+      await expect(page.locator('.editor-workspace-grid')).toHaveAttribute(
+        'data-editor-layout',
+        'split',
+      );
+      await expect(page.locator('[data-live-preview] .katex')).toBeVisible();
 
-    // Trigger edit + explicit save -> hits simulated 409 -> opens conflict recovery MergeView
-    await page.locator('[data-editor] .cm-content').click();
-    await page.keyboard.type('\nتغییر محلی');
-    await page.locator('[data-save]').click();
-    await expect(mergeDialog).toBeVisible();
-    await expect(page.locator('[data-merge-title]')).toContainText('رفع تداخل');
-    await expect(mergeDialog.locator('.cm-mergeView .cm-editor')).toHaveCount(2);
-    await page.locator('[data-merge-apply]').click();
-    await expect(mergeDialog).toBeHidden();
-    await expect(page.locator('[data-save-badge]')).toHaveAttribute('data-state', 'saved');
-  });
+      // Trigger edit + explicit save -> hits simulated 409 -> opens conflict recovery MergeView
+      await page.locator('[data-editor] .cm-content').click();
+      await page.keyboard.type('\nتغییر محلی');
+      await page.locator('[data-save]').click();
+      await expect(mergeDialog).toBeVisible();
+      await expect(page.locator('[data-merge-title]')).toContainText('رفع تداخل');
+      await expect(mergeDialog.locator('.cm-mergeView .cm-editor')).toHaveCount(2);
+      await page.locator('[data-merge-apply]').click();
+      await expect(mergeDialog).toBeHidden();
+      await expect(page.locator('[data-save-badge]')).toHaveAttribute('data-state', 'saved');
+
+      expect(pageErrors).toEqual([]);
+      expect(unexpectedConsoleErrors).toEqual([]);
+    },
+  );
 
   test('comments sheet displays real names, KaTeX, filters, inline reply & inline edit', async ({
     page,
@@ -189,7 +252,16 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await mockPreviewAndLinks(page);
 
     const itemId = '00000000-0000-4000-8000-000000000099';
-    const commentsList: any[] = [
+    const commentsList: Array<{
+      id: string;
+      content: string;
+      user_id: string;
+      author_name: string;
+      author_role: string;
+      created_at: string;
+      parent_id: string | null;
+      resolved: boolean;
+    }> = [
       {
         id: 'c1',
         content: 'پرسش اول دربارهٔ $x^2 + 1$',
@@ -231,6 +303,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await page.route('**/api/workspace', (route) =>
       route.fulfill({ json: { forks: [], bookmarks: [] } }),
     );
+    await page.route('**/api/library/items?*', (route) => route.fulfill({ json: [] }));
     await page.route(`**/api/workspace/notes/${TEST_NOTE_SLUG}`, (route) =>
       route.fulfill({
         json: { canonical: { slug: TEST_NOTE_SLUG, content: '# عنوان', current_hash: HASH_V1 }, fork: null },
@@ -329,7 +402,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await page.goto(TEST_NOTE_URL, { waitUntil: 'networkidle' });
 
     // Open Comments Sheet
-    await page.locator('[data-note-extra-actions] [data-library-command="comments"]').click();
+    await openNoteCommand(page, 'comments');
     const dialog = page.locator('dialog[data-library-dialog]');
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('data-dialog-mode', 'sheet');
@@ -359,7 +432,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await page.keyboard.press('Escape');
 
     // Open Unified Share Dialog
-    await page.locator('[data-note-extra-actions] [data-library-command="share"]').click();
+    await openNoteCommand(page, 'share');
     await expect(dialog).toHaveAttribute('data-dialog-mode', 'modal');
     await dialog.locator('input[name="visibility"][value="unlisted"]').check();
     await dialog.locator('.share-visibility-form button[type="submit"]').click();
@@ -367,8 +440,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
 
     // Open Attachments Dialog via More Menu
     await page.keyboard.press('Escape');
-    await page.locator('[data-more-toggle]').click();
-    await page.locator('[data-note-more] [data-library-command="attachments"]').click();
+    await openNoteCommand(page, 'attachments');
     await expect(dialog.locator('[data-attachment-dropzone]')).toBeVisible();
     await expect(dialog.locator('.attachment-card')).toContainText('matrix-diagram.png');
     await expect(dialog.locator('.attachment-card')).toContainText('۲۰');
@@ -378,7 +450,20 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await mockPreviewAndLinks(page);
 
     const authorAccount = { ...MOCK_ACCOUNT, id: 'author-1', role: 'author', full_name: 'دکتر ناصری' };
-    const proposalItem: any = {
+    const proposalItem: {
+      id: string;
+      slug: string;
+      title: string;
+      author_name: string;
+      base_content: string;
+      proposed_content: string;
+      student_comment: string;
+      status: string;
+      author_review_comment: string;
+      created_at: string;
+      sync_status: string;
+      reviewed_at?: string;
+    } = {
       id: 'prop-1',
       slug: TEST_NOTE_SLUG,
       title: 'دستگاه معادلات خطی و ماتریس‌ها',
@@ -395,6 +480,7 @@ test.describe('Phase D — Editor, Comments Sheet, Share/Attachments, Workspace 
     await page.route('**/api/auth/session', (route) =>
       route.fulfill({ json: { authenticated: true, account: authorAccount } }),
     );
+    await page.route('**/api/library/items?*', (route) => route.fulfill({ json: [] }));
     await page.route('**/api/workspace', (route) =>
       route.fulfill({
         json: {

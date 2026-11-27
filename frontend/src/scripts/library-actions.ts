@@ -1343,7 +1343,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
   const commandHandler = (event: Event) => {
     const target = (event.target as Element).closest<HTMLElement>('[data-library-command]');
     const command = target?.dataset.libraryCommand;
-    if (command && actions[command])
+    if (command && actions[command]) {
+      const morePanel = document.getElementById('workspace-more-panel');
+      if (morePanel && !morePanel.hidden) {
+        morePanel.hidden = true;
+        document.querySelector('[data-more-toggle]')?.setAttribute('aria-expanded', 'false');
+      }
       void run(async () => {
         const guestAllowed = ['link', 'markdown', 'width', 'comments'];
         if (!user && !guestAllowed.includes(command)) {
@@ -1361,6 +1366,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
           await ensure();
         await actions[command]();
       });
+    }
   };
 
   root.addEventListener('click', commandHandler);

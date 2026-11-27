@@ -1764,7 +1764,11 @@
   }
 
   /* Workspace Dashboard, Library Browser & Review */
-  [data-private-section] {
+  [hidden]:not([hidden='until-found']) {
+    display: none !important;
+  }
+
+  section[data-private-section] {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -1772,7 +1776,7 @@
     margin-bottom: 16px;
   }
 
-  [data-private-section] h2 {
+  section[data-private-section] h2 {
     font-size: 14px;
     font-weight: 700;
     margin: 0 0 12px;
@@ -1780,15 +1784,15 @@
     border-bottom: 1px solid var(--border);
   }
 
-  [data-private-section] ul {
+  section[data-private-section] ul {
     list-style: none;
     padding: 0;
     margin: 0;
     display: grid;
-    gap: 4px;
+    gap: 6px;
   }
 
-  [data-private-section] li {
+  section[data-private-section] li:not(.workspace-proposal-card) {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1797,20 +1801,20 @@
     font-size: 13px;
   }
 
-  [data-private-section] li:hover {
+  section[data-private-section] li:hover {
     background: var(--surface-hover);
   }
 
-  [data-private-section] li a {
+  section[data-private-section] li a {
     text-decoration: none;
     font-weight: 500;
   }
 
-  [data-private-section] li a:hover {
+  section[data-private-section] li a:hover {
     color: var(--primary-text);
   }
 
-  [data-private-section] li button {
+  section[data-private-section] li button {
     min-height: 30px;
     padding: 0 10px;
     font-size: 12px;
@@ -1820,7 +1824,7 @@
     color: var(--muted-foreground);
   }
 
-  [data-private-section] li button:hover {
+  section[data-private-section] li button:hover {
     background: var(--surface-hover);
     color: var(--foreground);
   }
@@ -3443,10 +3447,28 @@
     margin: 4px 0 0;
   }
 
+  .workspace-feedback-stack {
+    display: grid;
+    gap: 4px;
+  }
+
+  .workspace-feedback-row:has(p:empty) {
+    display: none;
+  }
+
   .workspace-feedback-row {
     font-size: 12px;
     color: var(--muted-foreground);
     margin: 2px 0;
+  }
+
+  a.workspace-action-btn,
+  a.garden-button-primary {
+    text-decoration: none;
+  }
+
+  [data-review-title]:focus:not(:focus-visible) {
+    outline: none;
   }
 
   .workspace-feedback-row p[role='alert'] {

@@ -155,8 +155,8 @@ import {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 3px;
-  padding: 4px 6px;
+  gap: 2px;
+  padding: 4px;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;
@@ -164,7 +164,7 @@ import {
 .toolbar-group {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   flex-shrink: 0;
 }
 .markdown-toolbar > * {
@@ -173,7 +173,7 @@ import {
 .markdown-toolbar button,
 .markdown-toolbar select {
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--foreground);
   background: transparent;
   border: 1px solid transparent;
@@ -185,10 +185,10 @@ import {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-inline-size: 32px;
-  min-block-size: 32px;
-  height: 32px;
-  padding: 0 6px;
+  min-inline-size: 28px;
+  min-block-size: 30px;
+  height: 30px;
+  padding: 0 4px;
   cursor: pointer;
 }
 .markdown-toolbar button:hover {
@@ -209,10 +209,10 @@ import {
 
 /* Block Selector */
 .markdown-toolbar select {
-  min-block-size: 32px;
-  height: 32px;
-  padding: 0 10px 0 24px;
-  max-inline-size: 8.5rem;
+  min-block-size: 30px;
+  height: 30px;
+  padding: 0 8px 0 20px;
+  max-inline-size: 6.8rem;
   background: var(--surface-subtle);
   border-color: var(--border);
   font-family: var(--font-reading);
@@ -220,7 +220,7 @@ import {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left 6px center;
+  background-position: left 5px center;
 }
 .markdown-toolbar select:hover {
   background-color: var(--surface-hover);
@@ -234,34 +234,34 @@ import {
   font-weight: 600;
   letter-spacing: -0.5px;
 }
-.toolbar-mathlive-btn {
-  gap: 5px;
-  padding: 0 8px;
-  font-size: 12px;
+.markdown-toolbar .toolbar-mathlive-btn {
+  gap: 4px;
+  padding: 0 7px;
+  font-size: 11.5px;
   font-weight: 600;
   background: var(--primary-soft);
   color: var(--primary-text);
   border-color: color-mix(in oklch, var(--primary) 30%, transparent);
 }
-.toolbar-mathlive-btn:hover {
+.markdown-toolbar .toolbar-mathlive-btn:hover {
   background: color-mix(in oklch, var(--primary) 18%, transparent);
   border-color: color-mix(in oklch, var(--primary) 45%, transparent);
 }
-.toolbar-mathlive-btn[aria-pressed="true"] {
+.markdown-toolbar .toolbar-mathlive-btn[aria-pressed="true"] {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--primary-foreground);
 }
-.toolbar-split-btn {
-  gap: 5px;
-  padding: 0 9px;
-  font-size: 12px;
+.markdown-toolbar .toolbar-split-btn {
+  gap: 4px;
+  padding: 0 7px;
+  font-size: 11.5px;
   font-weight: 600;
   background: var(--surface-subtle);
   border-color: var(--border);
   color: var(--foreground);
 }
-.toolbar-split-btn[aria-pressed="true"] {
+.markdown-toolbar .toolbar-split-btn[aria-pressed="true"] {
   background: var(--primary-soft);
   border-color: color-mix(in oklch, var(--primary) 42%, transparent);
   color: var(--primary-text);
@@ -271,7 +271,7 @@ import {
 .toolbar-divider {
   inline-size: 1px;
   block-size: 18px;
-  margin-inline: 4px;
+  margin-inline: 2px;
   background: var(--border);
 }
 

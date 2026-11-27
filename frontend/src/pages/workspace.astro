@@ -587,10 +587,10 @@ import Reader from '../layouts/Reader.astro';
             forks: state.data?.forks ?? [],
             bookmarks: state.data?.bookmarks ?? [],
           };
-          fb.textContent = 'نسخه‌ها و نشانه‌ها به‌روز شدند.';
+          fb.textContent = '';
         } else {
           proposalsData = Array.isArray(state.data) ? state.data : [];
-          fb.textContent = 'پیشنهادها به‌روز شدند.';
+          fb.textContent = '';
         }
         retryBtn.hidden = true;
         renderFiltered();
