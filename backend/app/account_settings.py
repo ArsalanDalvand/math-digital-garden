@@ -7,13 +7,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from PIL import Image, UnidentifiedImageError
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, ValidationError, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from backend.app.models import AuthSession, User
-from backend.app.workspace import DB, Contract, Me, digest, passwords, user_json, write_guard
+from backend.app.workspace import (
+    DB,
+    Contract,
+    Me,
+    digest,
+    limiter,
+    passwords,
+    user_json,
+    write_guard,
+)
 
 router = APIRouter(prefix="/api/account")
 MAX_AVATAR = 512 * 1024
@@ -56,7 +65,10 @@ class PasswordChange(Contract):
 
 
 def account_json(user: User) -> dict[str, object]:
-    preferences = Preferences.model_validate_json(user.preferences_json or "{}")
+    try:
+        preferences = Preferences.model_validate_json(user.preferences_json or "{}")
+    except (ValueError, ValidationError):
+        preferences = Preferences()
     return {
         **user_json(user),
         "avatar_url": "/api/account/avatar" if user.avatar_png else None,
@@ -83,7 +95,8 @@ async def verify_password(user: User, value: str) -> None:
 
 
 @router.patch("/email", dependencies=[Depends(write_guard)])
-async def email(data: EmailChange, user: Me, db: DB) -> dict[str, object]:
+@limiter.limit("10/minute")
+async def email(request: Request, data: EmailChange, user: Me, db: DB) -> dict[str, object]:
     await verify_password(user, data.current_password)
     address = str(data.email).lower()
     if await db.scalar(select(User.id).where(User.email == address, User.id != user.id)):
@@ -98,6 +111,7 @@ async def email(data: EmailChange, user: Me, db: DB) -> dict[str, object]:
 
 
 @router.patch("/password", dependencies=[Depends(write_guard)])
+@limiter.limit("10/minute")
 async def password(data: PasswordChange, request: Request, user: Me, db: DB) -> dict[str, object]:
     await verify_password(user, data.current_password)
     user.password_hash = await run_in_threadpool(passwords.hash, data.password)

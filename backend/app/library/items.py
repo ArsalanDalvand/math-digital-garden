@@ -146,19 +146,25 @@ async def create_item(body: CreateItem, db: DB, user: Me, _: Writes):
 @router.get("/items/{item_id}")
 async def read_item(item_id: UUID, db: DB, user: Me, note: str | None = None):
     item = await owned(db, user.id, item_id)
-    all_user_items = (
-        await db.scalars(
-            select(LibraryItem).where(
+    meta_rows = (
+        await db.execute(
+            select(
+                LibraryItem.id,
+                LibraryItem.parent_id,
+                LibraryItem.kind,
+                LibraryItem.title,
+                LibraryItem.published_title,
+            ).where(
                 LibraryItem.user_id == user.id,
                 LibraryItem.trashed_at.is_(None),
             )
         )
     ).all()
-    item_map = {it.id: it for it in all_user_items}
+    item_map = {it.id: it for it in meta_rows}
 
     if item.kind == "folder":
         tree, flat_notes, path_map = collect_folder_tree_and_notes(
-            item.id, list(all_user_items), use_published=False
+            item.id, list(meta_rows), use_published=False
         )
         git_source = await db.scalar(
             select(LibraryGitSource).where(
@@ -166,24 +172,30 @@ async def read_item(item_id: UUID, db: DB, user: Me, note: str | None = None):
                 LibraryGitSource.user_id == user.id,
             )
         )
-        descendants = [it for it in all_user_items if it.id in path_map]
+        descendants = [it for it in meta_rows if it.id in path_map]
         descendant_ids = set(path_map.keys())
 
-        target_note: LibraryItem | None = None
+        target_id: UUID | None = None
         if note:
             try:
                 target_uuid = UUID(note)
                 if target_uuid in descendant_ids:
-                    target_note = item_map.get(target_uuid)
+                    candidate = item_map.get(target_uuid)
+                    if candidate is not None and candidate.kind == "note":
+                        target_id = candidate.id
             except (ValueError, TypeError):
                 pass
 
-        if target_note is None or target_note.kind != "note":
+        if target_id is None:
             notes = [it for it in descendants if it.kind == "note"]
-            target_note = next(
+            chosen = next(
                 (n for n in notes if n.title.lower() in ("readme", "راهنما", "index")),
                 notes[0] if notes else None,
             )
+            if chosen is not None:
+                target_id = chosen.id
+
+        target_note = await db.get(LibraryItem, target_id) if target_id is not None else None
 
         res = dto(item)
         res["tree"] = tree
@@ -218,7 +230,7 @@ async def read_item(item_id: UUID, db: DB, user: Me, note: str | None = None):
 
     if root_folder:
         _, flat_notes, path_map = collect_folder_tree_and_notes(
-            root_folder.id, list(all_user_items), use_published=False
+            root_folder.id, list(meta_rows), use_published=False
         )
         git_source = await db.scalar(
             select(LibraryGitSource).where(
@@ -355,9 +367,7 @@ async def watching(item_id: UUID, db: DB, user: Me, token: str | None = None):
 
 
 @router.put("/items/{item_id}/watch")
-async def watch(
-    item_id: UUID, body: Watch, db: DB, user: Me, _: Writes, token: str | None = None
-):
+async def watch(item_id: UUID, body: Watch, db: DB, user: Me, _: Writes, token: str | None = None):
     item = await accessible(db, item_id, user, token)
     entry = await db.get(LibraryWatch, (item_id, user.id))
     if body.watching:
@@ -389,10 +399,12 @@ async def watch_list(
 
 
 @router.put("/items/{item_id}/verification")
-async def verify(item_id: UUID, body: Verification, db: DB, user: Me, _: Writes):
+async def verify(
+    item_id: UUID, body: Verification, db: DB, user: Me, _: Writes, token: str | None = None
+):
     if user.role != "admin":
         raise HTTPException(403, "Admin role required")
-    item = await accessible(db, item_id, user, lock=True)
+    item = await accessible(db, item_id, user, token, lock=True)
     if not item.published_hash:
         raise HTTPException(409, "Published snapshot required")
     item.verified_hash = item.published_hash if body.verified else None

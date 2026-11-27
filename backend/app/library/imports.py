@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field
 from sqlalchemy import select
 
-from backend.app.library.common import dto
+from backend.app.library.common import dto, validate_safe_name
 from backend.app.library_models import LibraryGitSource, LibraryItem
 from backend.app.workspace import DB, Contract, Me, Writes, digest
 
@@ -45,12 +45,17 @@ async def import_git(body: GitImportRequest, db: DB, user: Me, _: Writes):
     lib = _pkg()
     await lib.run_in_threadpool(lib.validate_git_url, body.repo_url)
 
-    title = body.title
+    title = (body.title or "").strip()
     if not title:
         raw_name = body.repo_url.rstrip("/").split("/")[-1]
         if raw_name.endswith(".git"):
             raw_name = raw_name[:-4]
-        title = raw_name or "مستندات گیت"
+        title = raw_name.strip() or "مستندات گیت"
+    title = title.replace("/", "-").replace("\\", "-")
+    try:
+        validate_safe_name(title)
+    except ValueError:
+        raise HTTPException(422, "نام پوشه معتبر نیست.") from None
 
     if body.parent_id:
         parent_item = await lib.owned(db, user.id, body.parent_id)
@@ -105,9 +110,14 @@ async def import_zip(body: ZipImportRequest, db: DB, user: Me, _: Writes):
     except (binascii.Error, ValueError):
         raise HTTPException(400, "داده‌های فایل زیپ نامعتبر است.") from None
 
-    title = body.title
+    title = (body.title or "").strip()
     if not title:
         title = os.path.splitext(body.filename)[0].strip() or "مستندات زیپ"
+    title = title.replace("/", "-").replace("\\", "-")
+    try:
+        validate_safe_name(title)
+    except ValueError:
+        raise HTTPException(422, "نام پوشه معتبر نیست.") from None
 
     if body.parent_id:
         parent_item = await lib.owned(db, user.id, body.parent_id)
@@ -209,6 +219,11 @@ async def git_sync(item_id: UUID, db: DB, user: Me, _: Writes):
             "stats": stats,
             "message": msg,
         }
+    except HTTPException as exc:
+        git_source.sync_status = "error"
+        git_source.error_message = str(exc.detail)
+        await db.commit()
+        raise exc
     except Exception as exc:
         git_source.sync_status = "error"
         git_source.error_message = str(exc)

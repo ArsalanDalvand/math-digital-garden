@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -31,7 +32,26 @@ from backend.app.models import (
     UserNoteFork,
 )
 
-limiter = Limiter(key_func=get_remote_address)
+
+def client_ip_key(request: Request) -> str:
+    """Resolve client IP, trusting forwarded headers only from the local Astro SSR proxy."""
+    peer = request.client.host if request.client else ""
+    if peer in {"127.0.0.1", "::1"}:
+        xff = request.headers.get("x-forwarded-for", "")
+        candidates = [
+            request.headers.get("x-real-ip", "").strip(),
+            xff.split(",")[0].strip() if xff else "",
+        ]
+        for raw_ip in candidates:
+            if raw_ip and len(raw_ip) <= 64:
+                try:
+                    return str(ipaddress.ip_address(raw_ip))
+                except ValueError:
+                    continue
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=client_ip_key)
 passwords = PasswordHash.recommended()
 DUMMY_HASH = passwords.hash(token_urlsafe(32))
 DB = Annotated[AsyncSession, Depends(get_session)]
@@ -60,11 +80,12 @@ def write_guard(request: Request) -> None:
 Writes = Annotated[None, Depends(write_guard)]
 
 
-async def current_user(request: Request, db: DB) -> User:
+async def optional_user(request: Request, db: DB) -> User | None:
+    """Return the signed-in user for the current cookie, or None without raising 401."""
     token = request.cookies.get("garden_session", "")
     if not token or len(token) > 128:
-        raise HTTPException(401, "Login required")
-    user = await db.scalar(
+        return None
+    return await db.scalar(
         select(User)
         .join(AuthSession, User.id == AuthSession.user_id)
         .where(
@@ -72,6 +93,13 @@ async def current_user(request: Request, db: DB) -> User:
             AuthSession.expires_at > datetime.now(UTC),
         )
     )
+
+
+async def current_user(request: Request, db: DB) -> User:
+    token = request.cookies.get("garden_session", "")
+    if not token or len(token) > 128:
+        raise HTTPException(401, "Login required")
+    user = await optional_user(request, db)
     if user is None:
         raise HTTPException(401, "Session expired")
     return user

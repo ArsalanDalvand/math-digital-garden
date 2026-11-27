@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.library_models import LibraryItem
+from backend.app.library_models import LibraryItem, LibraryRevision
 from backend.app.workspace import digest
 
 logger = logging.getLogger(__name__)
@@ -208,9 +208,7 @@ def clone_git_repo(repo_url: str, branch: str = "main", target_dir: str = "") ->
         if res_fb.returncode != 0:
             err = res_fb.stderr.strip() or res.stderr.strip() or "خطا در دریافت مخزن"
             logger.warning("Git clone failed for %s: %s", safe_url, err)
-            raise HTTPException(
-                400, f"کلون مخزن با خطا مواجه شد: {err[-200:]}"
-            )
+            raise HTTPException(400, f"کلون مخزن با خطا مواجه شد: {err[-200:]}")
 
     # Get commit SHA
     sha_cmd = [
@@ -254,10 +252,7 @@ def extract_zip_archive(zip_bytes: bytes, dest_dir: str) -> int:
 
                 # Disallow zip-slip
                 target_path = os.path.realpath(os.path.join(real_dest, info.filename))
-                if (
-                    not target_path.startswith(real_dest + os.sep)
-                    and target_path != real_dest
-                ):
+                if not target_path.startswith(real_dest + os.sep) and target_path != real_dest:
                     raise HTTPException(400, "فایل فشرده حاوی مسیرهای نامعتبر است.")
 
                 # Ignore git / system directories
@@ -299,9 +294,9 @@ async def ingest_directory_to_library(
         LibraryItem.trashed_at.is_(None),
     )
     existing_items = (await db.scalars(all_existing_query)).all()
-    # Map (parent_id, title) -> LibraryItem
-    items_by_parent_title: dict[tuple[UUID | None, str], LibraryItem] = {
-        (item.parent_id, item.title): item for item in existing_items
+    # Map (parent_id, kind, title) -> LibraryItem so sibling folder and note names never collide
+    items_by_key: dict[tuple[UUID | None, str, str], LibraryItem] = {
+        (item.parent_id, item.kind, item.title): item for item in existing_items
     }
 
     async def walk_and_ingest(current_dir: str, current_parent_id: UUID) -> None:
@@ -324,8 +319,8 @@ async def ingest_directory_to_library(
 
         # Process subdirectories
         for subdir_name in subdirs:
-            key = (current_parent_id, subdir_name)
-            folder_item = items_by_parent_title.get(key)
+            key = (current_parent_id, "folder", subdir_name)
+            folder_item = items_by_key.get(key)
             if folder_item is None:
                 folder_item = LibraryItem(
                     user_id=user_id,
@@ -337,7 +332,7 @@ async def ingest_directory_to_library(
                 )
                 db.add(folder_item)
                 await db.flush()
-                items_by_parent_title[key] = folder_item
+                items_by_key[key] = folder_item
                 stats["added"] += 1
             seen_item_ids.add(folder_item.id)
             stats["total"] += 1
@@ -357,8 +352,8 @@ async def ingest_directory_to_library(
                 continue
 
             content_hash = digest(content)
-            key = (current_parent_id, title)
-            note_item = items_by_parent_title.get(key)
+            key = (current_parent_id, "note", title)
+            note_item = items_by_key.get(key)
 
             if note_item is None:
                 note_item = LibraryItem(
@@ -371,13 +366,24 @@ async def ingest_directory_to_library(
                 )
                 db.add(note_item)
                 await db.flush()
-                items_by_parent_title[key] = note_item
+                items_by_key[key] = note_item
                 stats["added"] += 1
             else:
                 if note_item.current_hash != content_hash:
                     note_item.content = content
                     note_item.current_hash = content_hash
                     note_item.updated_at = datetime.now(UTC)
+                    note_item.verified_hash = None
+                    note_item.verified_by = None
+                    note_item.verified_at = None
+                    db.add(
+                        LibraryRevision(
+                            user_id=user_id,
+                            item_id=note_item.id,
+                            content=content,
+                            content_hash=content_hash,
+                        )
+                    )
                     stats["updated"] += 1
             seen_item_ids.add(note_item.id)
             stats["total"] += 1
