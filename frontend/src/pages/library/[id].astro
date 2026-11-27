@@ -94,9 +94,18 @@ const noteProps = {
     <div class="shared-empty-state">
       <h2>پوشهٔ «{item.title}»</h2>
       <p>این پوشه یادداشتی برای نمایش مستقیم ندارد.</p>
-      <p><a href="/library">بازگشت به کتابخانه</a></p>
+      <div class="shared-empty-actions">
+        <a href="/library" class="garden-button-primary">بازگشت به کتابخانه</a>
+      </div>
     </div>
   ) : (
-    <p>یادداشت در دسترس نیست. <a href="/account">ورود</a> · <a href="/library">کتابخانه</a></p>
+    <div class="shared-empty-state">
+      <h2>یادداشت در دسترس نیست</h2>
+      <p>ممکن است دسترسی به این یادداشت نیاز به ورود داشته باشد یا از کتابخانه حذف شده باشد.</p>
+      <div class="shared-empty-actions">
+        <a href="/account" class="garden-button-primary">ورود به حساب</a>
+        <a href="/library" class="garden-button-secondary">بازگشت به کتابخانه</a>
+      </div>
+    </div>
   )}
 </Reader>

@@ -1,3 +1,5 @@
+import { mergeReadingStorage } from '../lib/account-helpers.mjs';
+
 export type Preferences = {
   theme: 'light' | 'dark' | 'system';
   size: number;
@@ -17,9 +19,11 @@ export type Account = {
 };
 export function applyPreferences(preferences: Preferences) {
   const { theme, default_mode, fixed_toolbar, ...reading } = preferences;
+  let mergedReading = { ...reading, mathScale: 1 };
   try {
+    mergedReading = mergeReadingStorage(localStorage.getItem('garden-reading'), reading);
     localStorage.setItem('garden-theme', theme);
-    localStorage.setItem('garden-reading', JSON.stringify(reading));
+    localStorage.setItem('garden-reading', JSON.stringify(mergedReading));
     localStorage.setItem('garden-default-mode', default_mode);
     localStorage.setItem('garden-fixed-toolbar', String(fixed_toolbar));
   } catch {}
@@ -43,6 +47,7 @@ export function applyPreferences(preferences: Preferences) {
   root.style.setProperty('--reading-size', reading.size + 'px');
   root.style.setProperty('--reading-leading', String(reading.leading));
   root.style.setProperty('--reading-width', reading.width + 'px');
+  root.style.setProperty('--math-scale', mergedReading.mathScale.toFixed(2));
   root.dataset.readingFocus = String(reading.focus);
   root.dataset.fixedToolbar = String(fixed_toolbar);
   root.dataset.defaultMode = default_mode;

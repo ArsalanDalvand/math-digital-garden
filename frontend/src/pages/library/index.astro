@@ -1,30 +1,121 @@
 ---
+import { Download, FolderKanban, LockKeyhole, Search, X } from 'lucide-react';
 import Reader from '../../layouts/Reader.astro';
 ---
-<Reader title="کتابخانه">
-<p>جزوه‌ها و یادداشت‌های شما در یک جا؛ ویرایش جزوه فقط برای حساب شما ذخیره می‌شود.</p>
-<p><a href="/workspace">فعالیت‌ها، نشانه‌ها و پیشنهادهای من</a></p>
-<div data-library-browser>
-<div class="garden-row library-actions-top">
-  <div class="library-views">
-    <button data-library-view="items">یادداشت‌ها</button>
-    <button data-library-view="favorites">علاقه‌مندی‌ها</button>
-    <button data-library-view="watching">پیگیری‌ها</button>
-    <button data-library-view="trash">زباله‌دان</button>
+
+<Reader title="کتابخانه" hidePageHeading>
+  <div class="library-page-shell">
+    <header class="library-page-header">
+      <div class="library-page-title-block">
+        <h1>کتابخانه</h1>
+        <p class="library-page-subtitle">
+          جزوه‌ها، پوشه‌ها و یادداشت‌های شخصی در کنار منابع رسمی وبسایت
+        </p>
+      </div>
+      <a href="/workspace" class="library-header-link">
+        <FolderKanban size={15} aria-hidden="true" />
+        <span>فعالیت‌ها و پیشنهادهای من</span>
+      </a>
+    </header>
+
+    <div data-library-browser class="library-browser-shell">
+      <div data-library-guest-banner class="library-guest-banner" hidden>
+        <div class="library-guest-banner-copy">
+          <span class="library-guest-icon" aria-hidden="true">
+            <LockKeyhole size={18} />
+          </span>
+          <div>
+            <strong>فضای شخصی نیاز به ورود دارد</strong>
+            <p>
+              برای ساخت یادداشت، دسته‌بندی پوشه‌ها یا درون‌ریزی مخزن‌های گیت و فایل زیپ وارد حساب
+              کاربری خود شوید. مطالعهٔ منابع رسمی بدون نیاز به ورود آزاد است.
+            </p>
+          </div>
+        </div>
+        <a href="/account" class="garden-button-primary">ورود یا ثبت‌نام</a>
+      </div>
+
+      <div class="library-toolbar">
+        <div class="library-views" role="group" aria-label="نماهای کتابخانه">
+          <button
+            type="button"
+            data-library-view="items"
+            aria-pressed="true"
+            class="is-active"
+          >
+            یادداشت‌ها
+          </button>
+          <button type="button" data-library-view="favorites" aria-pressed="false">
+            علاقه‌مندی‌ها
+          </button>
+          <button type="button" data-library-view="watching" aria-pressed="false">
+            پیگیری‌ها
+          </button>
+          <button type="button" data-library-view="trash" aria-pressed="false">
+            زباله‌دان
+          </button>
+        </div>
+
+        <div class="library-toolbar-end">
+          <div class="library-search-box">
+            <Search size={14} aria-hidden="true" class="library-search-icon" />
+            <input
+              type="search"
+              data-browser-filter
+              placeholder="فیلتر سریع در این نما…"
+              aria-label="فیلتر سریع در فهرست کتابخانه"
+              autocomplete="off"
+            />
+            <button
+              type="button"
+              data-browser-filter-clear
+              class="library-filter-clear"
+              aria-label="پاک کردن فیلتر"
+              hidden
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          </div>
+
+          <button type="button" data-import-docs class="import-docs-btn">
+            <Download size={15} aria-hidden="true" />
+            <span>درون‌ریزی (گیت / زیپ)</span>
+          </button>
+        </div>
+      </div>
+
+      <nav data-browser-path class="library-breadcrumb" aria-label="مسیر پوشه"></nav>
+
+      <form data-create-item class="library-create-bar" hidden>
+        <label class="library-create-kind">
+          <span class="sr-only">نوع مورد</span>
+          <select name="kind" aria-label="نوع مورد">
+            <option value="note">یادداشت</option>
+            <option value="folder">پوشه</option>
+          </select>
+        </label>
+        <label class="library-create-title">
+          <span class="sr-only">عنوان یادداشت یا پوشه</span>
+          <input
+            name="title"
+            required
+            maxlength="255"
+            placeholder="عنوان یادداشت یا پوشهٔ تازه…"
+          />
+        </label>
+        <button type="submit" disabled>ساختن</button>
+      </form>
+
+      <p role="status" data-browser-status class="library-browser-status"></p>
+      <div data-browser-empty class="library-empty-state" hidden></div>
+      <ul data-browser-list class="library-browser-list"></ul>
+      <button type="button" data-browser-more class="garden-button-secondary" hidden>
+        بارگذاری موارد بیشتر
+      </button>
+    </div>
   </div>
-  <button type="button" data-import-docs class="import-docs-btn">📥 درون‌ریزی مستندات (گیت / زیپ)</button>
-</div>
-<p role="status" data-browser-status></p><div data-browser-path></div>
-<form data-create-item class="garden-row"><label>نام <input name="title" required maxlength="255"/></label><label>نوع <select name="kind"><option value="note">یادداشت</option><option value="folder">پوشه</option></select></label><button type="submit" disabled>ساختن</button></form>
-<ul data-browser-list class="library-browser-list"></ul><button data-browser-more hidden>بیشتر</button>
-</div>
 </Reader>
-<script>import '../../scripts/library-browser';</script>
-<style>
-.library-browser-list{list-style:none;padding:0}
-.library-browser-list li{padding:.75rem 0;border-block-end:1px solid var(--border,#ddd);display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
-.library-actions-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}
-.library-views{display:flex;gap:.5rem;flex-wrap:wrap}
-.import-docs-btn{background:var(--primary);color:var(--primary-foreground);border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:600;font-size:.875rem;display:inline-flex;align-items:center;gap:.4rem}
-.import-docs-btn:hover{background:var(--primary-hover)}
-</style>
+
+<script>
+  import '../../scripts/library-browser';
+</script>

@@ -1,11 +1,36 @@
 import { useStore } from '@nanostores/react';
-import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  BookMarked,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  RotateCcw,
+  SlidersHorizontal,
+  Sun,
+  Upload,
+  UserRound,
+  UserRoundCog,
+} from 'lucide-react';
+import {
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { evaluatePasswordPolicy, roleLabel } from '../../lib/account-helpers.mjs';
 import {
   type Account,
   applyPreferences,
   type Preferences,
 } from '../../scripts/account-preferences.ts';
 import { ApiError, api } from '../../scripts/api.ts';
+import { getSession } from '../../scripts/session.ts';
+import { showToast } from '../../scripts/toast.ts';
 import { $identity, setAppIdentity, syncThemeFromDom } from '../../stores/garden.ts';
 import { Button } from '../ui/button.tsx';
 
@@ -29,6 +54,17 @@ const DEFAULT_PREFERENCES: Preferences = {
   default_mode: 'read',
   fixed_toolbar: true,
 };
+
+function readInitialMathScale(): number {
+  if (typeof localStorage === 'undefined') return 1;
+  try {
+    const parsed = JSON.parse(localStorage.getItem('garden-reading') || '{}');
+    if (parsed && typeof parsed.mathScale === 'number' && Number.isFinite(parsed.mathScale)) {
+      return Math.max(0.85, Math.min(1.3, parsed.mathScale));
+    }
+  } catch {}
+  return 1;
+}
 
 function getErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
@@ -62,17 +98,25 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     'loading',
   );
 
+  const [role, setRole] = useState<'student' | 'author' | 'admin'>('student');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFallback, setAvatarFallback] = useState('؟');
+  const [avatarDragOver, setAvatarDragOver] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  const [showEmailPass, setShowEmailPass] = useState(false);
+  const [showCurPass, setShowCurPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [mathScale, setMathScale] = useState<number>(() => readInitialMathScale());
 
   const [avatarStatus, setAvatarStatus] = useState<StatusState>(EMPTY_STATUS);
   const [profileStatus, setProfileStatus] = useState<StatusState>(EMPTY_STATUS);
@@ -117,11 +161,13 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       }
       ownerRef.current = user.id;
       sessionOwnerRef.current = user.id;
+      setRole(user.role);
       setFullName(user.full_name || '');
       setEmail(user.email);
       setAvatarUrl(user.avatar_url ? `${user.avatar_url}?v=${Date.now()}` : null);
       setAvatarFallback(Array.from(user.full_name || user.email)[0] || '؟');
       setPrefs(user.preferences);
+      setMathScale(readInitialMathScale());
       return true;
     },
     [invalidateIdentity],
@@ -148,9 +194,14 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     document.addEventListener('garden:identity', handleIdentityEvent);
     document.addEventListener('garden:preferences', handlePreferencesEvent);
 
-    api<Account>('/account')
+    getSession(true)
       .then((user) => {
         if (!active) return;
+        if (!user) {
+          setPhase('unauthenticated');
+          setLoadingStatus({ text: '', error: false });
+          return;
+        }
         if (!applyAccountSnapshot(user)) return;
         applyPreferences(user.preferences);
         syncThemeFromDom();
@@ -159,13 +210,8 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       })
       .catch((error) => {
         if (!active) return;
-        if (error instanceof ApiError && error.status === 401) {
-          setPhase('unauthenticated');
-          setLoadingStatus({ text: getErrorMessage(error), error: true });
-        } else {
-          setPhase('loading');
-          setLoadingStatus({ text: getErrorMessage(error), error: true });
-        }
+        setPhase('loading');
+        setLoadingStatus({ text: getErrorMessage(error), error: true });
       });
 
     return () => {
@@ -190,8 +236,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     );
   }, [newPassword, confirmPassword]);
 
-  async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0];
+  async function uploadAvatarFile(selected: File | undefined) {
     if (invalidatedRef.current || avatarBusy) return;
     if (
       !selected ||
@@ -223,6 +268,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       if (!applyAccountSnapshot(updated)) return;
       document.dispatchEvent(new Event('garden:account'));
       setAvatarStatus({ text: 'تصویر ذخیره شد.', error: false });
+      showToast('تصویر پروفایل ذخیره شد.', { variant: 'success' });
     } catch (error) {
       setAvatarStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -231,10 +277,25 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     }
   }
 
+  async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
+    await uploadAvatarFile(event.target.files?.[0]);
+  }
+
+  function handleAvatarDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setAvatarDragOver(true);
+  }
+
+  function handleAvatarDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setAvatarDragOver(false);
+    void uploadAvatarFile(event.dataTransfer?.files?.[0]);
+  }
+
   async function handleAvatarRemove() {
     if (invalidatedRef.current || avatarBusy) return;
     setAvatarBusy(true);
-    setAvatarStatus({ text: 'در حال ذخیره تصویر…', error: false });
+    setAvatarStatus({ text: 'در حال حذف تصویر…', error: false });
     try {
       const response = await fetch('/api/account/avatar', {
         method: 'DELETE',
@@ -246,6 +307,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       if (!applyAccountSnapshot(updated)) return;
       document.dispatchEvent(new Event('garden:account'));
       setAvatarStatus({ text: 'تصویر حذف شد.', error: false });
+      showToast('تصویر پروفایل حذف شد.', { variant: 'info' });
     } catch (error) {
       setAvatarStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -264,6 +326,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       applyAccountSnapshot(result);
       document.dispatchEvent(new Event('garden:account'));
       setProfileStatus({ text: 'ذخیره شد.', error: false });
+      showToast('نام نمایشی به‌روزرسانی شد.', { variant: 'success' });
     } catch (error) {
       setProfileStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -287,6 +350,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       applyAccountSnapshot(result);
       document.dispatchEvent(new Event('garden:account'));
       setEmailStatus({ text: 'ذخیره شد.', error: false });
+      showToast('نشانی ایمیل تغییر کرد.', { variant: 'success' });
     } catch (error) {
       setEmailStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -314,7 +378,8 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setPasswordStatus({ text: 'ذخیره شد.', error: false });
+      setPasswordStatus({ text: 'رمز عبور تغییر کرد.', error: false });
+      showToast('رمز عبور تغییر کرد و نشست‌های دیگر خارج شدند.', { variant: 'success' });
     } catch (error) {
       setPasswordStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -322,18 +387,40 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     }
   }
 
-  async function submitPreferences(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (invalidatedRef.current || busyForm === 'preferences') return;
+  function syncLocalMathScale(nextScale: number) {
+    const clamped = Math.max(0.85, Math.min(1.3, nextScale));
+    setMathScale(clamped);
+    document.documentElement.style.setProperty('--math-scale', clamped.toFixed(2));
+    try {
+      const raw = JSON.parse(localStorage.getItem('garden-reading') || '{}');
+      localStorage.setItem('garden-reading', JSON.stringify({ ...raw, mathScale: clamped }));
+    } catch {}
+  }
+
+  function handleThemePick(nextTheme: Preferences['theme']) {
+    setPrefs((prev) => ({ ...prev, theme: nextTheme }));
+    const resolved =
+      nextTheme === 'system'
+        ? matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light'
+        : nextTheme;
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    root.dataset.theme = resolved;
+    root.classList.toggle('dark', resolved === 'dark');
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => root.classList.remove('theme-switching')),
+    );
+  }
+
+  async function savePreferencesPayload(nextPrefs: Preferences, successText: string) {
     setBusyForm('preferences');
     setPrefsStatus({ text: 'در حال ذخیره…', error: false });
     try {
       const result = await api<Account>(
         '/account/preferences',
-        {
-          expected_user_id: ownerRef.current,
-          ...prefs,
-        },
+        { expected_user_id: ownerRef.current, ...nextPrefs },
         'PATCH',
       );
       if (invalidatedRef.current) return;
@@ -342,6 +429,7 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
       syncThemeFromDom();
       document.dispatchEvent(new Event('garden:account'));
       setPrefsStatus({ text: 'ذخیره شد.', error: false });
+      showToast(successText, { variant: 'success' });
     } catch (error) {
       setPrefsStatus({ text: getErrorMessage(error), error: true });
     } finally {
@@ -349,25 +437,48 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
     }
   }
 
+  async function submitPreferences(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (invalidatedRef.current || busyForm === 'preferences') return;
+    await savePreferencesPayload(prefs, 'ترجیحات حساب ذخیره شد.');
+  }
+
+  function resetPreferencesToDefault() {
+    if (invalidatedRef.current || busyForm === 'preferences') return;
+    setPrefs(DEFAULT_PREFERENCES);
+    syncLocalMathScale(1);
+    handleThemePick(DEFAULT_PREFERENCES.theme);
+    void savePreferencesPayload(DEFAULT_PREFERENCES, 'ترجیحات به حالت پیش‌فرض بازنشانی شد.');
+  }
+
   const showLoading = phase === 'loading' || phase === 'invalidated';
   const showLogin = phase === 'unauthenticated';
   const showContent = phase === 'ready';
-  const reloadHref = typeof location !== 'undefined' ? location.pathname : '/settings/account/profile';
+  const reloadHref =
+    typeof location !== 'undefined' ? location.pathname : '/settings/account/profile';
+  const passwordInfo = evaluatePasswordPolicy(newPassword, confirmPassword);
 
   return (
     <div className="account-settings">
       <nav aria-label="تنظیمات حساب" className="account-settings-nav">
-        <a
-          href="/settings/account/profile"
-          aria-current={page === 'profile' ? 'page' : undefined}
-        >
-          پروفایل من
+        <a href="/settings/account/profile" aria-current={page === 'profile' ? 'page' : undefined}>
+          <UserRoundCog size={16} aria-hidden="true" />
+          <span>پروفایل و امنیت</span>
         </a>
         <a
           href="/settings/account/preferences"
           aria-current={page === 'preferences' ? 'page' : undefined}
         >
-          ترجیحات من
+          <SlidersHorizontal size={16} aria-hidden="true" />
+          <span>ترجیحات مطالعه</span>
+        </a>
+        <a href="/account">
+          <LayoutDashboard size={16} aria-hidden="true" />
+          <span>نمای کلی حساب</span>
+        </a>
+        <a href="/library">
+          <BookMarked size={16} aria-hidden="true" />
+          <span>کتابخانه شخصی</span>
         </a>
       </nav>
 
@@ -386,19 +497,54 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
           )}
         </p>
 
-        <div data-settings-login="" hidden={!showLogin}>
-          <p>برای تغییر تنظیمات وارد حساب شوید.</p>
-          <a href="/account" className="text-primary underline underline-offset-4">
-            ورود / ثبت‌نام
+        <div data-settings-login="" className="library-guest-card" hidden={!showLogin}>
+          <span className="library-guest-card-icon" aria-hidden="true">
+            <UserRound size={24} />
+          </span>
+          <h2>نیاز به ورود به حساب</h2>
+          <p>برای تغییر مشخصات پروفایل و ذخیره‌سازی ترجیحات مطالعه وارد حساب کاربری شوید.</p>
+          <a href="/account" className="garden-button-primary">
+            ورود یا ثبت‌نام
           </a>
         </div>
 
         <div data-settings-content="" hidden={!showContent}>
+          <div className="account-identity-banner">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                width={44}
+                height={44}
+                className="account-avatar account-avatar-medium"
+              />
+            ) : (
+              <span className="account-avatar account-avatar-medium" aria-hidden="true">
+                {avatarFallback}
+              </span>
+            )}
+            <div className="account-identity-copy">
+              <div className="account-hub-name-row">
+                <strong>{fullName || email}</strong>
+                <span className="account-role-pill">{roleLabel(role)}</span>
+              </div>
+              <span className="account-hub-email" dir="ltr">
+                {email}
+              </span>
+            </div>
+          </div>
+
           {page === 'profile' ? (
             <>
-              <section className="account-section" aria-labelledby="avatar-heading">
+              <section
+                className={`account-section ${avatarDragOver ? 'is-dragover' : ''}`}
+                aria-labelledby="avatar-heading"
+                onDragOver={handleAvatarDragOver}
+                onDragLeave={() => setAvatarDragOver(false)}
+                onDrop={handleAvatarDrop}
+              >
                 <h2 id="avatar-heading">تصویر پروفایل</h2>
-                <div className="garden-row">
+                <div className="garden-row avatar-upload-row">
                   <span
                     className="account-avatar account-avatar-large"
                     data-avatar-fallback=""
@@ -416,8 +562,24 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                     src={avatarUrl || undefined}
                     hidden={!avatarUrl}
                   />
-                  <div>
-                    <label htmlFor="avatar-file">انتخاب تصویر</label>
+                  <div className="avatar-upload-controls">
+                    <div className="avatar-upload-actions">
+                      <label htmlFor="avatar-file">
+                        <Upload size={14} aria-hidden="true" />
+                        <span>انتخاب یا رها کردن تصویر</span>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-avatar-remove=""
+                        hidden={!avatarUrl}
+                        disabled={avatarBusy || !showContent}
+                        onClick={handleAvatarRemove}
+                      >
+                        حذف تصویر
+                      </Button>
+                    </div>
                     <input
                       ref={fileInputRef}
                       id="avatar-file"
@@ -431,17 +593,6 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                     <p id="avatar-help" className="garden-field-help">
                       PNG، JPEG یا WebP؛ حداکثر ۵۱۲ کیلوبایت و ۵۱۲ × ۵۱۲ پیکسل.
                     </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      data-avatar-remove=""
-                      hidden={!avatarUrl}
-                      disabled={avatarBusy || !showContent}
-                      onClick={handleAvatarRemove}
-                    >
-                      حذف تصویر
-                    </Button>
                   </div>
                 </div>
                 <p
@@ -515,18 +666,29 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                 </div>
                 <div className="garden-field">
                   <label htmlFor="email-password">رمز عبور فعلی</label>
-                  <input
-                    id="email-password"
-                    name="current_password"
-                    type="password"
-                    autoComplete="current-password"
-                    dir="ltr"
-                    required
-                    maxLength={256}
-                    value={emailPassword}
-                    disabled={!showContent}
-                    onChange={(e) => setEmailPassword(e.target.value)}
-                  />
+                  <div className="password-input-wrap">
+                    <input
+                      id="email-password"
+                      name="current_password"
+                      type={showEmailPass ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      dir="ltr"
+                      required
+                      maxLength={256}
+                      value={emailPassword}
+                      disabled={!showContent}
+                      onChange={(e) => setEmailPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      aria-label={showEmailPass ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                      aria-pressed={showEmailPass}
+                      onClick={() => setShowEmailPass((v) => !v)}
+                    >
+                      {showEmailPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
                 <div className="garden-row">
                   <Button
@@ -554,60 +716,112 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
               >
                 <h2>تغییر رمز عبور</h2>
                 <p className="garden-field-help">
-                  پس از تغییر رمز، نشست‌های دیگر حساب خارج می‌شوند.
+                  پس از تغییر رمز، نشست‌های دیگر حساب به‌طور خودکار خارج می‌شوند.
                 </p>
                 <div className="garden-field">
                   <label htmlFor="current-password">رمز عبور فعلی</label>
-                  <input
-                    id="current-password"
-                    name="current_password"
-                    type="password"
-                    autoComplete="current-password"
-                    dir="ltr"
-                    required
-                    maxLength={256}
-                    value={currentPassword}
-                    disabled={!showContent}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
+                  <div className="password-input-wrap">
+                    <input
+                      id="current-password"
+                      name="current_password"
+                      type={showCurPass ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      dir="ltr"
+                      required
+                      maxLength={256}
+                      value={currentPassword}
+                      disabled={!showContent}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      aria-label={showCurPass ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                      aria-pressed={showCurPass}
+                      onClick={() => setShowCurPass((v) => !v)}
+                    >
+                      {showCurPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
+
                 <div className="garden-field">
                   <label htmlFor="new-password">رمز عبور جدید</label>
-                  <input
-                    id="new-password"
-                    name="password"
-                    type="password"
-                    autoComplete="new-password"
-                    dir="ltr"
-                    required
-                    minLength={12}
-                    maxLength={256}
-                    aria-describedby="password-help"
-                    value={newPassword}
-                    disabled={!showContent}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <p id="password-help" className="garden-field-help">
-                    ۱۲ تا ۲۵۶ نویسه
-                  </p>
+                  <div className="password-input-wrap">
+                    <input
+                      id="new-password"
+                      name="password"
+                      type={showNewPass ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      dir="ltr"
+                      required
+                      minLength={12}
+                      maxLength={256}
+                      aria-describedby="password-help"
+                      value={newPassword}
+                      disabled={!showContent}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      aria-label={showNewPass ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور'}
+                      aria-pressed={showNewPass}
+                      onClick={() => setShowNewPass((v) => !v)}
+                    >
+                      {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div className="password-meter">
+                    <div className="password-meter-track">
+                      <div className="password-meter-fill" data-level={passwordInfo.level} />
+                    </div>
+                    <span id="password-help" className="password-meter-text">
+                      {passwordInfo.level === 'empty'
+                        ? '۱۲ تا ۲۵۶ نویسه'
+                        : passwordInfo.level === 'short'
+                          ? `${passwordInfo.remaining} نویسهٔ دیگر (${passwordInfo.length}/۱۲)`
+                          : passwordInfo.level === 'strong'
+                            ? 'رمز عبور قوی'
+                            : 'طول رمز عبور مناسب است'}
+                    </span>
+                  </div>
                 </div>
+
                 <div className="garden-field">
                   <label htmlFor="confirm-password">تکرار رمز عبور جدید</label>
-                  <input
-                    ref={confirmInputRef}
-                    id="confirm-password"
-                    name="confirmation"
-                    type="password"
-                    autoComplete="new-password"
-                    dir="ltr"
-                    required
-                    minLength={12}
-                    maxLength={256}
-                    value={confirmPassword}
-                    disabled={!showContent}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
+                  <div className="password-input-wrap">
+                    <input
+                      ref={confirmInputRef}
+                      id="confirm-password"
+                      name="confirmation"
+                      type={showConfirmPass ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      dir="ltr"
+                      required
+                      minLength={12}
+                      maxLength={256}
+                      value={confirmPassword}
+                      disabled={!showContent}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle-btn"
+                      aria-label={showConfirmPass ? 'پنهان کردن تکرار رمز' : 'نمایش تکرار رمز'}
+                      aria-pressed={showConfirmPass}
+                      onClick={() => setShowConfirmPass((v) => !v)}
+                    >
+                      {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {confirmPassword.length > 0 && !passwordInfo.matchesConfirmation && (
+                    <p role="alert" className="garden-field-help text-destructive">
+                      تکرار رمز عبور با رمز جدید یکسان نیست.
+                    </p>
+                  )}
                 </div>
+
                 <div className="garden-row">
                   <Button
                     type="submit"
@@ -634,28 +848,53 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
               onSubmit={submitPreferences}
             >
               <h2>ظاهر و مطالعه</h2>
+
               <div className="garden-field">
-                <label htmlFor="preference-theme">پوسته</label>
-                <select
-                  id="preference-theme"
-                  name="theme"
-                  value={prefs.theme}
-                  disabled={!showContent}
-                  onChange={(e) =>
-                    setPrefs((p) => ({
-                      ...p,
-                      theme: e.target.value as Preferences['theme'],
-                    }))
-                  }
+                <span className="prefs-field-heading" id="theme-group-label">
+                  پوستهٔ محیط
+                </span>
+                <div
+                  className="prefs-theme-group"
+                  role="radiogroup"
+                  aria-labelledby="theme-group-label"
                 >
-                  <option value="light">روشن</option>
-                  <option value="dark">تیره</option>
-                  <option value="system">همگام با دستگاه</option>
-                </select>
+                  {(
+                    [
+                      { value: 'light', label: 'روشن', icon: <Sun size={15} /> },
+                      { value: 'dark', label: 'تیره', icon: <Moon size={15} /> },
+                      { value: 'system', label: 'همگام با دستگاه', icon: <Monitor size={15} /> },
+                    ] as const
+                  ).map((opt) => {
+                    const selected = prefs.theme === opt.value;
+                    return (
+                      <label
+                        key={opt.value}
+                        className="prefs-theme-option"
+                        data-selected={String(selected)}
+                      >
+                        <input
+                          type="radio"
+                          name="theme"
+                          value={opt.value}
+                          checked={selected}
+                          disabled={!showContent}
+                          onChange={() => handleThemePick(opt.value)}
+                        />
+                        {opt.icon}
+                        <span>{opt.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="garden-field">
-                <label htmlFor="preference-size">اندازه متن</label>
+                <div className="prefs-slider-header">
+                  <label htmlFor="preference-size">اندازه متن</label>
+                  <output htmlFor="preference-size" data-size-output="">
+                    {prefs.size.toLocaleString('fa-IR')} پیکسل
+                  </output>
+                </div>
                 <input
                   id="preference-size"
                   name="size"
@@ -664,17 +903,17 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                   max={26}
                   value={prefs.size}
                   disabled={!showContent}
-                  onChange={(e) =>
-                    setPrefs((p) => ({ ...p, size: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setPrefs((p) => ({ ...p, size: Number(e.target.value) }))}
                 />
-                <output htmlFor="preference-size" data-size-output="">
-                  {prefs.size} پیکسل
-                </output>
               </div>
 
               <div className="garden-field">
-                <label htmlFor="preference-leading">فاصله خطوط</label>
+                <div className="prefs-slider-header">
+                  <label htmlFor="preference-leading">فاصله خطوط</label>
+                  <output htmlFor="preference-leading" data-leading-output="" dir="ltr">
+                    {prefs.leading.toFixed(1)}
+                  </output>
+                </div>
                 <input
                   id="preference-leading"
                   name="leading"
@@ -684,10 +923,39 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                   step={0.1}
                   value={prefs.leading}
                   disabled={!showContent}
-                  onChange={(e) =>
-                    setPrefs((p) => ({ ...p, leading: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setPrefs((p) => ({ ...p, leading: Number(e.target.value) }))}
                 />
+              </div>
+
+              <div className="garden-field">
+                <div className="prefs-slider-header">
+                  <label htmlFor="preference-math-scale">بزرگنمایی فرمول‌ها (در این مرورگر)</label>
+                  <output htmlFor="preference-math-scale" data-math-scale-output="">
+                    {Math.round(mathScale * 100).toLocaleString('fa-IR')}٪
+                  </output>
+                </div>
+                <input
+                  id="preference-math-scale"
+                  type="range"
+                  min={0.85}
+                  max={1.3}
+                  step={0.05}
+                  value={mathScale}
+                  disabled={!showContent}
+                  onChange={(e) => syncLocalMathScale(Number(e.target.value))}
+                />
+              </div>
+
+              <div
+                className="prefs-live-preview"
+                data-prefs-preview=""
+                style={{ fontSize: `${prefs.size}px`, lineHeight: String(prefs.leading) }}
+              >
+                <span className="prefs-preview-caption">پیش‌نمایش زندهٔ تایپوگرافی</span>
+                <p>
+                  هر عملگر خطی روی فضای برداری متناهی‌بعد <span dir="ltr">V</span> دارای مقدار ویژه است؛
+                  یعنی <span dir="ltr" className="prefs-preview-math" style={{ fontSize: `${mathScale}em` }}>det(T − λI) = 0</span> برای دست‌کم یک <span dir="ltr">λ</span>.
+                </p>
               </div>
 
               <div className="garden-field">
@@ -704,9 +972,9 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                     }))
                   }
                 >
-                  <option value="620">باریک</option>
-                  <option value="760">معمولی</option>
-                  <option value="960">عریض</option>
+                  <option value="620">باریک (۶۲۰ پیکسل)</option>
+                  <option value="760">معمولی (۷۶۰ پیکسل)</option>
+                  <option value="960">عریض (۹۶۰ پیکسل)</option>
                 </select>
               </div>
 
@@ -716,11 +984,9 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                   type="checkbox"
                   checked={prefs.focus}
                   disabled={!showContent}
-                  onChange={(e) =>
-                    setPrefs((p) => ({ ...p, focus: e.target.checked }))
-                  }
+                  onChange={(e) => setPrefs((p) => ({ ...p, focus: e.target.checked }))}
                 />
-                مطالعه بدون سایدبار
+                مطالعه بدون سایدبار (حالت تمرکز)
               </label>
 
               <div className="garden-field">
@@ -748,20 +1014,27 @@ export default function AccountSettingsPanel({ page }: AccountSettingsPanelProps
                   type="checkbox"
                   checked={prefs.fixed_toolbar}
                   disabled={!showContent}
-                  onChange={(e) =>
-                    setPrefs((p) => ({ ...p, fixed_toolbar: e.target.checked }))
-                  }
+                  onChange={(e) => setPrefs((p) => ({ ...p, fixed_toolbar: e.target.checked }))}
                 />
                 ثابت ماندن نوار ابزار هنگام ویرایش
               </label>
 
-              <div className="garden-row">
+              <div className="garden-row prefs-actions-row">
                 <Button
                   className="garden-button-primary"
                   type="submit"
                   disabled={busyForm === 'preferences' || !showContent}
                 >
                   ذخیره ترجیحات
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busyForm === 'preferences' || !showContent}
+                  onClick={resetPreferencesToDefault}
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                  <span>بازنشانی به پیش‌فرض</span>
                 </Button>
                 <p
                   role={prefsStatus.error ? 'alert' : 'status'}

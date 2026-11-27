@@ -1,131 +1,417 @@
 ---
+import {
+  BookMarked,
+  FolderKanban,
+  GitPullRequest,
+  LogOut,
+  SlidersHorizontal,
+  UserRoundCog,
+} from 'lucide-react';
 import Reader from '../layouts/Reader.astro';
 ---
-<Reader title="حساب کاربری">
-  <div class="account-page-container">
-    <p class="account-nav-bar"><a href="/library">کتابخانه</a> · <a href="/search">مطالعه</a></p>
+
+<Reader title="حساب کاربری" hidePageHeading>
+  <div class="account-page-container account-auth-shell">
+    <header class="account-page-header">
+      <div>
+        <h1>حساب کاربری</h1>
+        <p class="account-page-subtitle">مدیریت جزوه‌های شخصی، ترجیحات مطالعه و امنیت حساب</p>
+      </div>
+      <nav class="account-nav-bar" aria-label="مسیرهای مرتبط">
+        <a href="/library">کتابخانه</a>
+        <span aria-hidden="true">·</span>
+        <a href="/search">مطالعه</a>
+      </nav>
+    </header>
+
     <form data-auth-form class="garden-panel garden-stack account-form-card" aria-describedby="auth-intro">
-      <p id="auth-intro">برای نگهداری جزوه‌های شخصی وارد شوید. مطالعهٔ متن‌های رسمی به حساب نیاز ندارد.</p>
+      <p id="auth-intro">
+        برای نگهداری جزوه‌های شخصی و همگام‌سازی تنظیمات وارد شوید. مطالعهٔ متن‌های رسمی به حساب نیاز
+        ندارد.
+      </p>
+
       <fieldset class="auth-modes">
-        <legend>حساب کاربری</legend>
+        <legend>حالت دسترسی</legend>
         <div class="garden-row">
-          <label for="auth-login"><input id="auth-login" type="radio" name="mode" value="login" checked /> ورود</label>
-          <label for="auth-register"><input id="auth-register" type="radio" name="mode" value="register" /> ثبت‌نام</label>
+          <label for="auth-login">
+            <input id="auth-login" type="radio" name="mode" value="login" checked />
+            ورود به حساب
+          </label>
+          <label for="auth-register">
+            <input id="auth-register" type="radio" name="mode" value="register" />
+            ثبت‌نام تازه
+          </label>
         </div>
       </fieldset>
+
       <div class="garden-field">
         <label for="auth-email">ایمیل</label>
-        <input id="auth-email" name="email" type="email" dir="ltr" autocomplete="username" required maxlength="255" />
+        <input
+          id="auth-email"
+          name="email"
+          type="email"
+          dir="ltr"
+          autocomplete="username"
+          required
+          maxlength="255"
+          placeholder="name@example.com"
+        />
       </div>
+
       <div class="garden-field">
         <label for="auth-password">رمز عبور</label>
-        <input id="auth-password" name="password" type="password" dir="ltr" autocomplete="current-password" required minlength="12" maxlength="256" aria-describedby="auth-password-help" />
+        <div class="password-input-wrap">
+          <input
+            id="auth-password"
+            name="password"
+            type="password"
+            dir="ltr"
+            autocomplete="current-password"
+            required
+            minlength="12"
+            maxlength="256"
+            aria-describedby="auth-password-help"
+          />
+          <button
+            type="button"
+            class="password-toggle-btn"
+            data-toggle-password
+            aria-label="نمایش رمز عبور"
+            aria-pressed="false"
+          ></button>
+        </div>
         <p id="auth-password-help" class="garden-field-help">رمز عبور حساب خود را وارد کنید.</p>
+        <div data-password-meter class="password-meter" hidden>
+          <div class="password-meter-track">
+            <div data-password-meter-bar class="password-meter-fill" data-level="empty"></div>
+          </div>
+          <span data-password-meter-text class="password-meter-text"></span>
+        </div>
       </div>
+
       <div class="garden-field" data-register-field hidden>
-        <label for="auth-name">نام (اختیاری)</label>
-        <input id="auth-name" name="full_name" autocomplete="name" maxlength="255" disabled />
+        <label for="auth-name">نام نمایشی (اختیاری)</label>
+        <input
+          id="auth-name"
+          name="full_name"
+          autocomplete="name"
+          maxlength="255"
+          placeholder="نامی که در دیدگاه‌ها و پیشنهادها نمایش داده شود"
+          disabled
+        />
       </div>
+
       <p role="alert" data-account-status class="account-status-msg"></p>
-      <div class="garden-row"><button type="submit" class="garden-button-primary">ورود</button></div>
+      <div class="garden-row">
+        <button type="submit" class="garden-button-primary">ورود</button>
+      </div>
     </form>
+
     <div class="account-logged-in-card" data-logged-in-view hidden>
-      <p data-logged-in-summary class="account-status-msg"></p>
-      <p data-profile-link hidden class="account-links-row"><a href="/settings/account/profile">پروفایل من</a> · <a href="/settings/account/preferences">ترجیحات من</a></p>
-      <button type="button" data-logout hidden class="account-logout-btn">خروج از حساب</button>
+      <div class="account-hub-header">
+        <div class="account-hub-identity">
+          <span data-logged-in-avatar-host>
+            <span data-logged-in-avatar-fallback class="account-avatar account-avatar-large" aria-hidden="true">
+              ؟
+            </span>
+          </span>
+          <div class="account-hub-meta">
+            <div class="account-hub-name-row">
+              <strong data-logged-in-name class="account-hub-name"></strong>
+              <span data-logged-in-role class="account-role-pill"></span>
+            </div>
+            <span data-logged-in-email class="account-hub-email" dir="ltr"></span>
+            <p data-logged-in-summary class="account-status-msg sr-only"></p>
+          </div>
+        </div>
+        <button type="button" data-logout hidden class="account-logout-btn">
+          <LogOut size={15} className="scale-x-[-1]" aria-hidden="true" />
+          <span>خروج از حساب</span>
+        </button>
+      </div>
+
+      <div data-profile-link hidden class="account-hub-grid">
+        <a href="/settings/account/profile" class="account-hub-card">
+          <span class="account-hub-card-icon" aria-hidden="true"><UserRoundCog size={18} /></span>
+          <div>
+            <strong>پروفایل و امنیت</strong>
+            <span>ویرایش نام، تصویر پروفایل، ایمیل و تغییر رمز عبور</span>
+          </div>
+        </a>
+
+        <a href="/settings/account/preferences" class="account-hub-card">
+          <span class="account-hub-card-icon" aria-hidden="true"><SlidersHorizontal size={18} /></span>
+          <div>
+            <strong>ترجیحات مطالعه و ویرایشگر</strong>
+            <span>پوسته، اندازهٔ متن، بزرگنمایی فرمول‌ها و نوار ابزار</span>
+          </div>
+        </a>
+
+        <a href="/library" class="account-hub-card">
+          <span class="account-hub-card-icon" aria-hidden="true"><BookMarked size={18} /></span>
+          <div>
+            <strong>کتابخانهٔ شخصی</strong>
+            <span>مدیریت یادداشت‌ها، پوشه‌ها و درون‌ریزی گیت یا زیپ</span>
+          </div>
+        </a>
+
+        <a href="/workspace" class="account-hub-card">
+          <span class="account-hub-card-icon" aria-hidden="true"><FolderKanban size={18} /></span>
+          <div>
+            <strong>فضای کار و پیشنهادها</strong>
+            <span>پیگیری انشعاب‌ها، علاقه‌مندی‌ها و وضعیت پیشنهادهای اصلاح</span>
+          </div>
+        </a>
+
+        <a href="/review" data-review-hub-card hidden class="account-hub-card">
+          <span class="account-hub-card-icon" aria-hidden="true"><GitPullRequest size={18} /></span>
+          <div>
+            <strong>بازبینی پیشنهادها</strong>
+            <span>بررسی و ادغام تغییرات پیشنهادی کاربران</span>
+          </div>
+        </a>
+      </div>
     </div>
   </div>
 </Reader>
+
 <script>
-  import {api,message,ApiError} from '../scripts/api';
-  import {clearLocalUserPreferences,getSession,invalidateSessionCache} from '../scripts/session';
-  const ROLE_LABELS:Record<string,string>={student:'دانشجو',author:'نویسنده',admin:'مدیر'};
-  const status=document.querySelector<HTMLElement>('[data-account-status]')!;
-  const loggedInSummary=document.querySelector<HTMLElement>('[data-logged-in-summary]')!;
-  const form=document.querySelector<HTMLFormElement>('[data-auth-form]')!;
-  const logout=document.querySelector<HTMLButtonElement>('[data-logout]')!;
-  const password=form.querySelector<HTMLInputElement>('[name="password"]')!;
-  const name=form.querySelector<HTMLInputElement>('[name="full_name"]')!;
-  const registerField=form.querySelector<HTMLElement>('[data-register-field]')!;
-  const submit=form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
-  const passwordHelp=form.querySelector<HTMLElement>('#auth-password-help')!;
-  const selectedMode=()=>form.querySelector<HTMLInputElement>('[name="mode"]:checked')!.value;
-  const updateMode=()=>{
-    const registering=selectedMode()==='register';
-    registerField.hidden=!registering;
-    name.disabled=!registering;
-    form.querySelector<HTMLInputElement>('[name="email"]')!.autocomplete=registering?'email':'username';
-    password.autocomplete=registering?'new-password':'current-password';
-    passwordHelp.textContent=registering?'برای حساب جدید، رمز عبور بین ۱۲ تا ۲۵۶ نویسه انتخاب کنید.':'رمز عبور حساب خود را وارد کنید.';
-    submit.textContent=registering?'ساخت حساب':'ورود';
-    status.textContent='';
+  import { evaluatePasswordPolicy, roleLabel } from '../lib/account-helpers.mjs';
+  import { ApiError, api, message } from '../scripts/api';
+  import { clearLocalUserPreferences, getSession, invalidateSessionCache } from '../scripts/session';
+  import { showToast } from '../scripts/toast';
+
+  const EYE_SVG =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF_SVG =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
+
+  const status = document.querySelector<HTMLElement>('[data-account-status]')!;
+  const loggedInSummary = document.querySelector<HTMLElement>('[data-logged-in-summary]')!;
+  const loggedInName = document.querySelector<HTMLElement>('[data-logged-in-name]');
+  const loggedInRole = document.querySelector<HTMLElement>('[data-logged-in-role]');
+  const loggedInEmail = document.querySelector<HTMLElement>('[data-logged-in-email]');
+  const avatarHost = document.querySelector<HTMLElement>('[data-logged-in-avatar-host]');
+  const reviewHubCard = document.querySelector<HTMLElement>('[data-review-hub-card]');
+
+  const form = document.querySelector<HTMLFormElement>('[data-auth-form]')!;
+  const logout = document.querySelector<HTMLButtonElement>('[data-logout]')!;
+  const password = form.querySelector<HTMLInputElement>('[name="password"]')!;
+  const passwordToggle = form.querySelector<HTMLButtonElement>('[data-toggle-password]');
+  const passwordMeter = form.querySelector<HTMLElement>('[data-password-meter]');
+  const passwordMeterBar = form.querySelector<HTMLElement>('[data-password-meter-bar]');
+  const passwordMeterText = form.querySelector<HTMLElement>('[data-password-meter-text]');
+  const nameInput = form.querySelector<HTMLInputElement>('[name="full_name"]')!;
+  const registerField = form.querySelector<HTMLElement>('[data-register-field]')!;
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+  const passwordHelp = form.querySelector<HTMLElement>('#auth-password-help')!;
+
+  const selectedMode = () => form.querySelector<HTMLInputElement>('[name="mode"]:checked')!.value;
+
+  const updatePasswordMeter = () => {
+    const registering = selectedMode() === 'register';
+    if (!passwordMeter || !passwordMeterBar || !passwordMeterText) return;
+    passwordMeter.hidden = !registering;
+    if (!registering) return;
+
+    const info = evaluatePasswordPolicy(password.value);
+    passwordMeterBar.dataset.level = info.level;
+    if (info.level === 'empty') {
+      passwordMeterText.textContent = `حداقل ${info.minLength} نویسه لازم است.`;
+    } else if (info.level === 'short') {
+      passwordMeterText.textContent = `${info.remaining} نویسهٔ دیگر تا حد نصاب (${info.length}/${info.minLength})`;
+    } else if (info.level === 'strong') {
+      passwordMeterText.textContent = 'رمز عبور قوی و آماده است.';
+    } else {
+      passwordMeterText.textContent = 'طول رمز عبور مناسب است.';
+    }
   };
-  form.querySelectorAll<HTMLInputElement>('[name="mode"]').forEach(control=>control.addEventListener('change',updateMode));
+
+  if (passwordToggle) {
+    passwordToggle.innerHTML = EYE_SVG;
+    passwordToggle.addEventListener('click', () => {
+      const showing = password.type === 'text';
+      password.type = showing ? 'password' : 'text';
+      passwordToggle.setAttribute('aria-pressed', String(!showing));
+      passwordToggle.setAttribute('aria-label', showing ? 'نمایش رمز عبور' : 'پنهان کردن رمز عبور');
+      passwordToggle.innerHTML = showing ? EYE_SVG : EYE_OFF_SVG;
+    });
+  }
+
+  const updateMode = () => {
+    const registering = selectedMode() === 'register';
+    registerField.hidden = !registering;
+    nameInput.disabled = !registering;
+    form.querySelector<HTMLInputElement>('[name="email"]')!.autocomplete = registering
+      ? 'email'
+      : 'username';
+    password.autocomplete = registering ? 'new-password' : 'current-password';
+    passwordHelp.textContent = registering
+      ? 'برای حساب جدید، رمز عبور بین ۱۲ تا ۲۵۶ نویسه انتخاب کنید.'
+      : 'رمز عبور حساب خود را وارد کنید.';
+    submit.textContent = registering ? 'ساخت حساب' : 'ورود';
+    status.textContent = '';
+    updatePasswordMeter();
+  };
+
+  form
+    .querySelectorAll<HTMLInputElement>('[name="mode"]')
+    .forEach((control) => control.addEventListener('change', updateMode));
+  password.addEventListener('input', updatePasswordMeter);
   updateMode();
-  const authMessage=(error:unknown, action:string)=>{
-    if(error instanceof ApiError){
-      if(action==='login' && error.status===401)return 'ایمیل یا رمز عبور درست نیست؛ آن‌ها را بررسی و دوباره تلاش کنید.';
-      if(action==='register' && error.status===409)return 'ثبت‌نام با این ایمیل ممکن نیست؛ اگر حساب دارید، ورود را انتخاب کنید یا ایمیل دیگری وارد کنید.';
-      if(error.status===429)return 'تلاش‌های زیادی انجام شده است؛ کمی صبر کنید و دوباره تلاش کنید.';
-      if(error.status===422)return 'اطلاعات فرم پذیرفته نشد؛ ایمیل و رمز عبور را بررسی کنید.';
-      if(error.status===403)return 'درخواست ورود پذیرفته نشد؛ صفحه را دوباره باز کنید و تلاش کنید.';
-      if(error.status>=500)return 'سرویس ورود موقتاً در دسترس نیست؛ کمی بعد دوباره تلاش کنید.';
+
+  const authMessage = (error: unknown, action: string) => {
+    if (error instanceof ApiError) {
+      if (action === 'login' && error.status === 401)
+        return 'ایمیل یا رمز عبور درست نیست؛ آن‌ها را بررسی و دوباره تلاش کنید.';
+      if (action === 'register' && error.status === 409)
+        return 'ثبت‌نام با این ایمیل ممکن نیست؛ اگر حساب دارید، ورود را انتخاب کنید یا ایمیل دیگری وارد کنید.';
+      if (error.status === 429)
+        return 'تلاش‌های زیادی انجام شده است؛ کمی صبر کنید و دوباره تلاش کنید.';
+      if (error.status === 422)
+        return 'اطلاعات فرم پذیرفته نشد؛ ایمیل و رمز عبور را بررسی کنید.';
+      if (error.status === 403)
+        return 'درخواست ورود پذیرفته نشد؛ صفحه را دوباره باز کنید و تلاش کنید.';
+      if (error.status >= 500)
+        return 'سرویس ورود موقتاً در دسترس نیست؛ کمی بعد دوباره تلاش کنید.';
     }
     return 'ارتباط با سرویس حساب برقرار نشد؛ اتصال خود را بررسی و دوباره تلاش کنید.';
   };
-  const show=(user:any)=>{
-    const roleLabel=ROLE_LABELS[user.role] || user.role;
-    loggedInSummary.textContent=`${user.full_name || user.email} — ${roleLabel}`;
-    status.textContent='';
-    form.hidden=true;
-    logout.hidden=false;
-    document.querySelector<HTMLElement>('[data-profile-link]')!.hidden=false;
-    const view=document.querySelector<HTMLElement>('[data-logged-in-view]');
-    if(view)view.hidden=false;
+
+  const show = (user: any) => {
+    const label = roleLabel(user.role);
+    const displayName = user.full_name || user.email;
+    loggedInSummary.textContent = `${displayName} — ${label}`;
+    if (loggedInName) loggedInName.textContent = displayName;
+    if (loggedInRole) loggedInRole.textContent = label;
+    if (loggedInEmail) loggedInEmail.textContent = user.email || '';
+
+    const initial = Array.from(displayName)[0] || '؟';
+    if (avatarHost) {
+      if (user.avatar_url) {
+        const img = document.createElement('img');
+        img.src = `${user.avatar_url}?v=${Date.now()}`;
+        img.alt = '';
+        img.width = 64;
+        img.height = 64;
+        img.className = 'account-avatar account-avatar-large';
+        img.dataset.loggedInAvatar = '';
+        avatarHost.replaceChildren(img);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'account-avatar account-avatar-large';
+        span.dataset.loggedInAvatarFallback = '';
+        span.setAttribute('aria-hidden', 'true');
+        span.textContent = initial;
+        avatarHost.replaceChildren(span);
+      }
+    }
+
+    if (reviewHubCard) {
+      reviewHubCard.hidden = !['author', 'admin'].includes(user.role);
+    }
+
+    status.textContent = '';
+    form.hidden = true;
+    logout.hidden = false;
+    document.querySelector<HTMLElement>('[data-profile-link]')!.hidden = false;
+    const view = document.querySelector<HTMLElement>('[data-logged-in-view]');
+    if (view) view.hidden = false;
     invalidateSessionCache();
     document.dispatchEvent(new Event('garden:account'));
   };
-  void getSession().then(user=>{if(user)show(user);});
-  const fields=Array.from(form.querySelectorAll<HTMLInputElement>('input:not([type="radio"])'));
-  fields.forEach(field=>{
-    const error=document.createElement('p');
-    error.id=field.id+'-error';error.className='garden-field-help';error.hidden=true;error.setAttribute('role','alert');
-    field.after(error);
-    const help=field.getAttribute('aria-describedby') || '';
-    field.addEventListener('invalid',()=>{
-      field.setAttribute('aria-invalid','true');
-      field.setAttribute('aria-describedby',[help,error.id].filter(Boolean).join(' '));
-      error.textContent=field.name==='email'?'ایمیل معتبر وارد کنید (مانند name@example.com).':field.name==='password'?'رمز عبور را با ۱۲ تا ۲۵۶ نویسه وارد کنید.':'نام باید حداکثر ۲۵۵ نویسه باشد.';
-      error.hidden=false;
+
+  void getSession().then((user) => {
+    if (user) show(user);
+  });
+
+  const fields = Array.from(form.querySelectorAll<HTMLInputElement>('input:not([type="radio"])'));
+  fields.forEach((field) => {
+    const error = document.createElement('p');
+    error.id = `${field.id}-error`;
+    error.className = 'garden-field-help';
+    error.hidden = true;
+    error.setAttribute('role', 'alert');
+    field.closest('.garden-field')?.append(error);
+    const help = field.getAttribute('aria-describedby') || '';
+    field.addEventListener('invalid', () => {
+      field.setAttribute('aria-invalid', 'true');
+      field.setAttribute('aria-describedby', [help, error.id].filter(Boolean).join(' '));
+      error.textContent =
+        field.name === 'email'
+          ? 'ایمیل معتبر وارد کنید (مانند name@example.com).'
+          : field.name === 'password'
+            ? 'رمز عبور را با ۱۲ تا ۲۵۶ نویسه وارد کنید.'
+            : 'نام باید حداکثر ۲۵۵ نویسه باشد.';
+      error.hidden = false;
     });
-    field.addEventListener('input',()=>{
-      if(field.validity.valid){field.setAttribute('aria-invalid','false');error.hidden=true;}
+    field.addEventListener('input', () => {
+      if (field.validity.valid) {
+        field.setAttribute('aria-invalid', 'false');
+        error.hidden = true;
+      }
     });
   });
-  let busy=false;
-  const setBusy=(value:boolean)=>{
-    busy=value;
-    form.setAttribute('aria-busy',String(value));
-    submit.disabled=value;
-    form.querySelectorAll<HTMLInputElement>('[name="mode"]').forEach(control=>control.disabled=value);
-    if(value)submit.textContent=selectedMode()==='register'?'در حال ساخت حساب…':'در حال ورود…';
+
+  let busy = false;
+  const setBusy = (value: boolean) => {
+    busy = value;
+    form.setAttribute('aria-busy', String(value));
+    submit.disabled = value;
+    form
+      .querySelectorAll<HTMLInputElement>('[name="mode"]')
+      .forEach((control) => (control.disabled = value));
+    if (value) submit.textContent = selectedMode() === 'register' ? 'در حال ساخت حساب…' : 'در حال ورود…';
     else updateMode();
   };
-  form.addEventListener('submit',async(event)=>{
-    event.preventDefault();if(busy)return;
-    if(!form.checkValidity()){fields.find(field=>!field.disabled && !field.validity.valid)?.focus();return;}
-    const action=selectedMode();
-    const data=new FormData(form);const body:any={email:data.get('email'),password:data.get('password')};
-    if(action==='register')body.full_name=data.get('full_name') || null;
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    if (!form.checkValidity()) {
+      fields.find((field) => !field.disabled && !field.validity.valid)?.focus();
+      return;
+    }
+    const action = selectedMode();
+    const data = new FormData(form);
+    const body: any = { email: data.get('email'), password: data.get('password') };
+    if (action === 'register') body.full_name = data.get('full_name') || null;
     setBusy(true);
-    status.textContent='';
-    try{show(await api('/auth/'+action,body));form.reset();}catch(error){const msg=authMessage(error,action);setBusy(false);status.textContent=msg;return;}
+    status.textContent = '';
+    try {
+      const user = await api(`/auth/${action}`, body);
+      show(user);
+      form.reset();
+      showToast(action === 'register' ? 'حساب کاربری با موفقیت ساخته شد.' : 'خوش آمدید!', {
+        variant: 'success',
+      });
+    } catch (error) {
+      const msg = authMessage(error, action);
+      setBusy(false);
+      status.textContent = msg;
+      return;
+    }
     setBusy(false);
   });
-  logout.addEventListener('click',async()=>{try{await api('/auth/logout',undefined,'POST');clearLocalUserPreferences();invalidateSessionCache();document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.reload();}catch(error){status.textContent=message(error);loggedInSummary.textContent=message(error);}});
+
+  logout.addEventListener('click', async () => {
+    try {
+      await api('/auth/logout', undefined, 'POST');
+      clearLocalUserPreferences();
+      invalidateSessionCache();
+      document.dispatchEvent(new CustomEvent('garden:identity', { detail: null }));
+      location.reload();
+    } catch (error) {
+      status.textContent = message(error);
+      loggedInSummary.textContent = message(error);
+    }
+  });
 </script>
+
 <style>
-  .account-status-msg:empty { display: none; }
+  .account-status-msg:empty {
+    display: none;
+  }
   form[data-auth-form] .account-status-msg {
     margin: 0;
     padding: 0.65rem 0.85rem;
