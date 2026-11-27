@@ -26,10 +26,11 @@ import Reader from '../layouts/Reader.astro';
         <label for="auth-name">نام (اختیاری)</label>
         <input id="auth-name" name="full_name" autocomplete="name" maxlength="255" disabled />
       </div>
+      <p role="alert" data-account-status class="account-status-msg"></p>
       <div class="garden-row"><button type="submit" class="garden-button-primary">ورود</button></div>
     </form>
     <div class="account-logged-in-card" data-logged-in-view hidden>
-      <p role="status" data-account-status class="account-status-msg"></p>
+      <p data-logged-in-summary class="account-status-msg"></p>
       <p data-profile-link hidden class="account-links-row"><a href="/settings/account/profile">پروفایل من</a> · <a href="/settings/account/preferences">ترجیحات من</a></p>
       <button type="button" data-logout hidden class="account-logout-btn">خروج از حساب</button>
     </div>
@@ -37,7 +38,10 @@ import Reader from '../layouts/Reader.astro';
 </Reader>
 <script>
   import {api,message,ApiError} from '../scripts/api';
+  import {clearLocalUserPreferences,getSession,invalidateSessionCache} from '../scripts/session';
+  const ROLE_LABELS:Record<string,string>={student:'دانشجو',author:'نویسنده',admin:'مدیر'};
   const status=document.querySelector<HTMLElement>('[data-account-status]')!;
+  const loggedInSummary=document.querySelector<HTMLElement>('[data-logged-in-summary]')!;
   const form=document.querySelector<HTMLFormElement>('[data-auth-form]')!;
   const logout=document.querySelector<HTMLButtonElement>('[data-logout]')!;
   const password=form.querySelector<HTMLInputElement>('[name="password"]')!;
@@ -54,6 +58,7 @@ import Reader from '../layouts/Reader.astro';
     password.autocomplete=registering?'new-password':'current-password';
     passwordHelp.textContent=registering?'برای حساب جدید، رمز عبور بین ۱۲ تا ۲۵۶ نویسه انتخاب کنید.':'رمز عبور حساب خود را وارد کنید.';
     submit.textContent=registering?'ساخت حساب':'ورود';
+    status.textContent='';
   };
   form.querySelectorAll<HTMLInputElement>('[name="mode"]').forEach(control=>control.addEventListener('change',updateMode));
   updateMode();
@@ -69,15 +74,18 @@ import Reader from '../layouts/Reader.astro';
     return 'ارتباط با سرویس حساب برقرار نشد؛ اتصال خود را بررسی و دوباره تلاش کنید.';
   };
   const show=(user:any)=>{
-    status.textContent=`${user.full_name || user.email} — ${user.role}`;
+    const roleLabel=ROLE_LABELS[user.role] || user.role;
+    loggedInSummary.textContent=`${user.full_name || user.email} — ${roleLabel}`;
+    status.textContent='';
     form.hidden=true;
     logout.hidden=false;
     document.querySelector<HTMLElement>('[data-profile-link]')!.hidden=false;
     const view=document.querySelector<HTMLElement>('[data-logged-in-view]');
     if(view)view.hidden=false;
+    invalidateSessionCache();
     document.dispatchEvent(new Event('garden:account'));
   };
-  api('/auth/me').then(show).catch(error=>{if(!(error instanceof ApiError && error.status===401))status.textContent=message(error);});
+  void getSession().then(user=>{if(user)show(user);});
   const fields=Array.from(form.querySelectorAll<HTMLInputElement>('input:not([type="radio"])'));
   fields.forEach(field=>{
     const error=document.createElement('p');
@@ -109,8 +117,23 @@ import Reader from '../layouts/Reader.astro';
     const action=selectedMode();
     const data=new FormData(form);const body:any={email:data.get('email'),password:data.get('password')};
     if(action==='register')body.full_name=data.get('full_name') || null;
-    status.textContent='';setBusy(true);
-    try{show(await api('/auth/'+action,body));form.reset();}catch(error){status.textContent=authMessage(error,action);}finally{setBusy(false);}
+    setBusy(true);
+    status.textContent='';
+    try{show(await api('/auth/'+action,body));form.reset();}catch(error){const msg=authMessage(error,action);setBusy(false);status.textContent=msg;return;}
+    setBusy(false);
   });
-  logout.addEventListener('click',async()=>{try{await api('/auth/logout',undefined,'POST');document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.reload();}catch(error){status.textContent=message(error);}});
+  logout.addEventListener('click',async()=>{try{await api('/auth/logout',undefined,'POST');clearLocalUserPreferences();invalidateSessionCache();document.dispatchEvent(new CustomEvent('garden:identity',{detail:null}));location.reload();}catch(error){status.textContent=message(error);loggedInSummary.textContent=message(error);}});
 </script>
+<style>
+  .account-status-msg:empty { display: none; }
+  form[data-auth-form] .account-status-msg {
+    margin: 0;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-control, 6px);
+    background: var(--destructive-surface);
+    color: var(--destructive);
+    border: 1px solid color-mix(in oklch, var(--destructive) 35%, transparent);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+</style>

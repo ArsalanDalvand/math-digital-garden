@@ -17,6 +17,7 @@ import { findAndReplace } from 'mdast-util-find-and-replace';
 import rehypeParse from 'rehype-parse';
 import { getVaultAssets } from './vault-assets.mjs';
 import { UMKO_RELATIONS } from './umko.mjs';
+import { sanitizeRawHtml } from './html-sanitize.mjs';
 
 export const RENDERER_VERSION = 'v2-per-note-cache';
 
@@ -118,25 +119,6 @@ function stripObsidianComments(content) {
     if (i % 2 === 1) return part;
     return part.replace(/%%[\s\S]*?%%/g, '');
   }).join('');
-}
-
-/** @param {string} raw */
-function sanitizeRawHtml(raw) {
-  let s = raw.replace(/<\s*(?:script|style|object|applet|form)[\s\S]*?(?:<\s*\/\s*(?:script|style|object|applet|form)\s*>|$)/gi, '');
-  s = s.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  s = s.replace(/\bhref\s*=\s*["']\s*javascript:[^"']*["']/gi, 'href=""');
-  s = s.replace(/\bsrc\s*=\s*["']\s*(?:javascript|data):[^"']*["']/gi, 'src=""');
-  s = s.replace(/<\s*img\b[^>]*>/gi, '');
-  s = s.replace(/<iframe\b([^>]*)>/gi, (/** @type {string} */ _match, /** @type {string} */ attrs) => {
-    const srcMatch = attrs.match(/src=["']([^"']*)["']/i);
-    const src = srcMatch ? srcMatch[1] : '';
-    if (!src.startsWith('https://') && !src.startsWith('http://') && !src.startsWith('/')) {
-      return '';
-    }
-    const cleanAttrs = attrs.trim();
-    return '<iframe ' + cleanAttrs + ' sandbox="allow-scripts allow-same-origin allow-popups" loading="lazy">';
-  });
-  return s;
 }
 
 const wikiParser = unified().use(remarkParse).use(remarkWikiLink, { aliasDivider: '|' });

@@ -5,6 +5,7 @@ import LibraryActions from '../../components/LibraryActions.astro';
 import {renderMarkdown} from '../../lib/markdown.mjs';
 import {buildNoteLinkResolver} from '../../lib/library-links.mjs';
 import NoteProperties from '../../components/NoteProperties.astro';
+import { escapeHtml } from '../../lib/canvas-sanitize.mjs';
 import {parseFrontmatter} from '@astrojs/markdown-remark';
 
 export const prerender = false;
@@ -53,7 +54,7 @@ const isCanvas = item?.kind === 'note' && item?.content && (
 
 let html = item?.kind === 'note' && item?.content
   ? (isCanvas
-      ? `<figure class="canvas-diagram" data-canvas-title="${item.title || 'بوم ابسیدین'}" data-canvas-data="${encodeURIComponent(item.content)}"></figure>`
+      ? `<figure class="canvas-diagram" data-canvas-title="${escapeHtml(item.title || 'بوم ابسیدین')}" data-canvas-data="${encodeURIComponent(item.content)}"></figure>`
       : await renderMarkdown(item.content, { linkResolver }))
   : '';
 

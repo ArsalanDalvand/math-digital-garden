@@ -12,9 +12,18 @@ function mount(){
  document.addEventListener('garden:identity',event=>identities.push(event.detail));
  class ApiError extends Error{constructor(status){super();this.status=status;}}
  const exports={};
- const require=name=>name==='react'?{useState:initial=>{let state=initial;return[state,value=>{state=typeof value==='function'?value(state):value;}];},useEffect:effect=>{cleanup=effect();}}:name==='react/jsx-runtime'?{jsx:()=>null,jsxs:()=>null}:name.endsWith('/api')?{ApiError,api:(path,data,method)=>new Promise((resolve,reject)=>requests.push({path,data,method,resolve,reject}))}:name.endsWith('/account-preferences')?{applyPreferences:value=>applied.push(value)}:name.endsWith('/garden')?{$identity:{set(){}},setAppIdentity:user=>document.dispatchEvent(new CustomEvent('garden:identity',{detail:user?{id:user.id,role:user.role}:null})),syncThemeFromDom:()=>'light'}:{};
- vm.runInNewContext(compiled,{exports,require,document,window,CustomEvent,Date,location:{assign(){}}});exports.default();
- return{document,window,ApiError,requests,applied,identities,unmount:()=>cleanup()};
+ const slots=[];
+ let hookIdx=0;
+ let effectRan=false;
+ const mockJsx=(type,props)=>({type,props});
+ const require=name=>name==='react'?{
+  useState:initial=>{const i=hookIdx++;if(!(i in slots))slots[i]=initial;return[slots[i],value=>{slots[i]=typeof value==='function'?value(slots[i]):value;}];},
+  useEffect:effect=>{if(!effectRan){effectRan=true;cleanup=effect();}}
+ }:name==='react/jsx-runtime'?{jsx:mockJsx,jsxs:mockJsx}:name.endsWith('/api')?{ApiError,api:(path,data,method)=>new Promise((resolve,reject)=>requests.push({path,data,method,resolve,reject}))}:name.endsWith('/account-preferences')?{applyPreferences:value=>applied.push(value)}:name.endsWith('/garden')?{$identity:{set(){}},setAppIdentity:user=>document.dispatchEvent(new CustomEvent('garden:identity',{detail:user?{id:user.id,role:user.role}:null})),syncThemeFromDom:()=>'light'}:{};
+ vm.runInNewContext(compiled,{exports,require,document,window,CustomEvent,Date,location:{assign(){}}});
+ const render=()=>{hookIdx=0;return exports.default();};
+ render();
+ return{document,window,ApiError,requests,applied,identities,render,unmount:()=>cleanup()};
 }
 test('reading and theme changes serialize, retain last values and suppress stale saves',async()=>{
  const state=mount();state.requests[0].resolve(account);await tick();
@@ -71,4 +80,21 @@ test('external saved width is retained by the next theme change without a save l
  state.document.dispatchEvent(new CustomEvent('garden:theme-setting',{detail:{theme:'dark'}}));
  assert.equal(state.requests[1].data.width,960);assert.equal(state.requests[1].data.theme,'dark');
  state.requests[1].resolve({...account,preferences:state.requests[1].data});await tick();state.unmount();
+});
+
+test('auth/session guest response resolves with null identity and author role sees review item while student does not',async()=>{
+ const state=mount();
+ assert.equal(state.requests[0].path,'/auth/session');
+ state.requests[0].resolve({authenticated:false,account:null});await tick();
+ assert.equal(state.identities.at(-1),null);
+
+ state.document.dispatchEvent(new Event('garden:account'));
+ state.requests[1].resolve({authenticated:true,account:{...account,role:'student'}});await tick();
+ assert.doesNotMatch(JSON.stringify(state.render()),/بازبینی پیشنهادها/);
+
+ state.document.dispatchEvent(new Event('garden:account'));
+ state.requests[2].resolve({authenticated:true,account:{...account,role:'author'}});await tick();
+ assert.equal(state.identities.at(-1)?.role,'author');
+ assert.match(JSON.stringify(state.render()),/بازبینی پیشنهادها/);
+ state.unmount();
 });

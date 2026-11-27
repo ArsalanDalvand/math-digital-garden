@@ -93,7 +93,7 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
    openCmdk();
   }
  });
- document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=user?.role!=='admin');});
+ document.addEventListener('garden:identity',event=>{const user=(event as CustomEvent).detail;document.querySelectorAll<HTMLElement>('[data-admin-link]').forEach(link=>link.hidden=!['author','admin'].includes(user?.role));});
  const themeToggle=document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
  function updateThemeLabel(){if(themeToggle)themeToggle.setAttribute('aria-label',document.documentElement.dataset.theme==='dark'?'تغییر به پوستهٔ روشن':'تغییر به پوستهٔ تیره');}
  function applyDomTheme(next:string){const root=document.documentElement;root.classList.add('theme-switching');root.dataset.theme=next;updateThemeLabel();requestAnimationFrame(()=>requestAnimationFrame(()=>root.classList.remove('theme-switching')));}

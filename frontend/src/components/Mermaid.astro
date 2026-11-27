@@ -10,7 +10,7 @@
           startOnLoad: false,
           theme: isDark ? 'dark' : 'default',
           fontFamily: 'Vazirmatn, sans-serif',
-          securityLevel: 'loose',
+          securityLevel: 'strict',
           flowchart: { htmlLabels: true, curve: 'basis' }
         });
         return m.default;
@@ -55,12 +55,22 @@
     }
   }
 
-  document.addEventListener('garden:theme-setting', () => {
+  function rerenderTheme() {
     for (const figure of document.querySelectorAll<HTMLElement>('[data-mermaid]')) {
       rendered.delete(figure);
       void renderDiagram(figure, true);
     }
-  });
+  }
+
+  document.addEventListener('garden:theme-setting', rerenderTheme);
+  let lastTheme = document.documentElement.dataset.theme;
+  new MutationObserver(() => {
+    const nextTheme = document.documentElement.dataset.theme;
+    if (nextTheme !== lastTheme) {
+      lastTheme = nextTheme;
+      rerenderTheme();
+    }
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   bind();
   new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
