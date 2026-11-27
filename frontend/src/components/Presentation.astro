@@ -1,26 +1,242 @@
 <button type="button" data-presentation-open hidden>حالت ارائه</button>
 <dialog data-presentation aria-labelledby="presentation-title">
-  <header><h2 id="presentation-title">حالت ارائه</h2><button type="button" data-presentation-close>بستن ارائه</button></header>
+  <header class="presentation-header">
+    <h2 id="presentation-title">حالت ارائه</h2>
+    <div class="presentation-header-controls">
+      <select data-presentation-jump aria-label="پرش به اسلاید"></select>
+      <button type="button" data-presentation-fullscreen hidden>تمام‌صفحه</button>
+      <button type="button" data-presentation-close>بستن ارائه</button>
+    </div>
+  </header>
+  <div class="presentation-progress" aria-hidden="true">
+    <span data-presentation-progress></span>
+  </div>
   <p role="status" aria-live="polite" data-presentation-status></p>
   <article class="note" data-presentation-stage tabindex="0" aria-label="اسلاید ارائه"></article>
-  <footer><button type="button" data-presentation-prev>قبلی</button><span data-presentation-count aria-live="polite"></span><button type="button" data-presentation-next>بعدی</button><button type="button" data-presentation-fullscreen hidden>تمام‌صفحه</button><small>کلیدهای جهت، Home و End · خروج با Escape</small></footer>
+  <footer class="presentation-footer">
+    <div class="presentation-nav-buttons">
+      <button type="button" data-presentation-prev>اسلاید قبلی</button>
+      <span data-presentation-count aria-live="polite"></span>
+      <button type="button" data-presentation-next>اسلاید بعدی</button>
+    </div>
+    <small>کلیدهای جهت، Space / PageDown و F (تمام‌صفحه) · خروج با Escape</small>
+  </footer>
 </dialog>
-<script>import '../scripts/presentation';</script>
+<script>
+  import '../scripts/presentation';
+</script>
 <style is:global>
-[data-presentation]{box-sizing:border-box;width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;padding:1.5rem;background:var(--bg,#fff);color:var(--fg,#202020);overflow:hidden}
-[data-presentation][open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:1rem}
-[data-presentation]::backdrop{background:#000a}
-[data-presentation] header,[data-presentation] footer{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
-[data-presentation] header{grid-row:1;justify-content:space-between}
-[data-presentation-status]{grid-row:2}
-[data-presentation] footer{grid-row:4}
-[data-presentation] header h2{font-size:1rem;margin:0}
-[data-presentation] button{min-height:2.75rem;padding:.5rem 1rem}
-[data-presentation] [data-presentation-stage]{grid-row:3;width:min(100%,70rem);max-width:100%;min-width:0;overflow:auto;overscroll-behavior:contain;margin:0 auto;padding:1rem;font-size:clamp(1rem,2.2vw,1.75rem);line-height:1.9;overflow-wrap:anywhere}
-[data-presentation-stage] h1,[data-presentation-stage] h2{font-size:clamp(1.5rem,3.5vw,3rem);line-height:1.5}
-[data-presentation-stage] img,[data-presentation-stage] iframe{max-width:100%}
-[data-presentation-stage] pre,[data-presentation-stage] table{max-width:100%;overflow:auto}
-[data-presentation] footer small{flex-basis:100%}
-[data-presentation-status]:empty{display:none}
-@media(max-width:600px){[data-presentation]{padding:.75rem;gap:.5rem}[data-presentation] [data-presentation-stage]{padding:.5rem}[data-presentation] footer{gap:.5rem}}
+  [data-presentation] {
+    box-sizing: border-box;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    padding: 1.25rem 1.5rem;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-reading);
+    overflow: hidden;
+  }
+
+  [data-presentation][open] {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+  }
+
+  [data-presentation]::backdrop {
+    background: oklch(0 0 0 / 0.65);
+  }
+
+  .presentation-header {
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .presentation-header h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .presentation-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  [data-presentation-jump] {
+    min-height: 2.4rem;
+    max-width: min(280px, 55vw);
+    padding: 0 0.75rem;
+    border-radius: var(--radius-control, 6px);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+
+  .presentation-progress {
+    grid-row: 2;
+    height: 3px;
+    border-radius: 9999px;
+    background: var(--surface-subtle);
+    overflow: hidden;
+  }
+
+  [data-presentation-progress] {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--primary);
+    transition: width 180ms ease;
+  }
+
+  [data-presentation-status] {
+    grid-row: 3;
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+  }
+
+  [data-presentation-status]:empty {
+    display: none;
+  }
+
+  [data-presentation] [data-presentation-stage] {
+    grid-row: 4;
+    width: min(100%, 66rem);
+    max-width: 100%;
+    min-width: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    margin: 0 auto;
+    padding: 1.5rem 2rem;
+    border-radius: var(--radius-panel, 10px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: clamp(1.05rem, 2vw, 1.55rem);
+    line-height: 1.9;
+    overflow-wrap: anywhere;
+  }
+
+  [data-presentation-stage] h1,
+  [data-presentation-stage] h2 {
+    font-size: clamp(1.5rem, 3.2vw, 2.6rem);
+    line-height: 1.45;
+    margin-block-start: 0.25rem;
+  }
+
+  .presentation-cover-slogan {
+    font-size: 1.1rem;
+    color: var(--muted-foreground);
+    margin-top: 0.75rem;
+  }
+
+  [data-presentation-stage] img,
+  [data-presentation-stage] iframe {
+    max-width: 100%;
+  }
+
+  [data-presentation-stage] pre,
+  [data-presentation-stage] table {
+    max-width: 100%;
+    overflow: auto;
+  }
+
+  .presentation-footer {
+    grid-row: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .presentation-nav-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  [data-presentation-count] {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+    min-width: 6.5rem;
+    text-align: center;
+  }
+
+  [data-presentation] button {
+    min-height: 2.4rem;
+    padding: 0.4rem 0.95rem;
+    border-radius: var(--radius-control, 6px);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+
+  [data-presentation] button:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  [data-presentation] button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  [data-presentation] [data-presentation-next] {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--primary-foreground);
+    font-weight: 600;
+  }
+
+  [data-presentation] [data-presentation-next]:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+
+  .presentation-footer small {
+    font-size: 0.78rem;
+    color: var(--muted-foreground);
+  }
+
+  @media (max-width: 600px) {
+    [data-presentation] {
+      padding: 0.75rem;
+      gap: 0.5rem;
+    }
+    [data-presentation] [data-presentation-stage] {
+      padding: 1rem;
+    }
+    .presentation-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .presentation-nav-buttons {
+      justify-content: space-between;
+    }
+  }
 </style>

@@ -2,14 +2,22 @@
 import Reader from '../layouts/Reader.astro';
 import { searchCatalogue } from '../lib/catalogue.mjs';
 import { paginateCatalogue, cataloguePageHref } from '../lib/catalogue-pagination.mjs';
+import { filterDisplayTags, renderInlineMathHtml } from '../lib/inline-katex.mjs';
 import { noteMetadata, noteHref } from '../lib/markdown.mjs';
+import {
+  bookDisplayLabel,
+  buildSearchFilterHref,
+  formatSearchSnippetHtml,
+} from '../lib/search-format.mjs';
 import { UMKO_KINDS, UMKO_TRACKS, UMKO_LEVELS } from '../lib/umko.mjs';
+import { X } from 'lucide-react';
 
 export const prerender = false;
 
 interface SearchDisplayItem {
   slug: string;
   title: string;
+  book_slug: string;
   slogan_fa: string;
   kind: string;
   level: string;
@@ -33,8 +41,13 @@ let totalCount = 0;
 let currentPage = requestedPage;
 let totalPages = 1;
 let tags: string[] = tag ? [tag] : [];
-let availableTracks: string[] = Object.keys(UMKO_TRACKS);
-let availableKinds: string[] = Object.keys(UMKO_KINDS);
+const availableTracks: string[] = Object.keys(UMKO_TRACKS);
+const availableKinds: string[] = Object.keys(UMKO_KINDS);
+const umkoKinds = UMKO_KINDS as Record<string, { label?: string; color?: string }>;
+const umkoTracks = UMKO_TRACKS as Record<string, string>;
+const umkoLevels = UMKO_LEVELS as Record<string, { label?: string; short?: string }>;
+const knownBooks = ['axler', 'abstract-algebra'];
+const customBook = book && !knownBooks.includes(book) ? book : '';
 let message = '';
 
 if (q.length > 200 || tag.length > 200) {
@@ -59,19 +72,20 @@ if (q.length > 200 || tag.length > 200) {
       items = indexedItems.map((item) => ({
         slug: String(item.slug || ''),
         title: String(item.title || ''),
+        book_slug: String(item.book_slug || ''),
         slogan_fa: String(item.slogan || ''),
         kind: String(item.kind || ''),
         level: String(item.level || ''),
         tracks: Array.isArray(item.tracks) ? item.tracks.map(String) : [],
-        tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+        tags: filterDisplayTags(Array.isArray(item.tags) ? item.tags.map(String) : []),
         snippet: String(item.snippet || ''),
       }));
       tags = [...new Set([...items.flatMap((n) => n.tags), ...(tag ? [tag] : [])])].sort();
     } else {
       const notes = noteMetadata(res.notes || []);
-      tags = [...new Set([...notes.flatMap((note) => note.tags), ...(tag ? [tag] : [])])].sort();
-      availableTracks = [...new Set(notes.flatMap((n) => (Array.isArray(n.tracks) ? n.tracks : [])))].sort();
-      availableKinds = [...new Set(notes.map((n) => n.kind).filter(Boolean))].sort();
+      tags = [
+        ...new Set([...filterDisplayTags(notes.flatMap((note) => note.tags)), ...(tag ? [tag] : [])]),
+      ].sort();
 
       let filtered = notes;
       if (tag) filtered = filtered.filter((note) => note.tags.includes(tag));
@@ -86,11 +100,12 @@ if (q.length > 200 || tag.length > 200) {
       items = pagination.items.map((note) => ({
         slug: note.slug,
         title: note.title,
+        book_slug: note.book_slug || '',
         slogan_fa: note.slogan_fa || '',
         kind: note.kind || '',
         level: note.level || '',
         tracks: Array.isArray(note.tracks) ? note.tracks : [],
-        tags: Array.isArray(note.tags) ? note.tags : [],
+        tags: filterDisplayTags(Array.isArray(note.tags) ? note.tags : []),
         snippet: '',
       }));
     }
@@ -100,80 +115,318 @@ if (q.length > 200 || tag.length > 200) {
   }
 }
 
-const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind }).toString()}`;
+const currentFilterState = { q, book, kind, track, tag };
+const retryHref = `/search?${new URLSearchParams({ q, tag, track, kind, book }).toString()}`;
+
+const activeChips: Array<{ key: 'q' | 'book' | 'kind' | 'track' | 'tag'; label: string }> = [];
+if (q.trim()) activeChips.push({ key: 'q', label: `عبارت: ${q.trim()}` });
+if (book) activeChips.push({ key: 'book', label: `کتاب: ${bookDisplayLabel(book)}` });
+if (kind) activeChips.push({ key: 'kind', label: `نوع: ${(UMKO_KINDS as Record<string, { label?: string }>)[kind]?.label || kind}` });
+if (track) activeChips.push({ key: 'track', label: `مسیر: ${(UMKO_TRACKS as Record<string, string>)[track] || track}` });
+if (tag) activeChips.push({ key: 'tag', label: `برچسب: #${tag}` });
 ---
+
 <Reader title="جست‌وجو و پایگاه دانش">
-  <p id="search-help">از عنوان یا متن جست‌وجو کنید و با برچسب، نوع سند یا مسیر مطالعه، موضوع را محدود کنید. مطالعهٔ یادداشت‌ها به حساب نیاز ندارد.</p>
-  <form action="/search" role="search" class="garden-panel garden-stack" data-od-id="catalogue-search" aria-describedby="search-help">
+  <p id="search-help">
+    از عنوان یا متن جست‌وجو کنید و با کتاب، نوع یادداشت، مسیر مطالعه یا برچسب، نتایج را محدود کنید.
+  </p>
+
+  <form
+    action="/search"
+    role="search"
+    class="garden-panel garden-stack"
+    data-od-id="catalogue-search"
+    aria-describedby="search-help"
+  >
     <div class="garden-field">
-    <label for="query">عنوان یا متن یادداشت</label>
-    <input id="query" type="search" name="q" maxlength="200" value={q} />
+      <label for="query">عنوان یا متن یادداشت</label>
+      <input
+        id="query"
+        type="search"
+        name="q"
+        maxlength="200"
+        value={q}
+        placeholder="مثلاً فضای برداری، قضیه بعد، ضرب داخلی…"
+      />
     </div>
+
     <div class="search-filters-grid">
       <div class="garden-field">
-        <label for="tag">برچسب</label>
-        <select id="tag" name="tag"><option value="">همهٔ برچسب‌ها</option>{tags.map((item)=><option value={item} selected={item===tag}>{item}</option>)}</select>
+        <label for="book">کتاب و مجموعه</label>
+        <select id="book" name="book">
+          <option value="">همهٔ کتاب‌ها</option>
+          {knownBooks.map((b) => (
+            <option value={b} selected={b === book}>{bookDisplayLabel(b)}</option>
+          ))}
+          {customBook && <option value={customBook} selected>{bookDisplayLabel(customBook)}</option>}
+        </select>
       </div>
-      {availableTracks.length > 0 && (
-        <div class="garden-field">
-          <label for="track">مسیر مطالعه</label>
-          <select id="track" name="track">
-            <option value="">همهٔ مسیرها</option>
-            {availableTracks.map((t)=><option value={t} selected={t===track}>{UMKO_TRACKS[t] || t}</option>)}
-          </select>
-        </div>
-      )}
-      {availableKinds.length > 0 && (
-        <div class="garden-field">
-          <label for="kind">نوع سند (UMKO)</label>
-          <select id="kind" name="kind">
-            <option value="">همهٔ انواع</option>
-            {availableKinds.map((k)=><option value={k} selected={k===kind}>{UMKO_KINDS[k]?.label || k}</option>)}
-          </select>
-        </div>
-      )}
+
+      <div class="garden-field">
+        <label for="kind">نوع یادداشت</label>
+        <select id="kind" name="kind">
+          <option value="">همهٔ انواع</option>
+          {availableKinds.map((k) => (
+            <option value={k} selected={k === kind}>{umkoKinds[k]?.label || k}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="garden-field">
+        <label for="track">مسیر مطالعه</label>
+        <select id="track" name="track">
+          <option value="">همهٔ مسیرها</option>
+          {availableTracks.map((t) => (
+            <option value={t} selected={t === track}>{umkoTracks[t] || t}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="garden-field">
+        <label for="tag">برچسب</label>
+        <select id="tag" name="tag">
+          <option value="">همهٔ برچسب‌ها</option>
+          {tags.map((item) => <option value={item} selected={item === tag}>{item}</option>)}
+        </select>
+      </div>
     </div>
+
     <div class="garden-row">
       <button class="garden-button-primary" type="submit" data-od-id="search-submit">جست‌وجو</button>
       <a href="/search" data-od-id="search-reset">پاک‌کردن فیلترها</a>
     </div>
   </form>
+
+  {activeChips.length > 0 && (
+    <div class="active-filter-chips" role="group" aria-label="فیلترهای فعال" data-active-filter-chips>
+      {activeChips.map((chip) => (
+        <a
+          class="active-chip"
+          href={buildSearchFilterHref(currentFilterState, chip.key)}
+          data-remove-filter={chip.key}
+          title={`حذف فیلتر ${chip.label}`}
+        >
+          <span>{chip.label}</span>
+          <X size={13} aria-hidden="true" />
+        </a>
+      ))}
+    </div>
+  )}
+
   <section aria-label="نتیجهٔ جست‌وجو" data-od-id="search-results">
-    {message ? <div class="garden-panel">
-      <p role="status">{message}</p>
-      <a href={retryHref} data-od-id="search-retry">تلاش دوباره با همین فیلترها</a>
-    </div> : <>
-      <p role="status">{totalCount ? `${totalCount.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}</p>
-      {items.length ? <ul class="catalogue-list">{items.map((note)=><li class="garden-panel" data-od-id={`search-note-${note.slug}`}>
-        <h2><a href={noteHref(note.slug)}>{note.title}</a></h2>
-        {note.slogan_fa && <p class="note-slogan-search">«{note.slogan_fa}»</p>}
-        <div class="note-result-badges">
-          {note.kind && <span class="badge-mini" style={`color: ${UMKO_KINDS[note.kind]?.color || 'inherit'}`}>{UMKO_KINDS[note.kind]?.label || note.kind}</span>}
-          {note.level && <span class="badge-mini">🎓 {UMKO_LEVELS[note.level]?.label || note.level}</span>}
-          {note.tracks?.map((t: string) => <span class="badge-mini">🎯 {UMKO_TRACKS[t] || t}</span>)}
-        </div>
-        {note.snippet && <p class="note-snippet">{note.snippet}</p>}
-        {note.tags.length > 0 && <p class="note-summary">موضوع: {note.tags.join('، ')}</p>}
-      </li>)}</ul> : <p>عبارت کوتاه‌تر یا برچسب دیگری انتخاب کنید. برای آشنایی با محیط می‌توانید <a href="/sample">یادداشت نمونه را بخوانید</a>.</p>}
-      {totalPages > 1 && <nav class="garden-row catalogue-pagination" aria-label="صفحه‌های نتایج" data-od-id="catalogue-pagination">
-        {currentPage > 1 && <a href={cataloguePageHref(q, tag, currentPage - 1, { track, kind, book })}>نتایج قبلی</a>}
-        <span>صفحهٔ {currentPage.toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}</span>
-        {currentPage < totalPages && <a href={cataloguePageHref(q, tag, currentPage + 1, { track, kind, book })}>نتایج بعدی</a>}
-      </nav>}
-    </>}
+    {message ? (
+      <div class="garden-panel">
+        <p role="status">{message}</p>
+        <a href={retryHref} data-od-id="search-retry">تلاش دوباره با همین فیلترها</a>
+      </div>
+    ) : (
+      <>
+        <p role="status">
+          {totalCount ? `${totalCount.toLocaleString('fa-IR')} یادداشت` : 'یادداشتی پیدا نشد.'}
+        </p>
+
+        {items.length ? (
+          <ul class="catalogue-list">
+            {items.map((note) => {
+              const kindMeta = umkoKinds[note.kind];
+              const levelMeta = umkoLevels[note.level];
+              const sloganHtml = renderInlineMathHtml(note.slogan_fa);
+              const snippetHtml = formatSearchSnippetHtml(note.snippet, q);
+              return (
+                <li class="garden-panel search-result-card" data-od-id={`search-note-${note.slug}`}>
+                  <h2>
+                    <a href={noteHref(note.slug)}>{note.title}</a>
+                  </h2>
+                  {sloganHtml && <p class="note-slogan-search" set:html={sloganHtml} />}
+                  <div class="note-result-badges">
+                    {note.book_slug && (
+                      <span class="badge-mini badge-book">{bookDisplayLabel(note.book_slug)}</span>
+                    )}
+                    {note.kind && (
+                      <span
+                        class="badge-mini badge-kind"
+                        style={`--kind-color: ${kindMeta?.color || 'var(--primary)'}`}
+                      >
+                        <span class="badge-kind-dot" aria-hidden="true"></span>
+                        <span>{kindMeta?.label || note.kind}</span>
+                      </span>
+                    )}
+                    {note.level && (
+                      <span class="badge-mini">{levelMeta?.label || note.level}</span>
+                    )}
+                    {note.tracks?.map((t: string) => (
+                      <span class="badge-mini">{umkoTracks[t] || t}</span>
+                    ))}
+                  </div>
+                  {snippetHtml && <p class="note-snippet" set:html={snippetHtml} />}
+                  {note.tags.length > 0 && (
+                    <div class="note-result-tags">
+                      {note.tags.map((tagName) => (
+                        <a
+                          class="tag-chip"
+                          href={`/search?${new URLSearchParams({
+                            ...(q ? { q } : {}),
+                            ...(book ? { book } : {}),
+                            ...(kind ? { kind } : {}),
+                            ...(track ? { track } : {}),
+                            tag: tagName,
+                          }).toString()}`}
+                        >
+                          #{tagName}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p>
+            عبارت کوتاه‌تر یا فیلتر دیگری انتخاب کنید. برای آشنایی با محیط می‌توانید{' '}
+            <a href="/sample">یادداشت نمونه را بخوانید</a>.
+          </p>
+        )}
+
+        {totalPages > 1 && (
+          <nav
+            class="garden-row catalogue-pagination"
+            aria-label="صفحه‌های نتایج"
+            data-od-id="catalogue-pagination"
+          >
+            {currentPage > 1 && (
+              <a href={cataloguePageHref(q, tag, currentPage - 1, { track, kind, book })}>
+                نتایج قبلی
+              </a>
+            )}
+            <span>
+              صفحهٔ {currentPage.toLocaleString('fa-IR')} از {totalPages.toLocaleString('fa-IR')}
+            </span>
+            {currentPage < totalPages && (
+              <a href={cataloguePageHref(q, tag, currentPage + 1, { track, kind, book })}>
+                نتایج بعدی
+              </a>
+            )}
+          </nav>
+        )}
+      </>
+    )}
   </section>
 </Reader>
+
 <style>
-  section { margin-block-start: var(--space-8); }
-  .search-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
-  .catalogue-list { display: grid; gap: var(--space-4); padding: 0; list-style: none; }
-  .catalogue-list h2 { margin: 0; font-size: 1.125rem; }
-  .note-slogan-search { margin-block: var(--space-1) var(--space-2); font-size: 0.9rem; color: var(--primary-text); font-style: italic; }
-  .note-result-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-block: var(--space-1); }
-  .badge-mini { font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); }
-  .note-snippet { margin-block: var(--space-2) 0; color: var(--foreground); font-size: 0.9rem; line-height: 1.65; opacity: 0.9; overflow-wrap: anywhere; }
-  .catalogue-list .note-summary { margin-block: var(--space-2) 0; color: var(--muted-foreground); overflow-wrap: anywhere; font-size: 0.85rem; }
-  form select { inline-size: 100%; }
-  .catalogue-pagination { justify-content: space-between; margin-block: var(--space-6); }
-  .catalogue-pagination a { min-block-size: var(--control-height); display: inline-flex; align-items: center; }
+  section {
+    margin-block-start: var(--space-6);
+  }
+  .search-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-3);
+  }
+  .active-filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-block-start: var(--space-4);
+  }
+  .active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: var(--primary-soft);
+    color: var(--primary-text);
+    border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+    transition: background-color 120ms ease;
+  }
+  .active-chip:hover {
+    background: color-mix(in oklch, var(--primary) 20%, var(--surface));
+  }
+  .catalogue-list {
+    display: grid;
+    gap: var(--space-4);
+    padding: 0;
+    list-style: none;
+  }
+  .catalogue-list h2 {
+    margin: 0;
+    font-size: 1.125rem;
+  }
+  .note-slogan-search {
+    margin-block: var(--space-2) var(--space-2);
+    font-size: 0.92rem;
+    color: var(--foreground);
+    line-height: 1.75;
+  }
+  .note-result-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-block: var(--space-1);
+  }
+  .badge-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    padding: 0.14rem 0.55rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    color: var(--muted-foreground);
+  }
+  .badge-kind {
+    color: var(--foreground);
+    font-weight: 600;
+    background: color-mix(in oklch, var(--kind-color) 11%, var(--surface));
+    border-color: color-mix(in oklch, var(--kind-color) 32%, var(--border));
+  }
+  .badge-kind-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--kind-color);
+  }
+  .note-snippet {
+    margin-block: var(--space-2) 0;
+    color: var(--muted-foreground);
+    font-size: 0.88rem;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+  }
+  .note-result-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-block-start: var(--space-2);
+  }
+  .tag-chip {
+    font-size: 0.75rem;
+    padding: 1px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--primary-text);
+    text-decoration: none;
+  }
+  .tag-chip:hover {
+    background: var(--surface-hover);
+    text-decoration: underline;
+  }
+  form select {
+    inline-size: 100%;
+  }
+  .catalogue-pagination {
+    justify-content: space-between;
+    margin-block: var(--space-6);
+  }
+  .catalogue-pagination a {
+    min-block-size: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+  }
 </style>

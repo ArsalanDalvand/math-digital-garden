@@ -1,8 +1,16 @@
 <script>
-  import {viewerOrigin} from '../lib/geogebra.mjs';
-  const bound=new Map<HTMLElement,()=>void>();
+  import { viewerOrigin } from '../lib/geogebra.mjs';
+
+  const bound = new Map<HTMLElement, () => void>();
   const activeFigures: HTMLElement[] = [];
   const MAX_ACTIVE = 6;
+
+  function computeFrameHeight(configHeight: number): number {
+    if (window.innerWidth < 540) {
+      return Math.min(configHeight, Math.max(320, Math.round(window.innerWidth * 0.92)));
+    }
+    return configHeight;
+  }
 
   function deactivate(figure: HTMLElement) {
     const idx = activeFigures.indexOf(figure);
@@ -11,12 +19,14 @@
     if (host) host.replaceChildren();
     figure.dataset.geogebraLoaded = 'idle';
     figure.setAttribute('aria-busy', 'false');
-    const button = figure.querySelector<HTMLButtonElement>('button');
-    if (button) {
-      button.hidden = false;
-      button.disabled = false;
-      button.textContent = 'نمایش دوباره رسم';
+    const loadButton = figure.querySelector<HTMLButtonElement>(':scope > button');
+    if (loadButton) {
+      loadButton.hidden = false;
+      loadButton.disabled = false;
+      loadButton.textContent = 'نمایش دوباره رسم';
     }
+    const resetBtn = figure.querySelector<HTMLButtonElement>('[data-geogebra-reset]');
+    if (resetBtn) resetBtn.disabled = true;
   }
 
   function registerActive(figure: HTMLElement) {
@@ -31,73 +41,217 @@
     }
   }
 
-  const observer=new IntersectionObserver(entries=>{
-    for(const entry of entries){
-      if(!entry.isIntersecting)continue;
-      const target = entry.target as HTMLElement;
-      if (target.dataset?.geogebraLoaded !== 'ready' && target.dataset?.geogebraLoaded !== 'loading') {
-        target.querySelector<HTMLButtonElement>('button')?.click();
+  function ensureHeaderToolbar(figure: HTMLElement, captionText: string, onReset: () => void) {
+    if (figure.querySelector('.geogebra-toolbar')) return;
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'geogebra-toolbar';
+
+    const existingCaption = figure.querySelector(':scope > figcaption');
+    const titleEl = document.createElement('span');
+    titleEl.className = 'geogebra-caption-label';
+    titleEl.textContent = existingCaption?.textContent?.trim() || captionText || 'رسم تعاملی GeoGebra';
+    if (existingCaption) existingCaption.setAttribute('hidden', '');
+
+    const actions = document.createElement('div');
+    actions.className = 'geogebra-toolbar-actions';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'geogebra-tool-btn';
+    resetBtn.dataset.geogebraReset = '';
+    resetBtn.textContent = 'بازنشانی رسم';
+    resetBtn.disabled = true;
+    resetBtn.addEventListener('click', onReset);
+
+    const fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'geogebra-tool-btn';
+    fsBtn.dataset.geogebraFullscreen = '';
+    fsBtn.textContent = 'تمام‌صفحه';
+    fsBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        void figure.requestFullscreen?.().catch(() => {});
+      } else {
+        void document.exitFullscreen?.().catch(() => {});
+      }
+    });
+
+    actions.append(resetBtn, fsBtn);
+    toolbar.append(titleEl, actions);
+    figure.prepend(toolbar);
+  }
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const target = entry.target as HTMLElement;
+        if (
+          target.dataset?.geogebraLoaded !== 'ready' &&
+          target.dataset?.geogebraLoaded !== 'loading'
+        ) {
+          target.querySelector<HTMLButtonElement>(':scope > button')?.click();
+        }
+      }
+    },
+    { rootMargin: '300px' },
+  );
+
+  function bind() {
+    for (const [figure, dispose] of bound) {
+      if (!figure.isConnected) {
+        dispose();
+        observer.unobserve(figure);
+        bound.delete(figure);
       }
     }
-  },{rootMargin:'300px'});
-  function bind(){
-    for(const [figure,dispose] of bound)if(!figure.isConnected){dispose();observer.unobserve(figure);bound.delete(figure);}
-    for(const figure of document.querySelectorAll<HTMLElement>('[data-geogebra]')){
-      const button=figure.querySelector<HTMLButtonElement>('button');
-      if(!button || bound.has(figure))continue;
-      let cleanup=()=>{};
-      let controller:AbortController | undefined;
-      bound.set(figure,()=>{controller?.abort();cleanup();});
-      button.addEventListener('click',async()=>{
-        controller?.abort();cleanup();
-        controller=new AbortController();const signal=controller.signal;
-        button.disabled=true;
-        try{
-          const config=JSON.parse(figure.dataset.geogebra!);
-          if(config.filename){
-            const response=await fetch(config.filename,{credentials:'omit',signal});if(!response.ok)throw new Error('File unavailable');
-            const blob=await response.blob();if(blob.size>5_000_000)throw new Error('File too large');
-            const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(blob);});
-            config.ggbBase64=data.split(',')[1];delete config.filename;
+
+    for (const figure of document.querySelectorAll<HTMLElement>('[data-geogebra]')) {
+      const loadButton = figure.querySelector<HTMLButtonElement>(':scope > button');
+      if (!loadButton || bound.has(figure)) continue;
+
+      let parsedCaption = '';
+      try {
+        parsedCaption = JSON.parse(figure.dataset.geogebra || '{}').caption || '';
+      } catch {}
+
+      let cleanup = () => {};
+      let controller: AbortController | undefined;
+      bound.set(figure, () => {
+        controller?.abort();
+        cleanup();
+      });
+
+      const triggerLoad = async () => {
+        controller?.abort();
+        cleanup();
+        controller = new AbortController();
+        const signal = controller.signal;
+        loadButton.disabled = true;
+
+        const host = figure.querySelector<HTMLElement>('[data-geogebra-host]');
+        if (!host) return;
+        const resetBtn = figure.querySelector<HTMLButtonElement>('[data-geogebra-reset]');
+
+        try {
+          const config = JSON.parse(figure.dataset.geogebra!);
+          const frameHeight = computeFrameHeight(Number(config.height) || 420);
+          config.height = frameHeight;
+
+          const skeleton = document.createElement('div');
+          skeleton.className = 'geogebra-skeleton';
+          skeleton.style.height = `${frameHeight}px`;
+          host.replaceChildren(skeleton);
+
+          if (config.filename) {
+            const response = await fetch(config.filename, { credentials: 'omit', signal });
+            if (!response.ok) throw new Error('File unavailable');
+            const blob = await response.blob();
+            if (blob.size > 5_000_000) throw new Error('File too large');
+            const data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            config.ggbBase64 = data.split(',')[1];
+            delete config.filename;
           }
-          if(signal.aborted || !figure.isConnected)return;
-          const frame=document.createElement('iframe');frame.title=config.caption || 'رسم تعاملی GeoGebra';
-          frame.sandbox.add('allow-scripts','allow-same-origin');frame.style.width='100%';frame.style.height=config.height+'px';frame.style.border='0';
-          const token=crypto.randomUUID();
-          let status=figure.querySelector<HTMLElement>('[data-geogebra-status]');
-          if(!status){status=document.createElement('p');status.dataset.geogebraStatus='';status.setAttribute('role','status');figure.append(status);}
-          status.textContent='در حال بارگذاری رسم…';figure.dataset.geogebraLoaded='loading';figure.setAttribute('aria-busy','true');
-          const receive=(event:MessageEvent)=>{
-            if(event.source!==frame.contentWindow || event.origin!==new URL(frame.src).origin || event.data?.token!==token || event.data?.type!=='garden:geogebra')return;
-            if(!['ready','failed'].includes(event.data.status))return;
-            if(signal.aborted || !figure.isConnected)return;
-            figure.dataset.geogebraLoaded=event.data.status;figure.setAttribute('aria-busy','false');
-            if(event.data.status==='ready')registerActive(figure);
-            button.hidden=event.data.status==='ready';button.disabled=false;
-            status!.textContent=event.data.status==='ready'?'':'بارگذاری رسم ناموفق بود؛ کد اصلی و متن جزوه در دسترس است.';
+          if (signal.aborted || !figure.isConnected) return;
+
+          const frame = document.createElement('iframe');
+          frame.title = config.caption || 'رسم تعاملی GeoGebra';
+          frame.sandbox.add('allow-scripts', 'allow-same-origin');
+          frame.style.width = '100%';
+          frame.style.height = `${frameHeight}px`;
+          frame.style.border = '0';
+
+          const token = crypto.randomUUID();
+          let status = figure.querySelector<HTMLElement>('[data-geogebra-status]');
+          if (!status) {
+            status = document.createElement('p');
+            status.dataset.geogebraStatus = '';
+            status.setAttribute('role', 'status');
+            figure.append(status);
+          }
+          status.textContent = 'در حال بارگذاری رسم…';
+          figure.dataset.geogebraLoaded = 'loading';
+          figure.setAttribute('aria-busy', 'true');
+
+          const receive = (event: MessageEvent) => {
+            if (
+              event.source !== frame.contentWindow ||
+              event.origin !== new URL(frame.src).origin ||
+              event.data?.token !== token ||
+              event.data?.type !== 'garden:geogebra'
+            ) {
+              return;
+            }
+            if (!['ready', 'failed'].includes(event.data.status)) return;
+            if (signal.aborted || !figure.isConnected) return;
+            figure.dataset.geogebraLoaded = event.data.status;
+            figure.setAttribute('aria-busy', 'false');
+            if (event.data.status === 'ready') {
+              registerActive(figure);
+              skeleton.remove();
+              if (resetBtn) resetBtn.disabled = false;
+            }
+            loadButton.hidden = event.data.status === 'ready';
+            loadButton.disabled = false;
+            status!.textContent =
+              event.data.status === 'ready'
+                ? ''
+                : 'بارگذاری رسم ناموفق بود؛ کد اصلی و متن جزوه در دسترس است.';
           };
-          window.addEventListener('message',receive);cleanup=()=>{window.removeEventListener('message',receive);const idx=activeFigures.indexOf(figure);if(idx!==-1)activeFigures.splice(idx,1);};
-          // A different hostname isolates private DOM/cookies while allowing GeoGebra's nested frames.
+
+          window.addEventListener('message', receive);
+          cleanup = () => {
+            window.removeEventListener('message', receive);
+            const idx = activeFigures.indexOf(figure);
+            if (idx !== -1) activeFigures.splice(idx, 1);
+          };
+
           let origin = location.origin;
           try {
             origin = viewerOrigin(location.origin, import.meta.env.PUBLIC_GEOGEBRA_VIEWER_ORIGIN);
           } catch {
             origin = location.origin;
           }
-          frame.src=origin+'/drawings/geogebra';
-          frame.addEventListener('load',()=>frame.contentWindow?.postMessage({type:'garden:geogebra:init',config,token},origin),{once:true});
-          figure.querySelector('[data-geogebra-host]')!.replaceChildren(frame);button.textContent='بارگذاری دوباره';
-        }catch{
-          if(signal.aborted)return;
-          figure.dataset.geogebraLoaded='failed';figure.setAttribute('aria-busy','false');
-          button.disabled=false;button.hidden=false;button.textContent='تلاش دوباره';
-          let status=figure.querySelector<HTMLElement>('[data-geogebra-status]');
-          if(!status){status=document.createElement('p');status.dataset.geogebraStatus='';status.setAttribute('role','status');figure.append(status);}
-          status.textContent='بارگذاری رسم ناموفق بود؛ متن و کد اصلی در دسترس است.';
+
+          frame.src = `${origin}/drawings/geogebra`;
+          frame.addEventListener(
+            'load',
+            () => frame.contentWindow?.postMessage({ type: 'garden:geogebra:init', config, token }, origin),
+            { once: true },
+          );
+          host.append(frame);
+          loadButton.textContent = 'بارگذاری دوباره';
+        } catch {
+          if (signal.aborted) return;
+          figure.dataset.geogebraLoaded = 'failed';
+          figure.setAttribute('aria-busy', 'false');
+          loadButton.disabled = false;
+          loadButton.hidden = false;
+          loadButton.textContent = 'تلاش دوباره';
+          host.replaceChildren();
+          let status = figure.querySelector<HTMLElement>('[data-geogebra-status]');
+          if (!status) {
+            status = document.createElement('p');
+            status.dataset.geogebraStatus = '';
+            status.setAttribute('role', 'status');
+            figure.append(status);
+          }
+          status.textContent = 'بارگذاری رسم ناموفق بود؛ متن و کد اصلی در دسترس است.';
         }
-      });
+      };
+
+      ensureHeaderToolbar(figure, parsedCaption, () => void triggerLoad());
+      loadButton.addEventListener('click', () => void triggerLoad());
       observer.observe(figure);
     }
   }
-  bind();new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
+
+  bind();
+  new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
 </script>
