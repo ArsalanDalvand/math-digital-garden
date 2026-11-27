@@ -12,7 +12,7 @@ from pydantic import Field
 from sqlalchemy import select
 
 from backend.app.config import settings
-from backend.app.models import CanonicalNote, ChangeProposal
+from backend.app.models import CanonicalNote, ChangeProposal, User
 from backend.app.note_indexing import build_note_lookup, sync_note_index
 from backend.app.workspace.security import (
     DB,
@@ -41,7 +41,18 @@ class ReviewInput(Contract):
     comment: str = Field(default="", max_length=4000)
 
 
-def proposal_json(p: ChangeProposal, slug: str = "") -> dict[str, object]:
+def _author_label(user: User | None) -> str:
+    name = (user.full_name or "").strip() if user is not None else ""
+    if name:
+        return name
+    if user is not None and user.role in {"author", "admin"}:
+        return "مؤلف"
+    return "دانشجو"
+
+
+def proposal_json(
+    p: ChangeProposal, slug: str = "", title: str = "", author_name: str = ""
+) -> dict[str, object]:
     return {
         **{
             k: getattr(p, k)
@@ -62,7 +73,17 @@ def proposal_json(p: ChangeProposal, slug: str = "") -> dict[str, object]:
             )
         },
         "slug": slug,
+        "title": title,
+        "author_name": author_name,
     }
+
+
+def _proposal_query():
+    return (
+        select(ChangeProposal, CanonicalNote.slug, CanonicalNote.title, User)
+        .join(CanonicalNote)
+        .outerjoin(User, ChangeProposal.user_id == User.id)
+    )
 
 
 @router.post("/proposals", status_code=201, dependencies=[Depends(write_guard)])
@@ -83,35 +104,35 @@ async def propose(data: ProposalInput, user: Me, db: DB) -> dict[str, object]:
     )
     db.add(item)
     await db.commit()
-    return proposal_json(item, note.slug)
+    return proposal_json(item, note.slug, note.title, _author_label(user))
 
 
 @router.get("/proposals")
 async def proposals(user: Me, db: DB) -> list[dict[str, object]]:
     rows = (
         await db.execute(
-            select(ChangeProposal, CanonicalNote.slug)
-            .join(CanonicalNote)
+            _proposal_query()
             .where(ChangeProposal.user_id == user.id)
             .order_by(ChangeProposal.created_at.desc())
             .limit(100)
         )
     ).all()
-    return [proposal_json(p, slug) for p, slug in rows]
+    return [proposal_json(p, slug, title, _author_label(author)) for p, slug, title, author in rows]
 
 
 @router.get("/proposals/{proposal_id}")
 async def proposal(proposal_id: UUID, user: Me, db: DB) -> dict[str, object]:
     row = (
         await db.execute(
-            select(ChangeProposal, CanonicalNote.slug)
-            .join(CanonicalNote)
-            .where(ChangeProposal.id == proposal_id, ChangeProposal.user_id == user.id)
+            _proposal_query().where(
+                ChangeProposal.id == proposal_id, ChangeProposal.user_id == user.id
+            )
         )
     ).one_or_none()
     if row is None:
         raise HTTPException(404, "Proposal not found")
-    return proposal_json(*row)
+    p, slug, title, author = row
+    return proposal_json(p, slug, title, _author_label(author))
 
 
 # Explicit author review boundary: students always use the owner-scoped endpoints above.
@@ -119,27 +140,21 @@ async def proposal(proposal_id: UUID, user: Me, db: DB) -> dict[str, object]:
 async def review_list(user: Author, db: DB) -> list[dict[str, object]]:
     rows = (
         await db.execute(
-            select(ChangeProposal, CanonicalNote.slug)
-            .join(CanonicalNote)
-            .order_by(ChangeProposal.created_at.desc())
-            .limit(100)
+            _proposal_query().order_by(ChangeProposal.created_at.desc()).limit(100)
         )
     ).all()
-    return [proposal_json(p, slug) for p, slug in rows]
+    return [proposal_json(p, slug, title, _author_label(author)) for p, slug, title, author in rows]
 
 
 @router.get("/review/{proposal_id}")
 async def review_detail(proposal_id: UUID, user: Author, db: DB) -> dict[str, object]:
     row = (
-        await db.execute(
-            select(ChangeProposal, CanonicalNote.slug)
-            .join(CanonicalNote)
-            .where(ChangeProposal.id == proposal_id)
-        )
+        await db.execute(_proposal_query().where(ChangeProposal.id == proposal_id))
     ).one_or_none()
     if row is None:
         raise HTTPException(404, "Proposal not found")
-    return proposal_json(*row)
+    p, slug, title, author = row
+    return proposal_json(p, slug, title, _author_label(author))
 
 
 @router.post("/review/{proposal_id}", dependencies=[Depends(write_guard)])
@@ -197,7 +212,8 @@ async def decide(
         schedule_index(tasks, note.id, None)
     if p.status == "approved" and settings.content_git_repo:
         await sync_approved(db, p, note)
-    return proposal_json(p, note.slug)
+    submitter = await db.get(User, p.user_id)
+    return proposal_json(p, note.slug, note.title, _author_label(submitter))
 
 
 @router.post("/review/{proposal_id}/sync", dependencies=[Depends(write_guard)])
@@ -212,4 +228,5 @@ async def retry_sync(proposal_id: UUID, user: Author, db: DB) -> dict[str, objec
     note = await db.scalar(select(CanonicalNote).where(CanonicalNote.id == p.note_id))
     assert note is not None
     await sync_approved(db, p, note)
-    return proposal_json(p, note.slug)
+    submitter = await db.get(User, p.user_id)
+    return proposal_json(p, note.slug, note.title, _author_label(submitter))

@@ -28,8 +28,8 @@ const activeMath=StateField.define<ActiveMath|null>({
   })
 });
 export const inlineMathLive=[activeMath,EditorView.baseTheme({
-  '.cm-mathlive':{display:'inline-block',maxWidth:'100%',verticalAlign:'middle',direction:'ltr',unicodeBidi:'isolate'},
-  '.cm-mathlive math-field':{display:'inline-block',maxWidth:'100%',minWidth:'2em',padding:'0',border:'none',borderRadius:'0',background:'transparent',color:'inherit',fontSize:'inherit',outline:'1px solid var(--primary)'},
+  '.cm-mathlive':{display:'inline-block',maxWidth:'100%',verticalAlign:'middle',direction:'ltr',unicodeBidi:'isolate',marginInline:'3px'},
+  '.cm-mathlive math-field':{display:'inline-block',maxWidth:'100%',minWidth:'2.4em',padding:'2px 8px',border:'1px solid color-mix(in oklch, var(--primary) 45%, var(--border))',borderRadius:'6px',background:'var(--primary-soft)',color:'var(--foreground)',fontSize:'inherit',boxShadow:'0 0 0 2px color-mix(in oklch, var(--primary) 16%, transparent)'},
   '.cm-mathlive math-field::part(virtual-keyboard-toggle)':{display:'none'},
   '.cm-mathlive math-field::part(menu-toggle)':{display:'none'}
 })];
@@ -68,7 +68,11 @@ export function bindInlineMathLive(host:HTMLElement,view:EditorView,math:Mathfie
     view.dispatch({changes:{from:active.from,to:active.to,insert},effects:setMath.of(next),selection:{anchor:active.from}});
   },{signal});
   math.addEventListener('keydown',event=>{
-    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close(true);}
+    const active=view.state.field(activeMath);
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close(true);return;}
+    if(event.key==='Enter'&&!event.shiftKey&&active?.delimiter==='$'){
+      event.preventDefault();event.stopPropagation();close(true);
+    }
   },{signal,capture:true});
   math.addEventListener('focusout',()=>queueMicrotask(()=>{if(!disposed&&!math.hasFocus())close();}),{signal});
   return()=>{close();disposed=true;events.abort();};

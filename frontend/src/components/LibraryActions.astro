@@ -1,9 +1,25 @@
 ---
-interface Props {id?:string; canonicalSlug?:string; publicView?:boolean; token?:string}
-const {id='',canonicalSlug='',publicView=false,token=''}=Astro.props;
+import { X } from 'lucide-react';
+
+interface Props {
+  id?: string;
+  canonicalSlug?: string;
+  publicView?: boolean;
+  token?: string;
+}
+const { id = '', canonicalSlug = '', publicView = false, token = '' } = Astro.props;
 ---
-<div data-library-actions={id} data-canonical-slug={canonicalSlug} data-public={String(publicView)} data-token={token}>
-  <div data-library-top class="garden-row"><button type="button" data-library-command="share">اشتراک‌گذاری</button><button type="button" data-library-command="comments">دیدگاه‌ها</button></div>
+
+<div
+  data-library-actions={id}
+  data-canonical-slug={canonicalSlug}
+  data-public={String(publicView)}
+  data-token={token}
+>
+  <div data-library-top class="garden-row">
+    <button type="button" data-library-command="share">اشتراک‌گذاری</button>
+    <button type="button" data-library-command="comments">دیدگاه‌ها</button>
+  </div>
   <div data-library-menu class="library-menu">
     <button type="button" data-library-command="share" class="mobile-only-action">اشتراک‌گذاری</button>
     <button type="button" data-library-command="comments" class="mobile-only-action">دیدگاه‌ها</button>
@@ -22,53 +38,22 @@ const {id='',canonicalSlug='',publicView=false,token=''}=Astro.props;
     <small data-library-info></small>
   </div>
   <p role="status" aria-live="polite" data-library-status></p>
-  <dialog data-library-dialog aria-labelledby={`library-dialog-title-${id}`}><button type="button" data-library-close aria-label="بستن" title="بستن"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button><h2 id={`library-dialog-title-${id}`} data-library-title></h2><p role="status" aria-live="polite" data-library-dialog-status></p><div data-library-body></div></dialog>
+  <dialog
+    data-library-dialog
+    data-dialog-mode="modal"
+    aria-labelledby={`library-dialog-title-${id}`}
+  >
+    <div class="library-dialog-header">
+      <h2 id={`library-dialog-title-${id}`} data-library-title></h2>
+      <button type="button" data-library-close aria-label="بستن" title="بستن">
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+    <p role="status" aria-live="polite" data-library-dialog-status></p>
+    <div data-library-body></div>
+  </dialog>
 </div>
-<script>import '../scripts/library-actions';</script>
-<style is:global>
-.library-menu{display:grid;gap:2px;padding:4px}
-.library-menu button{display:flex;align-items:center;gap:8px;min-height:32px;height:32px;padding:0 8px;background:transparent;border:0;border-radius:5px;color:var(--foreground);font-size:13px;font-weight:500;text-align:start;cursor:pointer;transition:background-color .12s ease, color .12s ease;white-space:nowrap}
-.library-menu button:hover{background:var(--surface-hover);color:var(--foreground)}
-.library-menu [data-library-command="trash"]{border-top:1px solid var(--border);border-radius:0;margin-top:4px;padding-top:4px}
-.library-menu [data-library-command="trash"]:hover{color:var(--destructive);background:var(--destructive-surface)}
-.library-menu small{display:block;padding:8px 8px 4px;font-size:11px;color:var(--muted-foreground);border-top:1px solid var(--border);margin-top:4px;line-height:1.4;max-width:22rem}
 
-dialog[data-library-dialog]{width:min(42rem,92vw);max-height:85vh;overflow-y:auto;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:14px;padding:22px 24px;box-shadow:0 24px 60px -8px oklch(0 0 0 / 0.35);font-family:var(--font-reading);line-height:1.7}
-dialog[data-library-dialog]::backdrop{background:oklch(0 0 0 / 0.55);backdrop-filter:blur(6px)}
-[data-library-close]{position:absolute;top:16px;left:16px;width:32px;height:32px;padding:0;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;color:var(--muted-foreground);cursor:pointer;transition:background-color .15s ease, color .15s ease}
-[data-library-close]:hover{background:var(--surface-hover);color:var(--foreground)}
-[data-library-title]{font-size:1.15rem;font-weight:700;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--foreground)}
-
-[data-library-body]{display:flex;flex-direction:column;gap:10px}
-[data-library-body]>p{font-size:12.5px;color:var(--muted-foreground);line-height:1.6;margin:0;background:var(--surface-subtle);border:1px solid var(--border);border-radius:8px;padding:8px 12px}
-
-[data-library-body]>button{min-height:36px;height:36px;padding:0 14px;border-radius:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:background-color .15s ease, border-color .15s ease;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--surface-subtle);border:1px solid var(--border);color:var(--foreground)}
-[data-library-body]>button:hover{background:var(--surface-hover);border-color:var(--border-strong);color:var(--foreground)}
-
-[data-library-body]>a{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--primary-text);text-decoration:none;padding:8px 12px;border-radius:6px;background:var(--primary-soft);border:1px solid color-mix(in oklch, var(--primary) 28%, transparent);transition:background-color .15s ease;align-self:flex-start}
-[data-library-body]>a:hover{background:color-mix(in oklch, var(--primary) 18%, transparent);text-decoration:underline}
-
-.library-list{list-style:none;padding:0;display:grid;gap:10px;margin:8px 0}
-.library-list li{background:var(--surface-subtle);border:1px solid var(--border);border-radius:8px;padding:12px 14px;transition:background-color .15s ease}
-.library-list li:hover{background:var(--surface-hover)}
-.library-list strong{display:inline-block;font-size:12.5px;font-weight:600;color:var(--primary-text)}
-.library-list p{margin:4px 0 6px;font-size:13.5px;line-height:1.7;color:var(--foreground)}
-.library-list small{display:inline-block;font-size:11px;color:var(--muted-foreground);margin-inline-start:8px}
-.library-list pre{direction:ltr;unicode-bidi:isolate;white-space:pre-wrap;overflow-wrap:anywhere;max-height:30rem;overflow:auto;background:var(--background);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px}
-
-.library-reply{margin-inline-start:1.5rem;border-inline-start:2px solid color-mix(in oklch, var(--primary) 35%, transparent);padding-inline-start:12px;margin-top:8px}
-.library-actions-inline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
-.library-actions-inline button{font-size:11.5px;padding:3px 8px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--muted-foreground);cursor:pointer;transition:background-color .15s ease, color .15s ease;font-family:inherit}
-.library-actions-inline button:hover{background:var(--surface-hover);color:var(--foreground)}
-
-.library-form{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding:12px;background:var(--surface-subtle);border:1px solid var(--border);border-radius:10px;transition:border-color .15s ease}
-.library-form:focus-within{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in oklch, var(--primary) 20%, transparent)}
-.library-form label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--muted-foreground)}
-.library-form textarea,.library-form input{border-radius:6px;background:var(--surface);border:1px solid var(--border);outline:none;padding:6px 10px;color:inherit;font:inherit;font-size:13.5px;line-height:1.6;resize:vertical}
-.library-form textarea{min-height:5rem}
-.library-form button[type=submit],dialog[data-library-dialog] button:not([data-library-close]):not(.library-actions-inline button):not([data-library-body]>button){align-self:flex-start;padding:6px 16px;border-radius:6px;background:var(--primary);color:var(--primary-foreground);border:none;font-weight:600;font-size:12.5px;font-family:inherit;cursor:pointer;transition:background-color .15s ease}
-.library-form button[type=submit]:hover,dialog[data-library-dialog] button:not([data-library-close]):not(.library-actions-inline button):not([data-library-body]>button):hover{background:var(--primary-hover)}
-
-.library-compare{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
-@media(max-width:600px){.library-compare{grid-template-columns:1fr}}
-</style>
+<script>
+  import '../scripts/library-actions';
+</script>

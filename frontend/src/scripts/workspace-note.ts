@@ -9,16 +9,18 @@ import {
   wikiLinks,
 } from '@atomic-editor/editor';
 import { parse } from 'yaml';
-import { api, message } from './api';
+import { ApiError, api, message } from './api';
 import { bindEditorToolbar } from './editor-toolbar';
 import { getSession } from './session';
 import { showToast } from './toast';
 import '@atomic-editor/editor/styles.css';
+import type { MergeView as CodeMirrorMergeView } from '@codemirror/merge';
 import { Compartment, StateEffect } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import { atomicMath } from '../lib/atomic-math';
 import { blockPreview } from '../lib/block-preview';
 import { preferredVersion } from '../lib/default-version.mjs';
+import { countWordsAndChars, detectRebaseNeeded, summarizeDiffStats } from '../lib/editor-sync.mjs';
 import {
   applyRawChanges,
   createAutosaver,
@@ -33,32 +35,54 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
   const slug = root.dataset.workspaceNote!;
   const libraryId = root.dataset.libraryId;
   const toolbar = root.querySelector<HTMLElement>('[data-editor-toolbar]')!;
+  const splitButton = toolbar.querySelector<HTMLButtonElement>('[data-toolbar-split]');
   let disposeToolbar: (() => void) | undefined;
-  let identity: string | undefined,
-    identityEpoch = 0;
+  let identity: string | undefined;
+  let identityEpoch = 0;
   let fixedToolbar = true;
+  let splitEnabled = false;
   try {
     fixedToolbar = localStorage.getItem('garden-fixed-toolbar') !== 'false';
+    splitEnabled = localStorage.getItem('garden-editor-split') === 'true';
   } catch {}
+
+  const panel = root.querySelector<HTMLElement>('[data-editor-panel]')!;
+  const editorGrid = root.querySelector<HTMLElement>('.editor-workspace-grid')!;
+  const livePreviewPane = root.querySelector<HTMLElement>('[data-live-preview]')!;
+  const livePreviewBody = root.querySelector<HTMLElement>('[data-live-preview-body]')!;
+  const livePreviewState = root.querySelector<HTMLElement>('[data-preview-state]');
+  const saveBadge = root.querySelector<HTMLElement>('[data-save-badge]');
+  const statsLabel = root.querySelector<HTMLElement>('[data-editor-stats]');
+  const syncBanner = root.querySelector<HTMLElement>('[data-sync-banner]')!;
+  const syncBannerText = root.querySelector<HTMLElement>('[data-sync-banner-text]')!;
+  const syncBannerAction = root.querySelector<HTMLButtonElement>('[data-sync-banner-action]')!;
+
   const updateToolbar = () => {
-    toolbar.hidden = !root.classList.contains('is-editing');
+    const editing = root.classList.contains('is-editing');
+    toolbar.hidden = !editing;
     toolbar.dataset.sticky = String(fixedToolbar);
+    if (splitButton) splitButton.setAttribute('aria-pressed', String(splitEnabled));
+    editorGrid.dataset.editorLayout = editing && splitEnabled ? 'split' : 'single';
+    livePreviewPane.hidden = !(editing && splitEnabled);
   };
+
   document.addEventListener('garden:preferences', (event) => {
     fixedToolbar = (event as CustomEvent).detail.fixed_toolbar;
     updateToolbar();
   });
+
   let userInteracted = false;
   let readingOriginal = new URLSearchParams(location.search).get('version') === 'canonical';
   root.addEventListener('click', () => {
     userInteracted = true;
   });
+
   const status = root.querySelector<HTMLElement>('[data-save-status]')!;
-  const panel = root.querySelector<HTMLElement>('[data-editor-panel]')!;
-  const article = document.querySelector<HTMLElement>('article.note:not([data-live-preview])')!;
+  const article = document.querySelector<HTMLElement>('article.note:not([data-live-preview-body])')!;
   const canonicalHtml = article.innerHTML;
-  const displayedCanonicalRaw = article.dataset.aiRaw,
-    displayedCanonicalHash = article.dataset.aiHash!;
+  const displayedCanonicalRaw = article.dataset.aiRaw;
+  const displayedCanonicalHash = article.dataset.aiHash!;
+
   type LinkEntry = { slug: string; title: string; aliases: string[] };
   let links: LinkEntry[] = JSON.parse(
     document.querySelector('[data-note-link-index]')?.textContent || '[]',
@@ -80,21 +104,44 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     const name = target.split('#')[0].replace(/\.md$/, '');
     return list.find((n) => [n.slug, n.title, ...n.aliases].includes(name));
   };
+
   const mode = new Compartment();
   let view: EditorView | undefined;
-  let raw = '',
-    frontmatter = '',
-    hash = '',
-    canonical = '',
-    dirty = false,
-    stopped = false,
-    hasFork = false,
-    previewSeq = 0;
+  let mergeView: CodeMirrorMergeView | undefined;
+  let mergeMode: 'conflict' | 'rebase' | null = null;
+  let mergeRemoteHash = '';
+  let mergeRemoteContent = '';
+  let raw = '';
+  let frontmatter = '';
+  let hash = '';
+  let canonical = '';
+  let canonicalHash = '';
+  let forkBaseHash = '';
+  let dirty = false;
+  let stopped = false;
+  let hasFork = false;
+  let suppressingDocChange = false;
+  let previewSeq = 0;
+  let splitPreviewSeq = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let splitTimer: ReturnType<typeof setTimeout> | undefined;
   let autosave: ReturnType<typeof createAutosaver> | undefined;
+
   const originalButton = document.querySelector<HTMLButtonElement>('[data-original]')!;
   const viewButton = document.querySelector<HTMLButtonElement>('[data-view]')!;
   const shareButton = document.querySelector<HTMLButtonElement>('[data-share]')!;
+
+  const updateMeta = (state: 'saved' | 'dirty' | 'saving' | 'conflict' | 'error', text: string) => {
+    if (saveBadge) {
+      saveBadge.dataset.state = state;
+      saveBadge.textContent = text;
+    }
+    if (statsLabel) {
+      const { words, chars } = countWordsAndChars(raw);
+      statsLabel.textContent = `${words.toLocaleString('fa')} واژه · ${chars.toLocaleString('fa')} نویسه`;
+    }
+  };
+
   const syncOriginal = () => {
     originalButton.hidden = !!libraryId || raw === canonical;
     document.querySelector<HTMLButtonElement>('[data-save]')!.hidden = !dirty;
@@ -102,6 +149,449 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     document.querySelector<HTMLButtonElement>('[data-reset]')!.hidden =
       !!libraryId || raw === canonical;
   };
+
+  const updateSyncBanner = () => {
+    if (stopped && mergeRemoteHash) {
+      syncBanner.dataset.bannerMode = 'conflict';
+      syncBannerText.textContent =
+        'تغییر همزمان رخ داد؛ نسخهٔ ذخیره‌شدهٔ سرور از پیش‌نویس شما جلوتر است.';
+      syncBannerAction.textContent = 'رفع تداخل ذخیره';
+      syncBanner.hidden = false;
+      return;
+    }
+    const rebaseInfo = detectRebaseNeeded(
+      { canonical: { current_hash: canonicalHash }, fork: hasFork ? { base_hash: forkBaseHash } : null },
+      !!libraryId,
+    );
+    if (rebaseInfo.needed) {
+      syncBanner.dataset.bannerMode = 'rebase';
+      syncBannerText.textContent = 'نسخهٔ رسمی این یادداشت به‌روز شده است.';
+      syncBannerAction.textContent = 'مقایسه و همگام‌سازی';
+      syncBanner.hidden = false;
+      return;
+    }
+    delete syncBanner.dataset.bannerMode;
+    syncBanner.hidden = true;
+  };
+
+  const say = (text: string) => {
+    status.textContent = text;
+  };
+
+  function context(
+    target: HTMLElement,
+    scope: string,
+    content: string | undefined,
+    version: string,
+    unsaved = false,
+  ) {
+    target.dataset.aiScope = scope;
+    target.dataset.aiHash = version;
+    if (content === undefined) delete target.dataset.aiRaw;
+    else target.dataset.aiRaw = content;
+    target.dataset.aiDirty = String(unsaved);
+    document.dispatchEvent(new Event('garden:context-change'));
+  }
+
+  let loaded: any;
+  let loadPending: Promise<any> | undefined;
+  async function load() {
+    if (loaded) return loaded;
+    if (loadPending) return loadPending;
+    loadPending = loadFresh();
+    try {
+      return (loaded = await loadPending);
+    } finally {
+      loadPending = undefined;
+    }
+  }
+
+  async function fetchServerNote() {
+    return api(
+      libraryId
+        ? '/library/items/' + encodeURIComponent(libraryId)
+        : '/workspace/notes/' + encodeURIComponent(slug),
+    );
+  }
+
+  async function loadFresh() {
+    const epoch = identityEpoch;
+    const response = await fetchServerNote();
+    if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد؛ صفحه را دوباره باز کنید.');
+    const data = libraryId
+      ? {
+          canonical: { content: response.content, current_hash: response.current_hash },
+          fork: {
+            custom_content: response.content,
+            current_hash: response.current_hash,
+            base_hash: response.current_hash,
+          },
+        }
+      : response;
+    canonical = data.canonical.content;
+    canonicalHash = data.canonical.current_hash;
+    raw = data.fork?.custom_content ?? canonical;
+    hash = data.fork?.current_hash ?? canonicalHash;
+    forkBaseHash = data.fork?.base_hash ?? canonicalHash;
+    hasFork = !!data.fork;
+    syncOriginal();
+    updateSyncBanner();
+    return data;
+  }
+
+  const previews = createPreviewRenderer(async (content: string, blocks: boolean) => {
+    const epoch = identityEpoch;
+    const response = await fetch('/api/preview', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'X-Requested-With': 'MathGarden', ...(blocks ? { 'X-Preview-Blocks': '1' } : {}) },
+      body: content,
+    });
+    if (!response.ok) throw new Error('پیش‌نمایش موقتاً در دسترس نیست.');
+    const result = await response.json();
+    if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد.');
+    return result;
+  });
+  const previewHtml = (content: string) => previews.render(content);
+
+  async function render(content: string, target: HTMLElement) {
+    const seq = ++previewSeq;
+    const html = await previewHtml(content);
+    if (seq === previewSeq) target.innerHTML = html;
+  }
+
+  function scheduleSplitPreview(delay = 350) {
+    if (!splitEnabled || !root.classList.contains('is-editing')) return;
+    clearTimeout(splitTimer);
+    if (livePreviewState) livePreviewState.textContent = 'در حال همگام‌سازی…';
+    const seq = ++splitPreviewSeq;
+    const snapshot = raw;
+    const epoch = identityEpoch;
+    splitTimer = setTimeout(() => {
+      void previewHtml(snapshot)
+        .then((html) => {
+          if (seq !== splitPreviewSeq || epoch !== identityEpoch || !livePreviewBody.isConnected) return;
+          livePreviewBody.innerHTML = html;
+          if (livePreviewState) livePreviewState.textContent = 'به‌روز';
+        })
+        .catch(() => {
+          if (seq !== splitPreviewSeq || epoch !== identityEpoch) return;
+          if (livePreviewState) livePreviewState.textContent = 'پیش‌نمایش موقتاً ناموفق';
+        });
+    }, delay);
+  }
+
+  const persistRemote = async (content: string, expected_hash: string) => {
+    const epoch = identityEpoch;
+    const fork = await api(
+      libraryId
+        ? '/library/items/' + encodeURIComponent(libraryId)
+        : '/notes/' + encodeURIComponent(slug) + '/fork',
+      { content, expected_hash },
+      libraryId ? 'PATCH' : 'POST',
+    );
+    if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد.');
+    return fork;
+  };
+
+  function makeAutosaver(initialHash: string) {
+    return createAutosaver(initialHash, async (content, expected_hash) => {
+      say('در حال ذخیره…');
+      updateMeta('saving', 'در حال ذخیره…');
+      try {
+        const fork = await persistRemote(content, expected_hash);
+        hash = fork.current_hash;
+        hasFork = true;
+        if (fork.base_hash) forkBaseHash = fork.base_hash;
+        dirty = raw !== content;
+        syncOriginal();
+        updateSyncBanner();
+        updateMeta(dirty ? 'dirty' : 'saved', dirty ? 'تغییرات ذخیره‌نشده' : 'ذخیره‌شده');
+        context(root.querySelector<HTMLElement>('[data-editor]')!, 'personal', raw, hash, dirty);
+        say(dirty ? 'تغییر جدید در انتظار ذخیره' : 'ذخیره شد — نسخهٔ شخصی شما');
+        return fork;
+      } catch (error) {
+        const statusCode = error instanceof ApiError ? error.status : 0;
+        stopped = [401, 403, 409].includes(statusCode);
+        updateMeta(
+          statusCode === 409 ? 'conflict' : 'error',
+          statusCode === 409 ? 'تداخل نسخه' : 'خطا در ذخیره',
+        );
+        handle(error);
+        if (statusCode === 409) {
+          void handleConflictRecovery();
+        }
+        throw error;
+      }
+    });
+  }
+
+  async function save() {
+    if (!autosave || stopped) {
+      throw new Error('برای ادامهٔ ذخیره، تداخل نسخه را در پنجرهٔ مقایسه برطرف کنید.');
+    }
+    clearTimeout(timer);
+    if (!dirty) return;
+    await autosave(raw);
+  }
+
+  function handle(error: unknown) {
+    say(message(error));
+  }
+
+  // Merge / Conflict / Rebase Dialog elements & handlers
+  const mergeDialog = root.querySelector<HTMLDialogElement>('[data-merge-dialog]')!;
+  const mergeTitle = root.querySelector<HTMLElement>('[data-merge-title]')!;
+  const mergeDesc = root.querySelector<HTMLElement>('[data-merge-desc]')!;
+  const mergeStats = root.querySelector<HTMLElement>('[data-merge-stats]')!;
+  const mergeLabelA = root.querySelector<HTMLElement>('[data-merge-label-a]')!;
+  const mergeLabelB = root.querySelector<HTMLElement>('[data-merge-label-b]')!;
+  const mergeHost = root.querySelector<HTMLElement>('[data-merge-host]')!;
+  const mergeStatus = root.querySelector<HTMLElement>('[data-merge-status]')!;
+  const mergeApplyButton = root.querySelector<HTMLButtonElement>('[data-merge-apply]')!;
+  const mergeUseRemoteButton = root.querySelector<HTMLButtonElement>('[data-merge-use-remote]')!;
+  const mergeCopyButton = root.querySelector<HTMLButtonElement>('[data-merge-copy]')!;
+
+  function cleanupMerge() {
+    mergeView?.destroy();
+    mergeView = undefined;
+    mergeHost.replaceChildren();
+    mergeStatus.textContent = '';
+  }
+
+  mergeDialog.addEventListener('close', () => {
+    cleanupMerge();
+  });
+
+  for (const btn of root.querySelectorAll('[data-merge-close], [data-merge-cancel]')) {
+    btn.addEventListener('click', () => mergeDialog.close());
+  }
+
+  async function openMergeDialog(options: {
+    mode: 'conflict' | 'rebase';
+    remoteContent: string;
+    remoteHash: string;
+  }) {
+    mergeMode = options.mode;
+    mergeRemoteContent = options.remoteContent;
+    mergeRemoteHash = options.remoteHash;
+
+    const stats = summarizeDiffStats(options.remoteContent, raw);
+    mergeStats.textContent = stats.changed
+      ? `+${stats.added.toLocaleString('fa')} افزوده · -${stats.removed.toLocaleString('fa')} حذف`
+      : 'متن‌ها یکسان‌اند';
+    mergeStats.hidden = false;
+
+    if (options.mode === 'conflict') {
+      mergeTitle.textContent = 'رفع تداخل ذخیره';
+      mergeDesc.textContent =
+        'نسخهٔ ذخیره‌شده روی سرور از زمان شروع ویرایش شما تغییر کرده است. تغییرات هر بخش را با کلید فلش منتقل یا در ستون پیش‌نویس خود ویرایش و ذخیره کنید.';
+      mergeLabelA.textContent = 'نسخهٔ جدید سرور (فقط خواندنی)';
+      mergeLabelB.textContent = 'پیش‌نویس فعلی شما (قابل ویرایش)';
+      mergeApplyButton.textContent = 'ذخیرهٔ نسخهٔ ادغام‌شده';
+    } else {
+      mergeTitle.textContent = 'مقایسه و همگام‌سازی با نسخهٔ رسمی';
+      mergeDesc.textContent =
+        'نسخهٔ رسمی این یادداشت به‌روزرسانی شده است. نسخهٔ رسمی جدید را با ویرایش شخصی خود مقایسه کرده و مبنا را همگام‌سازی کنید.';
+      mergeLabelA.textContent = 'نسخهٔ رسمی تازه (فقط خواندنی)';
+      mergeLabelB.textContent = 'نسخهٔ شخصی شما (قابل ویرایش)';
+      mergeApplyButton.textContent = 'اعمال ادغام و همگام‌سازی';
+    }
+
+    cleanupMerge();
+    if (!mergeDialog.open) mergeDialog.showModal();
+    mergeStatus.textContent = 'در حال آماده‌سازی مقایسه…';
+
+    try {
+      const [{ MergeView }, { basicSetup }, { markdown }, { EditorState }, { EditorView }] =
+        await Promise.all([
+          import('@codemirror/merge'),
+          import('codemirror'),
+          import('@codemirror/lang-markdown'),
+          import('@codemirror/state'),
+          import('@codemirror/view'),
+        ]);
+      if (!mergeDialog.open) return;
+
+      const sharedExt = [
+        markdown(),
+        EditorView.lineWrapping,
+        EditorView.perLineTextDirection.of(true),
+      ];
+      mergeView = new MergeView({
+        parent: mergeHost,
+        a: {
+          doc: options.remoteContent,
+          extensions: [...sharedExt, EditorState.readOnly.of(true), EditorView.editable.of(false)],
+        },
+        b: {
+          doc: raw,
+          extensions: [basicSetup, ...sharedExt],
+        },
+        revertControls: 'a-to-b',
+        highlightChanges: true,
+        gutter: true,
+      });
+      mergeStatus.textContent = '';
+    } catch (error) {
+      mergeStatus.textContent = message(error);
+    }
+  }
+
+  async function handleConflictRecovery() {
+    try {
+      const latest = await fetchServerNote();
+      mergeRemoteContent = libraryId
+        ? latest.content
+        : latest.fork?.custom_content ?? latest.canonical.content;
+      mergeRemoteHash = libraryId
+        ? latest.current_hash
+        : latest.fork?.current_hash ?? latest.canonical.current_hash;
+      if (!libraryId && latest.canonical) {
+        canonical = latest.canonical.content;
+        canonicalHash = latest.canonical.current_hash;
+      }
+      updateSyncBanner();
+      await openMergeDialog({
+        mode: 'conflict',
+        remoteContent: mergeRemoteContent,
+        remoteHash: mergeRemoteHash,
+      });
+    } catch (error) {
+      say(message(error));
+    }
+  }
+
+  mergeCopyButton.addEventListener('click', () => {
+    const content = mergeView ? mergeView.b.state.doc.toString() : raw;
+    void navigator.clipboard.writeText(content).then(() => {
+      showToast('متن پیش‌نویس در حافظه کپی شد.', { variant: 'info' });
+    });
+  });
+
+  mergeUseRemoteButton.addEventListener('click', () => {
+    if (!mergeView) return;
+    const remoteText = mergeView.a.state.doc.toString();
+    mergeView.b.dispatch({
+      changes: { from: 0, to: mergeView.b.state.doc.length, insert: remoteText },
+    });
+    mergeStatus.textContent = 'متن مرجع در پیش‌نویس شما جایگزین شد؛ برای ثبت نهایی ذخیره کنید.';
+  });
+
+  mergeApplyButton.addEventListener('click', () => {
+    void (async () => {
+      if (!mergeView || !mergeMode) return;
+      const mergedContent = mergeView.b.state.doc.toString();
+      mergeApplyButton.disabled = true;
+      mergeStatus.textContent = 'در حال ثبت نسخهٔ ادغام‌شده…';
+      try {
+        if (mergeMode === 'conflict') {
+          const saved = await persistRemote(mergedContent, mergeRemoteHash);
+          raw = mergedContent;
+          frontmatter = splitEditorMarkdown(raw).frontmatter;
+          hash = saved.current_hash;
+          hasFork = true;
+          dirty = false;
+          stopped = false;
+          autosave = makeAutosaver(hash);
+          syncBannerText.textContent = '';
+          mergeRemoteHash = '';
+          mergeRemoteContent = '';
+          showToast('تداخل با موفقیت برطرف و ذخیره شد.', { variant: 'success' });
+        } else {
+          const rebased = await api('/notes/' + encodeURIComponent(slug) + '/fork/rebase', {
+            content: mergedContent,
+            expected_hash: hash,
+            canonical_hash: mergeRemoteHash,
+          });
+          raw = mergedContent;
+          frontmatter = splitEditorMarkdown(raw).frontmatter;
+          canonical = mergeRemoteContent;
+          canonicalHash = mergeRemoteHash;
+          forkBaseHash = mergeRemoteHash;
+          hash = rebased.current_hash;
+          hasFork = true;
+          dirty = false;
+          stopped = false;
+          autosave = makeAutosaver(hash);
+          showToast('نسخهٔ شخصی با آخرین تغییرات رسمی همگام شد.', { variant: 'success' });
+        }
+
+        if (view) {
+          suppressingDocChange = true;
+          try {
+            const nextBody = raw.slice(frontmatter.length);
+            view.dispatch({
+              changes: { from: 0, to: view.state.doc.length, insert: nextBody },
+            });
+          } finally {
+            suppressingDocChange = false;
+          }
+          const properties = root.querySelector<HTMLTextAreaElement>('[data-properties]');
+          if (properties) {
+            properties.value =
+              raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1] ??
+              'title: ""\ntags: []\naliases: []';
+          }
+          scheduleSplitPreview(0);
+        } else if (!article.hidden) {
+          await render(raw, article);
+        }
+
+        syncOriginal();
+        updateSyncBanner();
+        updateMeta('saved', 'ذخیره‌شده');
+        context(
+          view ? root.querySelector<HTMLElement>('[data-editor]')! : article,
+          hasFork ? 'personal' : 'canonical',
+          raw,
+          hash,
+          false,
+        );
+        say('ذخیره و همگام‌سازی شد.');
+        mergeDialog.close();
+      } catch (error) {
+        mergeStatus.textContent = message(error);
+      } finally {
+        mergeApplyButton.disabled = false;
+      }
+    })();
+  });
+
+  syncBannerAction.addEventListener('click', () => {
+    void (async () => {
+      const latest = await fetchServerNote();
+      if (syncBanner.dataset.bannerMode === 'conflict') {
+        const rContent = libraryId
+          ? latest.content
+          : latest.fork?.custom_content ?? latest.canonical.content;
+        const rHash = libraryId
+          ? latest.current_hash
+          : latest.fork?.current_hash ?? latest.canonical.current_hash;
+        await openMergeDialog({ mode: 'conflict', remoteContent: rContent, remoteHash: rHash });
+        return;
+      }
+      canonical = latest.canonical.content;
+      canonicalHash = latest.canonical.current_hash;
+      await openMergeDialog({
+        mode: 'rebase',
+        remoteContent: canonical,
+        remoteHash: canonicalHash,
+      });
+    })().catch(handle);
+  });
+
+  function toggleSplitPreview() {
+    splitEnabled = !splitEnabled;
+    try {
+      localStorage.setItem('garden-editor-split', String(splitEnabled));
+    } catch {}
+    updateToolbar();
+    if (splitEnabled) scheduleSplitPreview(0);
+  }
+  splitButton?.addEventListener('click', toggleSplitPreview);
+
   const showReading = async () => {
     if (!view || !root.classList.contains('is-editing') || viewButton.disabled) return;
     viewButton.disabled = true;
@@ -132,6 +622,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       viewButton.removeAttribute('aria-busy');
     }
   };
+
   function modeSwitch(readOnly: boolean) {
     view!.dispatch({ effects: mode.reconfigure(readOnlyExtension(readOnly)) });
     document
@@ -140,11 +631,14 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     viewButton.setAttribute('aria-pressed', String(readOnly));
     root.classList.toggle('is-editing', !readOnly);
     updateToolbar();
+    if (!readOnly && splitEnabled) scheduleSplitPreview(0);
   }
+
   viewButton.addEventListener('click', () => {
     userInteracted = true;
     void showReading().catch(handle);
   });
+
   originalButton.addEventListener('click', () => {
     userInteracted = true;
     void (async () => {
@@ -162,84 +656,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       say('');
     })().catch(handle);
   });
-  const say = (text: string) => (status.textContent = text);
-  function context(
-    target: HTMLElement,
-    scope: string,
-    content: string | undefined,
-    version: string,
-    unsaved = false,
-  ) {
-    target.dataset.aiScope = scope;
-    target.dataset.aiHash = version;
-    if (content === undefined) delete target.dataset.aiRaw;
-    else target.dataset.aiRaw = content;
-    target.dataset.aiDirty = String(unsaved);
-    document.dispatchEvent(new Event('garden:context-change'));
-  }
-  let loaded: any;
-  let loadPending: Promise<any> | undefined;
-  async function load() {
-    if (loaded) return loaded;
-    if (loadPending) return loadPending;
-    loadPending = loadFresh();
-    try {
-      return (loaded = await loadPending);
-    } finally {
-      loadPending = undefined;
-    }
-  }
-  async function loadFresh() {
-    const epoch = identityEpoch;
-    const response = await api(
-      libraryId
-        ? '/library/items/' + encodeURIComponent(libraryId)
-        : '/workspace/notes/' + encodeURIComponent(slug),
-    );
-    if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد؛ صفحه را دوباره باز کنید.');
-    const data = libraryId
-      ? {
-          canonical: { content: response.content, current_hash: response.current_hash },
-          fork: { custom_content: response.content, current_hash: response.current_hash },
-        }
-      : response;
-    canonical = data.canonical.content;
-    raw = data.fork?.custom_content ?? canonical;
-    hash = data.fork?.current_hash ?? data.canonical.current_hash;
-    hasFork = !!data.fork;
-    syncOriginal();
-    return data;
-  }
-  const previews = createPreviewRenderer(async (content: string, blocks: boolean) => {
-    const epoch = identityEpoch;
-    const response = await fetch('/api/preview', {
-      method: 'POST',
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: { 'X-Requested-With': 'MathGarden', ...(blocks ? { 'X-Preview-Blocks': '1' } : {}) },
-      body: content,
-    });
-    if (!response.ok) throw new Error('پیش‌نمایش موقتاً در دسترس نیست.');
-    const result = await response.json();
-    if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد.');
-    return result;
-  });
-  const previewHtml = (content: string) => previews.render(content);
-  async function render(content: string, target: HTMLElement) {
-    const seq = ++previewSeq;
-    const html = await previewHtml(content);
-    if (seq === previewSeq) target.innerHTML = html;
-  }
-  async function save() {
-    if (!autosave || stopped)
-      throw new Error('برای ادامهٔ ذخیره، متن را دریافت و صفحه را دوباره بارگذاری کنید.');
-    clearTimeout(timer);
-    if (!dirty) return;
-    await autosave(raw);
-  }
-  function handle(error: unknown) {
-    say(message(error));
-  }
+
   const editorModules = Promise.all([
     import('codemirror'),
     import('@codemirror/lang-markdown'),
@@ -247,6 +664,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     import('mathlive'),
     import('@lezer/markdown'),
   ]);
+
   document.querySelector('[data-edit]')!.addEventListener('click', async () => {
     const epoch = identityEpoch;
     userInteracted = true;
@@ -265,6 +683,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
         activateEditor({ article, panel, indicator: document.querySelector('.note-status') });
         modeSwitch(false);
         syncOriginal();
+        updateMeta(dirty ? 'dirty' : 'saved', dirty ? 'تغییرات ذخیره‌نشده' : 'ذخیره‌شده');
         context(article, 'personal', raw, hash, dirty);
         view.focus();
         return;
@@ -293,35 +712,11 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       MathfieldElement.soundsDirectory = null;
       const math = new MathfieldElement();
       math.setAttribute('aria-label', 'ورود فرمول ریاضی');
-      autosave = createAutosaver(hash, async (content, expected_hash) => {
-        say('در حال ذخیره…');
-        try {
-          const epoch = identityEpoch;
-          const fork = await api(
-            libraryId
-              ? '/library/items/' + encodeURIComponent(libraryId)
-              : '/notes/' + encodeURIComponent(slug) + '/fork',
-            { content, expected_hash },
-            libraryId ? 'PATCH' : 'POST',
-          );
-          if (epoch !== identityEpoch) throw new Error('حساب تغییر کرد.');
-          hash = fork.current_hash;
-          hasFork = true;
-          dirty = raw !== content;
-          syncOriginal();
-          context(root.querySelector<HTMLElement>('[data-editor]')!, 'personal', raw, hash, dirty);
-          say(dirty ? 'تغییر جدید در انتظار ذخیره' : 'ذخیره شد — نسخهٔ شخصی شما');
-          return fork;
-        } catch (error) {
-          stopped =
-            error instanceof Error &&
-            'status' in error &&
-            [401, 403, 409].includes(Number(error.status));
-          handle(error);
-          throw error;
-        }
-      });
-      const propertiesDetails = root.querySelector<HTMLDetailsElement>('.note-properties')!;
+      autosave = makeAutosaver(hash);
+
+      const propertiesDetails = root.querySelector<HTMLDetailsElement>(
+        '.editor-frontmatter-panel',
+      )!;
       const properties = root.querySelector<HTMLTextAreaElement>('[data-properties]')!;
       const syncProperties = () => {
         properties.value =
@@ -365,7 +760,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
           EditorState.tabSize.of(2),
           EditorView.contentAttributes.of({ 'aria-label': 'متن خام Markdown', dir: 'rtl' }),
           EditorView.updateListener.of((update) => {
-            if (!update.docChanged) return;
+            if (!update.docChanged || suppressingDocChange) return;
             const changes: { from: number; to: number; insert: string }[] = [];
             update.changes.iterChanges((from, to, _from, _to, insert) =>
               changes.push({ from, to, insert: insert.toString() }),
@@ -373,13 +768,17 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
             raw = frontmatter + applyRawChanges(raw.slice(frontmatter.length), changes);
             dirty = true;
             syncOriginal();
+            updateMeta('dirty', 'تغییرات ذخیره‌نشده');
             if (!propertiesDetails.open) syncProperties();
             context(root.querySelector<HTMLElement>('[data-editor]')!, 'personal', raw, hash, true);
             say('تغییرات ذخیره‌نشده');
+            scheduleSplitPreview();
             clearTimeout(timer);
-            timer = setTimeout(() => {
-              void save().catch(handle);
-            }, 1500);
+            if (!stopped) {
+              timer = setTimeout(() => {
+                void save().catch(handle);
+              }, 1500);
+            }
           }),
         ],
       });
@@ -396,12 +795,16 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
           frontmatter = splitEditorMarkdown(raw).frontmatter;
           dirty = true;
           syncOriginal();
+          updateMeta('dirty', 'ویژگی‌ها تغییر کردند');
           context(root.querySelector<HTMLElement>('[data-editor]')!, 'personal', raw, hash, true);
           say('ویژگی‌ها تغییر کردند؛ در انتظار ذخیره');
+          scheduleSplitPreview();
           clearTimeout(timer);
-          timer = setTimeout(() => {
-            void save().catch(handle);
-          }, 1500);
+          if (!stopped) {
+            timer = setTimeout(() => {
+              void save().catch(handle);
+            }, 1500);
+          }
         } catch (error) {
           handle(error);
         }
@@ -409,6 +812,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
 
       activateEditor({ article, panel, indicator: document.querySelector('.note-status') });
       modeSwitch(false);
+      updateMeta(dirty ? 'dirty' : 'saved', dirty ? 'تغییرات ذخیره‌نشده' : 'ذخیره‌شده');
       context(root.querySelector<HTMLElement>('[data-editor]')!, 'personal', raw, hash, dirty);
       article.hidden = true;
       panel.hidden = false;
@@ -421,7 +825,13 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       editButton.removeAttribute('aria-busy');
     }
   });
+
   const shareDialog = root.querySelector<HTMLDialogElement>('[data-share-dialog]')!;
+  const proposalDiffSummary = root.querySelector<HTMLElement>('[data-proposal-diff-summary]')!;
+  const resetDialog = root.querySelector<HTMLDialogElement>('[data-reset-dialog]')!;
+  const resetStatus = root.querySelector<HTMLElement>('[data-reset-status]')!;
+  const resetConfirmButton = root.querySelector<HTMLButtonElement>('[data-reset-confirm]')!;
+
   async function finishEditing() {
     const button = document.querySelector<HTMLButtonElement>('[data-save]')!;
     button.disabled = true;
@@ -438,16 +848,27 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     }
   }
   document.querySelector('[data-save]')!.addEventListener('click', () => void finishEditing());
+
   shareButton.addEventListener('click', () => {
     void (async () => {
       const snapshot = raw;
       if (dirty) await save();
       if (raw !== snapshot || dirty)
         throw new Error('متن هنگام ذخیره تغییر کرد؛ دوباره تلاش کنید.');
+      const stats = summarizeDiffStats(canonical, raw);
+      proposalDiffSummary.textContent = stats.changed
+        ? `خلاصهٔ تغییرات شما: +${stats.added.toLocaleString('fa')} خط افزوده · -${stats.removed.toLocaleString('fa')} خط حذف نسبت به نسخهٔ رسمی`
+        : 'هیچ تفاوتی نسبت به نسخهٔ رسمی وجود ندارد.';
+      proposalDiffSummary.hidden = false;
+      root.querySelector('[data-share-status]')!.textContent = '';
       shareDialog.showModal();
     })().catch(handle);
   });
-  root.querySelector('[data-share-skip]')!.addEventListener('click', () => shareDialog.close());
+
+  for (const closeEl of root.querySelectorAll('[data-share-skip], [data-share-close]')) {
+    closeEl.addEventListener('click', () => shareDialog.close());
+  }
+
   for (const button of root.querySelectorAll<HTMLElement>('[data-mode]'))
     button.addEventListener('click', async () => {
       try {
@@ -480,6 +901,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
         handle(error);
       }
     });
+
   const bookmark = document.querySelector<HTMLButtonElement>('[data-bookmark]')!;
   let bookmarkTouched = false;
   const mark = (selected: boolean) => {
@@ -499,6 +921,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
         })
         .catch(() => {});
     });
+
   bookmark.addEventListener('click', async () => {
     bookmarkTouched = true;
     const selected = bookmark.getAttribute('aria-pressed') === 'true';
@@ -528,6 +951,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       bookmark.removeAttribute('aria-busy');
     }
   });
+
   root
     .querySelector<HTMLFormElement>('[data-proposal-form]')!
     .addEventListener('submit', async (event) => {
@@ -540,7 +964,10 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
           slug,
           comment: new FormData(form).get('comment') || 'پیشنهاد اصلاح یادداشت',
         });
-        say('پیشنهاد برای مدیر ارسال شد؛ نسخهٔ رسمی هنوز تغییر نکرده است.');
+        const okMsg = 'پیشنهاد برای بازبینی مؤلف ارسال شد؛ نسخهٔ رسمی هنوز تغییر نکرده است.';
+        say(okMsg);
+        showToast('پیشنهاد اصلاح ارسال شد.', { variant: 'success' });
+        form.reset();
         shareDialog.close();
       } catch (error) {
         root.querySelector('[data-share-status]')!.textContent = message(error);
@@ -548,17 +975,29 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
         button.disabled = false;
       }
     });
-  document.querySelector('[data-reset]')!.addEventListener('click', async () => {
-    if (!confirm('نسخهٔ شخصی به اصل برگردد؟ تاریخچه محفوظ می‌ماند.')) return;
+
+  document.querySelector('[data-reset]')!.addEventListener('click', () => {
+    resetStatus.textContent = '';
+    resetDialog.showModal();
+  });
+  for (const cancel of root.querySelectorAll('[data-reset-cancel]')) {
+    cancel.addEventListener('click', () => resetDialog.close());
+  }
+  resetConfirmButton.addEventListener('click', async () => {
+    resetConfirmButton.disabled = true;
+    resetStatus.textContent = 'در حال بازنشانی…';
     try {
       if (dirty) await save();
       await api('/notes/' + encodeURIComponent(slug) + '/fork/reset', { expected_hash: hash });
       dirty = false;
+      resetDialog.close();
       location.reload();
     } catch (error) {
-      handle(error);
+      resetStatus.textContent = message(error);
+      resetConfirmButton.disabled = false;
     }
   });
+
   document.addEventListener('garden:apply-answer', (event) => {
     const detail = (event as CustomEvent).detail;
     if (detail.slug === slug && view) {
@@ -570,6 +1009,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       view.contentDOM.focus({ preventScroll: true });
     }
   });
+
   document.addEventListener(
     'keydown',
     (event) => {
@@ -590,6 +1030,14 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
         void finishEditing();
       } else if (
         (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === 'p' &&
+        editing
+      ) {
+        event.preventDefault();
+        toggleSplitPreview();
+      } else if (
+        (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === 'e' &&
         (!typing || inEditor)
       ) {
@@ -607,6 +1055,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     },
     true,
   );
+
   void (async () => {
     try {
       const user = await getSession();
@@ -632,6 +1081,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       /* Anonymous readers retain the public version; explicit edit reports auth errors. */
     }
   })();
+
   const header = document.querySelector('[data-note-header-actions]');
   if (header) {
     header.append(root.querySelector('.note-mode')!, document.querySelector('[data-save]')!);
@@ -644,6 +1094,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
   }
   const toolbarSlot = document.querySelector('[data-editor-toolbar-slot]');
   if (toolbarSlot) toolbarSlot.append(toolbar);
+
   document.addEventListener('garden:flush-note', (event) => {
     const detail = (event as CustomEvent).detail;
     void (async () => {
@@ -654,6 +1105,7 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
       return { content: raw, hash };
     })().then(detail.resolve, detail.reject);
   });
+
   document.addEventListener('garden:identity', (event) => {
     const next = (event as CustomEvent).detail?.id || '';
     if (identity === undefined) {
@@ -665,16 +1117,24 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     identity = next;
     identityEpoch++;
     previewSeq++;
+    splitPreviewSeq++;
     userInteracted = true;
     stopped = true;
     dirty = false;
     clearTimeout(timer);
+    clearTimeout(splitTimer);
+    cleanupMerge();
+    if (mergeDialog.open) mergeDialog.close();
+    if (resetDialog.open) resetDialog.close();
+    if (shareDialog.open) shareDialog.close();
     disposeToolbar?.();
     view?.destroy();
     view = undefined;
     raw = '';
     hash = '';
     canonical = '';
+    canonicalHash = '';
+    forkBaseHash = '';
     loaded = undefined;
     article.replaceChildren();
     delete article.dataset.aiRaw;
@@ -682,22 +1142,24 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     panel.replaceChildren();
     panel.hidden = true;
     toolbar.hidden = true;
+    syncBanner.hidden = true;
     location.reload();
   });
+
   let defaultApplied = false;
-  const applyDefaultMode = (mode: string | undefined) => {
-    if (!mode) return;
+  const applyDefaultMode = (modeName: string | undefined) => {
+    if (!modeName) return;
     if (defaultApplied) return;
     defaultApplied = true;
-    if (mode === 'edit' && !userInteracted)
+    if (modeName === 'edit' && !userInteracted)
       document.querySelector<HTMLButtonElement>('[data-edit]')?.click();
   };
   document.addEventListener('garden:preferences', (event) =>
     applyDefaultMode((event as CustomEvent).detail.default_mode),
   );
-  if (libraryId && new URLSearchParams(location.search).get('edit') === '1')
-    applyDefaultMode('edit');
+  if (new URLSearchParams(location.search).get('edit') === '1') applyDefaultMode('edit');
   applyDefaultMode(document.documentElement.dataset.defaultMode);
+
   window.addEventListener('beforeunload', (event) => {
     if (dirty) {
       event.preventDefault();

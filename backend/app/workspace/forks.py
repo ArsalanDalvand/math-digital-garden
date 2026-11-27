@@ -130,7 +130,16 @@ async def workspace(user: Me, db: DB) -> dict[str, object]:
         )
     ).all()
     return {
-        "forks": [{**fork_json(f), "slug": n.slug, "title": n.title} for f, n in rows],
+        "forks": [
+            {
+                **fork_json(f),
+                "slug": n.slug,
+                "title": n.title,
+                "canonical_hash": n.current_hash,
+                "needs_rebase": f.base_hash != n.current_hash,
+            }
+            for f, n in rows
+        ],
         "bookmarks": [{"slug": n.slug, "title": n.title} for n in marks],
     }
 

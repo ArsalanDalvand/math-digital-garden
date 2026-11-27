@@ -11,9 +11,33 @@ from sqlalchemy import select
 
 from backend.app.library.common import accessible
 from backend.app.library_models import LibraryComment
+from backend.app.models import User
 from backend.app.workspace import DB, Contract, Me, Writes, note_by_slug
 
 router = APIRouter()
+
+
+def _comment_author(user: User | None) -> tuple[str, str]:
+    if user is None:
+        return ("عضو باغ", "student")
+    name = (user.full_name or "").strip()
+    if not name:
+        name = "مؤلف" if user.role in {"author", "admin"} else "عضو باغ"
+    return (name, user.role)
+
+
+def _comment_dto(c: LibraryComment, author: User | None) -> dict[str, object]:
+    author_name, author_role = _comment_author(author)
+    return dict(
+        id=c.id,
+        content=c.content,
+        user_id=c.user_id,
+        author_name=author_name,
+        author_role=author_role,
+        created_at=c.created_at,
+        parent_id=c.parent_id,
+        resolved=c.resolved,
+    )
 
 
 class Comment(Contract):
@@ -53,26 +77,18 @@ async def comments(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ):
+    filters = [getattr(LibraryComment, k) == v for k, v in target[0].items()]
     rows = (
-        await db.scalars(
-            select(LibraryComment)
-            .filter_by(**target[0])
+        await db.execute(
+            select(LibraryComment, User)
+            .outerjoin(User, LibraryComment.user_id == User.id)
+            .where(*filters)
             .order_by(LibraryComment.created_at, LibraryComment.id)
             .offset(offset)
             .limit(limit)
         )
     ).all()
-    return [
-        dict(
-            id=c.id,
-            content=c.content,
-            user_id=c.user_id,
-            created_at=c.created_at,
-            parent_id=c.parent_id,
-            resolved=c.resolved,
-        )
-        for c in rows
-    ]
+    return [_comment_dto(c, author) for c, author in rows]
 
 
 @router.post("/canonical/{slug}/comments", status_code=201)
@@ -91,14 +107,7 @@ async def comment(target: CommentTarget, body: Comment, db: DB, user: Me, _: Wri
     )
     db.add(entry)
     await db.commit()
-    return dict(
-        id=entry.id,
-        content=entry.content,
-        user_id=entry.user_id,
-        created_at=entry.created_at,
-        parent_id=entry.parent_id,
-        resolved=entry.resolved,
-    )
+    return _comment_dto(entry, user)
 
 
 @router.patch("/canonical/{slug}/comments/{comment_id}")

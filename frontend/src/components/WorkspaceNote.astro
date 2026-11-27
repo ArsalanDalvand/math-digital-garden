@@ -1,33 +1,159 @@
 ---
-import {Bookmark} from 'lucide-react';
+import { AlertTriangle, Bookmark, X } from 'lucide-react';
 import EditorToolbar from './EditorToolbar.astro';
-interface Props {slug:string;libraryId?:string}
-const {slug,libraryId}=Astro.props;
+
+interface Props {
+  slug: string;
+  libraryId?: string;
+}
+const { slug, libraryId } = Astro.props;
 ---
+
 <section data-workspace-note={slug} data-library-id={libraryId} aria-label="فضای شخصی یادداشت">
   <div class="workspace-toolbar" data-od-id="personal-tools">
-  <div class="workspace-actions" data-note-actions>
-    <div class="note-mode" role="group" aria-label="حالت یادداشت">
-      <button type="button" aria-pressed="true" data-view>خواندن</button>
-      <button type="button" aria-pressed="false" title="نوشتن (Ctrl/⌘+E)" data-edit>نوشتن</button>
+    <div class="workspace-actions" data-note-actions>
+      <div class="note-mode" role="group" aria-label="حالت یادداشت">
+        <button type="button" aria-pressed="true" data-view>خواندن</button>
+        <button type="button" aria-pressed="false" title="نوشتن (Ctrl/⌘+E)" data-edit>نوشتن</button>
+      </div>
+      <button type="button" data-original hidden>نمایش نسخهٔ اصلی</button>
+      <button type="button" data-save hidden>ذخیره</button>
+      <button type="button" data-share hidden>پیشنهاد اصلاح</button>
+      <button type="button" data-reset hidden>بازنشانی به اصل</button>
+      <button type="button" data-bookmark aria-label="نشانه‌گذاری یادداشت" title="نشانه‌گذاری">
+        <Bookmark size={18} />
+        <span>نشانه‌گذاری</span>
+      </button>
     </div>
-    <button type="button" data-original hidden>نمایش نسخهٔ اصلی</button>
-    <button type="button" data-save hidden>ذخیره</button>
-    <button type="button" data-share hidden>پیشنهاد اصلاح</button>
-    <button type="button" data-reset hidden>بازنشانی به اصل</button>
-    <button type="button" data-bookmark aria-label="نشانه‌گذاری یادداشت" title="نشانه‌گذاری"><Bookmark size={18}/><span>نشانه‌گذاری</span></button>
   </div>
-  </div>
+
   <p role="status" aria-live="polite" data-save-status></p>
-  <EditorToolbar/>
-  <div data-editor-panel hidden>
-    <div data-editor aria-label="ویرایشگر Markdown"></div>
-    <p class="editor-hint">تغییرات پس از مکث کوتاه ذخیره می‌شوند. Ctrl/⌘+S برای ذخیره و Escape برای خواندن.</p>
-    <details class="note-properties"><summary>ویژگی‌های یادداشت — عنوان، تگ‌ها و نام‌های دیگر</summary><label>Properties (YAML)<textarea data-properties dir="ltr" aria-label="ویژگی‌های YAML یادداشت" spellcheck="false"></textarea></label><p>title، tags و aliases را اینجا تغییر دهید. ویژگی‌های دیگر نیز حفظ می‌شوند.</p><button type="button" data-apply-properties>اعمال ویژگی‌ها</button></details>
-    <article class="note" data-live-preview hidden></article>
+
+  <div class="editor-sync-banner" data-sync-banner hidden role="status" aria-live="polite">
+    <div class="editor-sync-banner-copy">
+      <AlertTriangle size={16} aria-hidden="true" />
+      <span data-sync-banner-text></span>
+    </div>
+    <button type="button" class="editor-sync-banner-btn" data-sync-banner-action>
+      مقایسه و همگام‌سازی
+    </button>
   </div>
-<dialog data-share-dialog aria-labelledby="share-title"><h2 id="share-title">یادداشت شما ذخیره شد</h2><p>می‌خواهید این تغییرات برای مدیر وب‌سایت هم ارسال شوند؟ نسخهٔ رسمی تنها پس از تأیید تغییر می‌کند.</p><form data-proposal-form><label>توضیح پیشنهاد (اختیاری)<textarea name="comment" maxlength="4000"></textarea></label><p role="status" data-share-status></p><div class="workspace-actions"><button type="button" data-share-skip>نه، فقط برای خودم</button><button type="submit">ارسال برای مدیر</button></div></form></dialog>
+
+  <EditorToolbar />
+
+  <div data-editor-panel hidden>
+    <div class="editor-workspace-grid" data-editor-layout="single">
+      <div class="editor-source-pane">
+        <div data-editor aria-label="ویرایشگر Markdown"></div>
+      </div>
+      <section
+        class="editor-live-preview"
+        data-live-preview
+        hidden
+        aria-label="پیش‌نمایش زنده یادداشت"
+      >
+        <header class="editor-preview-header">
+          <span>پیش‌نمایش زنده</span>
+          <span class="editor-preview-state" data-preview-state></span>
+        </header>
+        <article class="note" data-live-preview-body></article>
+      </section>
+    </div>
+
+    <div class="editor-footer" data-editor-footer>
+      <div class="editor-footer-metrics">
+        <span class="editor-save-badge" data-save-badge data-state="saved">ذخیره‌شده</span>
+        <span class="editor-stats" data-editor-stats>۰ واژه · ۰ نویسه</span>
+      </div>
+      <p class="editor-hint">Ctrl/⌘+S ذخیره · Ctrl/⌘+Shift+P پیش‌نمایش · Esc خواندن</p>
+    </div>
+
+    <details class="editor-frontmatter-panel">
+      <summary>ویژگی‌های یادداشت — عنوان، تگ‌ها و نام‌های دیگر</summary>
+      <label>
+        Properties (YAML)
+        <textarea data-properties dir="ltr" aria-label="ویژگی‌های YAML یادداشت" spellcheck="false"></textarea>
+      </label>
+      <p>title، tags و aliases را اینجا تغییر دهید. ویژگی‌های دیگر نیز حفظ می‌شوند.</p>
+      <button type="button" data-apply-properties>اعمال ویژگی‌ها</button>
+    </details>
+  </div>
+
+  <dialog data-share-dialog aria-labelledby="share-title">
+    <div class="dialog-header-row">
+      <h2 id="share-title">ارسال پیشنهاد اصلاح برای مؤلف</h2>
+      <button type="button" class="dialog-icon-close" data-share-close aria-label="بستن">
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+    <p>
+      تغییرات شخصی شما با متن رسمی مقایسه و برای بازبینی مؤلف ارسال می‌شود. نسخهٔ رسمی تنها پس از تأیید تغییر می‌کند.
+    </p>
+    <div class="proposal-diff-summary" data-proposal-diff-summary hidden></div>
+    <form data-proposal-form>
+      <label>
+        توضیح پیشنهاد (اختیاری)
+        <textarea
+          name="comment"
+          maxlength="4000"
+          placeholder="مثلاً: اصلاح فرمول قضیهٔ اول یا افزودن مثال روشن‌تر…"
+        ></textarea>
+      </label>
+      <p role="status" data-share-status></p>
+      <div class="workspace-actions">
+        <button type="button" data-share-skip>نه، فقط برای خودم</button>
+        <button type="submit">ارسال برای بررسی</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog data-merge-dialog aria-labelledby="merge-dialog-title">
+    <div class="dialog-header-row">
+      <h2 id="merge-dialog-title" data-merge-title>مقایسه و همگام‌سازی نسخه</h2>
+      <div class="merge-header-meta">
+        <span class="merge-stats-badge" data-merge-stats hidden></span>
+        <button type="button" class="dialog-icon-close" data-merge-close aria-label="بستن">
+          <X size={16} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+    <p class="merge-dialog-desc" data-merge-desc></p>
+    <div class="merge-pane-labels">
+      <span data-merge-label-a>نسخهٔ مرجع</span>
+      <span data-merge-label-b>نسخهٔ نهایی شما (قابل ویرایش)</span>
+    </div>
+    <div class="merge-editor-host" data-merge-host></div>
+    <p role="status" aria-live="polite" data-merge-status></p>
+    <div class="workspace-actions merge-dialog-actions">
+      <button type="button" class="garden-button-secondary" data-merge-copy>کپی متن من</button>
+      <button type="button" class="garden-button-secondary" data-merge-use-remote>
+        استفاده از نسخهٔ مرجع
+      </button>
+      <button type="button" class="garden-button-secondary" data-merge-cancel>انصراف</button>
+      <button type="button" class="garden-button-primary" data-merge-apply>
+        ذخیرهٔ نسخهٔ ادغام‌شده
+      </button>
+    </div>
+  </dialog>
+
+  <dialog data-reset-dialog aria-labelledby="reset-dialog-title">
+    <div class="dialog-header-row">
+      <h2 id="reset-dialog-title">بازنشانی به نسخهٔ رسمی</h2>
+      <button type="button" class="dialog-icon-close" data-reset-cancel aria-label="بستن">
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+    <p>
+      محتوای فعلی نسخهٔ شخصی شما جایگزین نسخهٔ رسمی می‌شود، اما تمام نسخه‌های قبلی در تاریخچه محفوظ می‌مانند.
+    </p>
+    <p role="status" aria-live="polite" data-reset-status></p>
+    <div class="workspace-actions">
+      <button type="button" data-reset-cancel>انصراف</button>
+      <button type="button" data-reset-confirm class="garden-button-danger">تأیید و بازنشانی</button>
+    </div>
+  </dialog>
 </section>
+
 <script>
   import '../scripts/workspace-note';
 </script>

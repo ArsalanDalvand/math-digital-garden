@@ -1,133 +1,613 @@
 ---
 import Reader from '../layouts/Reader.astro';
 ---
-<Reader title="جزوه‌های من">
-  <p><a href="/account">حساب کاربری</a> · <a href="/search">همهٔ یادداشت‌ها</a></p>
-  <p role="status" data-workspace-status>فضای خصوصی شما؛ نسخه‌های شخصی فقط برای حساب شما هستند.</p>
-  <p data-workspace-auth-prompt hidden>برای دیدن فضای شخصی <a href="/account">وارد حساب شوید</a>.</p>
-  <div class="garden-row"><p role="status" aria-live="polite" data-workspace-feedback>در حال دریافت نسخه‌ها و نشانه‌ها…</p><button type="button" data-workspace-retry disabled hidden>تلاش دوباره برای نسخه‌ها و نشانه‌ها</button></div>
-  <div class="garden-row"><p role="status" aria-live="polite" data-proposals-feedback>در حال دریافت پیشنهادها…</p><button type="button" data-proposals-retry disabled hidden>تلاش دوباره برای پیشنهادها</button></div>
-  <section class="garden-panel" data-private-section aria-labelledby="forks-heading"><h2 id="forks-heading">نسخه‌های شخصی</h2><ul data-forks></ul><p data-forks-empty hidden>هنوز یادداشتی ویرایش نکرده‌اید. <a href="/search">یک یادداشت برای مطالعه و ویرایش پیدا کنید.</a></p></section>
-  <section class="garden-panel" data-private-section aria-labelledby="bookmarks-heading"><h2 id="bookmarks-heading">نشانه‌گذاری‌ها</h2><ul data-bookmarks></ul><p data-bookmarks-empty hidden>هنوز نشانه‌ای ندارید. از ابزارهای صفحهٔ مطالعه، یادداشت را نشانه‌گذاری کنید.</p></section>
-  <section class="garden-panel" data-private-section aria-labelledby="proposals-heading"><h2 id="proposals-heading">پیشنهادهای اصلاح من</h2><ul data-proposals></ul><p data-proposals-empty hidden>هنوز پیشنهاد اصلاحی نفرستاده‌اید. پس از ذخیرهٔ نسخهٔ شخصی می‌توانید پیشنهاد خود را برای مؤلف ارسال کنید.</p></section>
-  <section id="workspace-history" class="garden-panel" data-private-section data-history hidden aria-labelledby="history-heading" aria-busy="false">
-    <h2 id="history-heading" data-history-heading>تاریخچهٔ متن خام</h2>
-    <p role="status" aria-live="polite" data-history-status></p>
-    <div class="garden-row"><button type="button" data-history-retry hidden>تلاش دوباره برای تاریخچه</button><button type="button" data-history-close>بستن تاریخچه</button></div>
-    <div data-revisions></div>
-  </section>
+
+<Reader title="جزوه‌های من" hidePageHeading>
+  <div class="workspace-page-container">
+    <header class="workspace-page-header">
+      <div>
+        <h1>جزوه‌های من</h1>
+        <p role="status" data-workspace-status class="workspace-subhead">
+          فضای خصوصی شما؛ ویرایش‌های شخصی، نشانه‌گذاری‌ها و پیشنهادهای اصلاح فقط برای حساب شما نمایش داده می‌شوند.
+        </p>
+      </div>
+      <div class="workspace-header-links">
+        <a href="/library" class="workspace-action-btn">کتابخانهٔ شخصی</a>
+        <a href="/search" class="workspace-action-btn">جست‌وجوی یادداشت‌ها</a>
+      </div>
+    </header>
+
+    <div data-workspace-auth-prompt hidden>
+      <div>
+        <strong>ورود به فضای شخصی</strong>
+        <p>برای دیدن نسخه‌های شخصی، نشانه‌گذاری‌ها و تاریخچهٔ ویرایش‌ها ابتدا وارد حساب شوید.</p>
+      </div>
+      <a href="/account">ورود به حساب کاربری</a>
+    </div>
+
+    <div class="workspace-feedback-stack" data-private-section>
+      <div class="garden-row workspace-feedback-row">
+        <p role="status" aria-live="polite" data-workspace-feedback>در حال بررسی نشست…</p>
+        <button type="button" data-workspace-retry disabled hidden>تلاش دوباره</button>
+      </div>
+      <div class="garden-row workspace-feedback-row">
+        <p role="status" aria-live="polite" data-proposals-feedback></p>
+        <button type="button" data-proposals-retry disabled hidden>تلاش دوباره</button>
+      </div>
+    </div>
+
+    <div class="workspace-stats-grid" data-private-section data-workspace-stats hidden>
+      <div class="workspace-stat-card">
+        <span class="workspace-stat-label">نسخه‌های شخصی</span>
+        <strong class="workspace-stat-value" data-stat-forks>۰</strong>
+      </div>
+      <div class="workspace-stat-card">
+        <span class="workspace-stat-label">نشانه‌گذاری‌ها</span>
+        <strong class="workspace-stat-value" data-stat-bookmarks>۰</strong>
+      </div>
+      <div class="workspace-stat-card">
+        <span class="workspace-stat-label">پیشنهادهای اصلاح</span>
+        <strong class="workspace-stat-value" data-stat-proposals>۰</strong>
+      </div>
+    </div>
+
+    <div class="garden-panel workspace-filter-bar" data-private-section hidden data-workspace-filters>
+      <input
+        type="search"
+        data-workspace-search
+        placeholder="فیلتر بر اساس عنوان یا شناسهٔ یادداشت…"
+        aria-label="فیلتر نسخه‌ها، نشانه‌ها و پیشنهادها"
+      />
+      <div
+        class="review-filter-tabs"
+        data-proposal-status-filter
+        role="group"
+        aria-label="فیلتر وضعیت پیشنهادها"
+      >
+        <button type="button" data-status="all" aria-pressed="true">همه</button>
+        <button type="button" data-status="pending" aria-pressed="false">در انتظار</button>
+        <button type="button" data-status="approved" aria-pressed="false">تأییدشده</button>
+        <button type="button" data-status="changes_requested" aria-pressed="false">نیازمند اصلاح</button>
+        <button type="button" data-status="rejected" aria-pressed="false">ردشده</button>
+      </div>
+    </div>
+
+    <section
+      class="garden-panel workspace-section-panel"
+      data-private-section
+      aria-labelledby="forks-heading"
+    >
+      <h2 id="forks-heading">نسخه‌های شخصی</h2>
+      <ul class="workspace-list" data-forks></ul>
+      <p class="workspace-empty-state" data-forks-empty hidden>
+        نسخهٔ شخصی مطابق این فیلتر یافت نشد.{' '}
+        <a href="/search">یک یادداشت برای مطالعه و ویرایش پیدا کنید.</a>
+      </p>
+    </section>
+
+    <section
+      class="garden-panel workspace-section-panel"
+      data-private-section
+      aria-labelledby="bookmarks-heading"
+    >
+      <h2 id="bookmarks-heading">نشانه‌گذاری‌ها</h2>
+      <ul class="workspace-list" data-bookmarks></ul>
+      <p class="workspace-empty-state" data-bookmarks-empty hidden>
+        هنوز نشانه‌ای ندارید. از ابزارهای صفحهٔ مطالعه، یادداشت را نشانه‌گذاری کنید.
+      </p>
+    </section>
+
+    <section
+      class="garden-panel workspace-section-panel"
+      data-private-section
+      aria-labelledby="proposals-heading"
+    >
+      <h2 id="proposals-heading">پیشنهادهای اصلاح من</h2>
+      <ul class="workspace-list" data-proposals></ul>
+      <p class="workspace-empty-state" data-proposals-empty hidden>
+        هنوز پیشنهاد اصلاحی ثبت نشده است. پس از ذخیرهٔ نسخهٔ شخصی می‌توانید تغییر خود را برای مؤلف بفرستید.
+      </p>
+    </section>
+
+    <section
+      id="workspace-history"
+      class="garden-panel workspace-section-panel"
+      data-private-section
+      data-history
+      hidden
+      aria-labelledby="history-heading"
+      aria-busy="false"
+    >
+      <div class="history-compare-header">
+        <h2 id="history-heading" data-history-heading>تاریخچهٔ نسخه</h2>
+        <div class="garden-row">
+          <button type="button" data-history-retry hidden>تلاش دوباره</button>
+          <button type="button" class="workspace-action-btn" data-history-close>بستن تاریخچه</button>
+        </div>
+      </div>
+      <p role="status" aria-live="polite" data-history-status></p>
+      <div class="history-compare-panel" data-history-merge-wrap hidden>
+        <div class="history-compare-header">
+          <strong data-history-merge-title>مقایسه با نسخهٔ فعلی</strong>
+          <span class="merge-stats-badge" data-history-merge-stats></span>
+        </div>
+        <div class="merge-pane-labels">
+          <span>نسخهٔ قدیمی انتخاب‌شده</span>
+          <span>نسخهٔ شخصی فعلی</span>
+        </div>
+        <div class="history-merge-host" data-history-merge-host></div>
+      </div>
+      <div class="workspace-revisions-list" data-revisions></div>
+    </section>
+  </div>
 </Reader>
+
 <script>
-  import {api,message,ApiError} from '../scripts/api';
-  const status=document.querySelector<HTMLElement>('[data-workspace-status]')!;
-  let unauthenticated=false;
-  function showSignIn(){
-    unauthenticated=true;++historyRequest;
-    document.querySelector<HTMLElement>('[data-workspace-auth-prompt]')!.hidden=false;
-    document.querySelectorAll<HTMLElement>('[data-private-section]').forEach(section=>section.hidden=true);
-    document.querySelector('[data-forks]')!.replaceChildren();
-    document.querySelector('[data-bookmarks]')!.replaceChildren();
-    document.querySelector('[data-proposals]')!.replaceChildren();
-    for(const section of ['workspace','proposals']){
-      document.querySelector<HTMLButtonElement>('[data-'+section+'-retry]')!.hidden=true;
-      const fb=document.querySelector<HTMLElement>('[data-'+section+'-feedback]');
-      if(fb){fb.textContent='برای دیدن فضای شخصی وارد حساب شوید.';fb.hidden=true;}
+  import type { MergeView as CodeMirrorMergeView } from '@codemirror/merge';
+  import { summarizeDiffStats } from '../lib/editor-sync.mjs';
+  import { ApiError, api, message } from '../scripts/api';
+  import { getSession } from '../scripts/session';
+  import { showToast } from '../scripts/toast';
+  import { filterWorkspace, loadWorkspace } from '../scripts/workspace-model.mjs';
+
+  const status = document.querySelector<HTMLElement>('[data-workspace-status]')!;
+  const statsContainer = document.querySelector<HTMLElement>('[data-workspace-stats]')!;
+  const filtersContainer = document.querySelector<HTMLElement>('[data-workspace-filters]')!;
+  const searchInput = document.querySelector<HTMLInputElement>('[data-workspace-search]')!;
+  const proposalFilterBar = document.querySelector<HTMLElement>('[data-proposal-status-filter]')!;
+  const history = document.querySelector<HTMLElement>('[data-history]')!;
+  const historyStatus = document.querySelector<HTMLElement>('[data-history-status]')!;
+  const historyRetry = document.querySelector<HTMLButtonElement>('[data-history-retry]')!;
+  const historyMergeWrap = document.querySelector<HTMLElement>('[data-history-merge-wrap]')!;
+  const historyMergeTitle = document.querySelector<HTMLElement>('[data-history-merge-title]')!;
+  const historyMergeStats = document.querySelector<HTMLElement>('[data-history-merge-stats]')!;
+  const historyMergeHost = document.querySelector<HTMLElement>('[data-history-merge-host]')!;
+
+  const proposalStatusLabels: Record<string, string> = {
+    pending: 'در انتظار بررسی',
+    approved: 'تأییدشده',
+    rejected: 'ردشده',
+    changes_requested: 'نیازمند اصلاح',
+  };
+
+  let unauthenticated = false;
+  let workspaceData: { forks: any[]; bookmarks: any[] } = { forks: [], bookmarks: [] };
+  let proposalsData: any[] = [];
+  let searchQuery = '';
+  let proposalStatus = 'all';
+  let activeHistory: { item: any; button: HTMLButtonElement } | undefined;
+  let historyRequest = 0;
+  let historyMergeView: CodeMirrorMergeView | undefined;
+  let proposalMergeView: CodeMirrorMergeView | undefined;
+  let expandedProposalId: string | null = null;
+
+  function destroyHistoryMerge() {
+    historyMergeView?.destroy();
+    historyMergeView = undefined;
+    historyMergeHost.replaceChildren();
+    historyMergeWrap.hidden = true;
+  }
+
+  function destroyProposalMerge() {
+    proposalMergeView?.destroy();
+    proposalMergeView = undefined;
+  }
+
+  function showSignIn() {
+    unauthenticated = true;
+    ++historyRequest;
+    destroyHistoryMerge();
+    destroyProposalMerge();
+    document.querySelector<HTMLElement>('[data-workspace-auth-prompt]')!.hidden = false;
+    document
+      .querySelectorAll<HTMLElement>('[data-private-section]')
+      .forEach((section) => (section.hidden = true));
+    for (const key of ['forks', 'bookmarks', 'proposals']) {
+      document.querySelector(`[data-${key}]`)!.replaceChildren();
+    }
+    for (const section of ['workspace', 'proposals']) {
+      document.querySelector<HTMLButtonElement>(`[data-${section}-retry]`)!.hidden = true;
+      const fb = document.querySelector<HTMLElement>(`[data-${section}-feedback]`);
+      if (fb) fb.textContent = '';
     }
   }
-  function link(item:any, personal=false){const a=document.createElement('a');a.href='/notes/'+encodeURIComponent(item.slug)+(personal?'?personal=1':'');a.textContent=(item.title ?? item.slug).replace(/-/g, ' ');return a;}
-  const history=document.querySelector<HTMLElement>('[data-history]')!;
-  const historyStatus=document.querySelector<HTMLElement>('[data-history-status]')!;
-  const historyRetry=document.querySelector<HTMLButtonElement>('[data-history-retry]')!;
-  let activeHistory:{item:any,button:HTMLButtonElement}|undefined;
-  let historyRequest=0;
-  async function showHistory(item:any,button:HTMLButtonElement) {
-    const request=++historyRequest;
-    activeHistory?.button.setAttribute('aria-expanded','false');
-    activeHistory={item,button};button.setAttribute('aria-expanded','true');
-    history.hidden=false;history.setAttribute('aria-busy','true');
-    document.querySelector('[data-history-heading]')!.textContent='تاریخچهٔ '+(item.title ?? item.slug);
-    const target=document.querySelector('[data-revisions]')!;target.replaceChildren();
-    historyStatus.setAttribute('role','status');historyStatus.textContent='در حال دریافت تاریخچه…';
-    historyRetry.hidden=true;historyRetry.disabled=true;
-    try {
-      const revisions=await api('/workspace/forks/'+encodeURIComponent(item.id)+'/history');
-      if(request!==historyRequest || unauthenticated)return;
-      for(const revision of revisions) {
-        const detail=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
-        summary.textContent=new Date(revision.created_at).toLocaleString('fa');
-        pre.textContent=revision.content;pre.tabIndex=0;pre.dir='auto';
-        detail.append(summary,pre);target.append(detail);
-      }
-      historyStatus.textContent=revisions.length?'تاریخچه دریافت شد؛ برای خواندن متن هر نسخه، تاریخ آن را باز کنید.':'هنوز نسخه‌ای در تاریخچه ثبت نشده است.';
-    } catch(error) {
-      if(request!==historyRequest || unauthenticated)return;
-      if(error instanceof ApiError && error.status===401){showSignIn();return;}
-      historyStatus.textContent=message(error);historyStatus.setAttribute('role','alert');historyRetry.hidden=false;
-    } finally {if(request===historyRequest){history.setAttribute('aria-busy','false');historyRetry.disabled=false;}}
+
+  function buildNoteLink(item: any, suffix = '') {
+    const a = document.createElement('a');
+    a.href = '/notes/' + encodeURIComponent(item.slug) + suffix;
+    a.textContent = (item.title ?? item.slug).replace(/-/g, ' ');
+    return a;
   }
-  historyRetry.addEventListener('click',()=>{if(activeHistory)void showHistory(activeHistory.item,activeHistory.button);});
-  document.querySelector('[data-history-close]')!.addEventListener('click',()=>{
-    ++historyRequest;history.hidden=true;history.setAttribute('aria-busy','false');
-    activeHistory?.button.setAttribute('aria-expanded','false');activeHistory?.button.focus();
-  });
-  async function loadSection(section:'workspace'|'proposals') {
-    const feedback=document.querySelector<HTMLElement>('[data-'+section+'-feedback]')!;
-    const retry=document.querySelector<HTMLButtonElement>('[data-'+section+'-retry]')!;
-    retry.disabled=true; retry.setAttribute('aria-busy','true');
-    feedback.textContent=section==='workspace'?'در حال دریافت نسخه‌ها و نشانه‌ها…':'در حال دریافت پیشنهادها…';
-    feedback.setAttribute('role','status');
-    try {
-      const data=await api('/'+section);
-      if(unauthenticated)return;
-      if(section==='workspace') {
-        const workspace=data;
-        document.querySelector('[data-forks]')!.replaceChildren();
-        document.querySelector('[data-bookmarks]')!.replaceChildren();
-        for(const item of workspace.forks) {
-          const li=document.createElement('li');li.className='garden-row workspace-item-card';
-          li.append(link(item,true));
-          const button=document.createElement('button');button.textContent='تاریخچه';button.type='button';
-          button.className='workspace-action-btn';
-          button.setAttribute('aria-label','تاریخچهٔ '+(item.title ?? item.slug));
-          button.setAttribute('aria-controls','workspace-history');button.setAttribute('aria-expanded','false');
-          button.addEventListener('click',()=>showHistory(item,button));
-          li.append(button);document.querySelector('[data-forks]')!.append(li);
+
+  function renderFiltered() {
+    destroyProposalMerge();
+    const filtered = filterWorkspace(
+      {
+        forks: workspaceData.forks,
+        bookmarks: workspaceData.bookmarks,
+        proposals: proposalsData,
+      },
+      searchQuery,
+      proposalStatus,
+    );
+
+    document.querySelector<HTMLElement>('[data-stat-forks]')!.textContent =
+      workspaceData.forks.length.toLocaleString('fa');
+    document.querySelector<HTMLElement>('[data-stat-bookmarks]')!.textContent =
+      workspaceData.bookmarks.length.toLocaleString('fa');
+    document.querySelector<HTMLElement>('[data-stat-proposals]')!.textContent =
+      proposalsData.length.toLocaleString('fa');
+
+    // Forks
+    const forksList = document.querySelector<HTMLElement>('[data-forks]')!;
+    forksList.replaceChildren();
+    for (const item of filtered.forks) {
+      const li = document.createElement('li');
+      li.className = 'workspace-item-card';
+
+      const mainInfo = document.createElement('div');
+      mainInfo.className = 'workspace-item-main';
+      mainInfo.append(buildNoteLink(item, '?personal=1'));
+      const subRow = document.createElement('div');
+      subRow.className = 'workspace-item-meta';
+      if (item.updated_at) {
+        const dt = document.createElement('time');
+        dt.textContent = `آخرین ویرایش: ${new Date(item.updated_at).toLocaleString('fa')}`;
+        subRow.append(dt);
+      }
+      if (item.needs_rebase) {
+        const pill = document.createElement('span');
+        pill.className = 'workspace-rebase-pill';
+        pill.textContent = 'نسخهٔ رسمی به‌روز شده';
+        subRow.append(pill);
+      }
+      if (subRow.childElementCount > 0) mainInfo.append(subRow);
+
+      const actionGroup = document.createElement('div');
+      actionGroup.className = 'garden-row';
+      const editLink = document.createElement('a');
+      editLink.href = '/notes/' + encodeURIComponent(item.slug) + '?edit=1';
+      editLink.className = 'workspace-action-btn';
+      editLink.textContent = 'ویرایش';
+
+      const histBtn = document.createElement('button');
+      histBtn.textContent = 'تاریخچه و مقایسه';
+      histBtn.type = 'button';
+      histBtn.className = 'workspace-action-btn';
+      histBtn.setAttribute('aria-label', 'تاریخچهٔ ' + (item.title ?? item.slug));
+      histBtn.setAttribute('aria-controls', 'workspace-history');
+      histBtn.setAttribute('aria-expanded', 'false');
+      histBtn.addEventListener('click', () => void showHistory(item, histBtn));
+
+      actionGroup.append(editLink, histBtn);
+      li.append(mainInfo, actionGroup);
+      forksList.append(li);
+    }
+    document.querySelector<HTMLElement>('[data-forks-empty]')!.hidden = filtered.forks.length > 0;
+
+    // Bookmarks
+    const bookmarksList = document.querySelector<HTMLElement>('[data-bookmarks]')!;
+    bookmarksList.replaceChildren();
+    for (const item of filtered.bookmarks) {
+      const li = document.createElement('li');
+      li.className = 'workspace-item-card';
+      li.append(buildNoteLink(item));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'حذف نشانه';
+      remove.className = 'workspace-action-btn is-danger';
+      remove.addEventListener('click', async () => {
+        remove.disabled = true;
+        remove.setAttribute('aria-busy', 'true');
+        status.textContent = 'در حال حذف نشانه…';
+        try {
+          await api('/workspace/bookmarks/' + encodeURIComponent(item.slug), undefined, 'DELETE');
+          workspaceData.bookmarks = workspaceData.bookmarks.filter((b) => b.slug !== item.slug);
+          status.textContent = 'نشانه حذف شد.';
+          showToast('نشانه برداشته شد.', { variant: 'info' });
+          renderFiltered();
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) showSignIn();
+          else status.textContent = message(error);
+        } finally {
+          remove.disabled = false;
+          remove.removeAttribute('aria-busy');
         }
-        for(const item of workspace.bookmarks) {
-          const li=document.createElement('li');li.className='garden-row workspace-item-card';
-          li.append(link(item));
-          const remove=document.createElement('button');remove.type='button';remove.textContent='حذف نشانه';
-          remove.className='workspace-action-btn is-danger';
-          remove.addEventListener('click',async()=>{
-            remove.disabled=true;remove.setAttribute('aria-busy','true');
-            status.textContent='در حال حذف نشانه…';
-            try {
-              await api('/workspace/bookmarks/'+encodeURIComponent(item.slug),undefined,'DELETE');
-              li.remove();status.textContent='نشانه حذف شد.';
-              document.querySelector<HTMLElement>('[data-bookmarks-empty]')!.hidden=document.querySelector('[data-bookmarks]')!.childElementCount>0;
-            } catch(error) {if(error instanceof ApiError && error.status===401)showSignIn();else status.textContent=message(error);}
-            finally {remove.disabled=false;remove.setAttribute('aria-busy','false');}
+      });
+      li.append(remove);
+      bookmarksList.append(li);
+    }
+    document.querySelector<HTMLElement>('[data-bookmarks-empty]')!.hidden =
+      filtered.bookmarks.length > 0;
+
+    // Proposals
+    const proposalsList = document.querySelector<HTMLElement>('[data-proposals]')!;
+    proposalsList.replaceChildren();
+    for (const item of filtered.proposals) {
+      const li = document.createElement('li');
+      li.className = 'workspace-proposal-card';
+
+      const topRow = document.createElement('div');
+      topRow.className = 'workspace-item-top';
+      const titleGroup = document.createElement('div');
+      titleGroup.className = 'workspace-item-main';
+      titleGroup.append(buildNoteLink(item, '?personal=1'));
+      const timeEl = document.createElement('time');
+      timeEl.className = 'workspace-proposal-time';
+      timeEl.textContent = new Date(item.created_at).toLocaleString('fa');
+      titleGroup.append(timeEl);
+
+      const badge = document.createElement('span');
+      badge.className = 'review-status-pill';
+      badge.dataset.status = item.status;
+      badge.textContent = proposalStatusLabels[item.status] ?? 'وضعیت نامشخص';
+      topRow.append(titleGroup, badge);
+      li.append(topRow);
+
+      if (item.student_comment) {
+        const sComment = document.createElement('p');
+        sComment.className = 'workspace-proposal-comment';
+        sComment.textContent = `توضیح شما: ${item.student_comment}`;
+        li.append(sComment);
+      }
+      if (item.author_review_comment) {
+        const aComment = document.createElement('div');
+        aComment.className = 'workspace-author-feedback';
+        const strong = document.createElement('strong');
+        strong.textContent = 'بازخورد مؤلف: ';
+        aComment.append(strong, document.createTextNode(item.author_review_comment));
+        li.append(aComment);
+      }
+
+      const diffToggle = document.createElement('button');
+      diffToggle.type = 'button';
+      diffToggle.className = 'workspace-action-btn';
+      const isExpanded = expandedProposalId === item.id;
+      diffToggle.textContent = isExpanded ? 'بستن مقایسه' : 'مشاهدهٔ تغییرات';
+      const diffBox = document.createElement('div');
+      diffBox.className = 'workspace-proposal-diff';
+      diffBox.hidden = !isExpanded;
+
+      diffToggle.addEventListener('click', () => {
+        if (expandedProposalId === item.id) {
+          expandedProposalId = null;
+          destroyProposalMerge();
+          renderFiltered();
+          return;
+        }
+        expandedProposalId = item.id;
+        renderFiltered();
+      });
+
+      li.append(diffToggle, diffBox);
+      proposalsList.append(li);
+
+      if (isExpanded) {
+        void (async () => {
+          const [{ MergeView }, { markdown }, { EditorState }, { EditorView }] = await Promise.all([
+            import('@codemirror/merge'),
+            import('@codemirror/lang-markdown'),
+            import('@codemirror/state'),
+            import('@codemirror/view'),
+          ]);
+          if (expandedProposalId !== item.id || !diffBox.isConnected) return;
+          const extensions = [
+            markdown(),
+            EditorState.readOnly.of(true),
+            EditorView.editable.of(false),
+            EditorView.lineWrapping,
+            EditorView.perLineTextDirection.of(true),
+          ];
+          diffBox.replaceChildren();
+          const labelsBar = document.createElement('div');
+          labelsBar.className = 'merge-pane-labels';
+          labelsBar.innerHTML = '<span>نسخهٔ مبدأ</span><span>نسخهٔ پیشنهادی شما</span>';
+          const host = document.createElement('div');
+          host.className = 'history-merge-host';
+          diffBox.append(labelsBar, host);
+          proposalMergeView = new MergeView({
+            parent: host,
+            a: { doc: item.base_content, extensions },
+            b: { doc: item.proposed_content, extensions },
+            highlightChanges: true,
+            gutter: true,
           });
-          li.append(remove);document.querySelector('[data-bookmarks]')!.append(li);
-        }
-        document.querySelector<HTMLElement>('[data-forks-empty]')!.hidden=workspace.forks.length>0;
-        document.querySelector<HTMLElement>('[data-bookmarks-empty]')!.hidden=workspace.bookmarks.length>0;
-      } else {
-        const proposals=data;
-        document.querySelector('[data-proposals]')!.replaceChildren();
-    for(const item of proposals){const li=document.createElement('li');li.textContent=`${item.slug} — ${({pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده',changes_requested:'نیازمند بازنگری'} as Record<string,string>)[item.status] ?? 'وضعیت نامشخص'}${item.author_review_comment ? ' — '+item.author_review_comment : ''}`;document.querySelector('[data-proposals]')!.append(li);}
-        document.querySelector<HTMLElement>('[data-proposals-empty]')!.hidden=proposals.length>0;
+        })();
       }
-      feedback.textContent=section==='workspace'?'نسخه‌ها و نشانه‌ها دریافت شدند.':'پیشنهادها دریافت شدند.';
-      retry.hidden=true;
-    } catch(error) {
-      if(error instanceof ApiError && error.status===401){showSignIn();return;}
-      if(unauthenticated)return;
-      feedback.textContent=message(error); feedback.setAttribute('role','alert'); retry.hidden=false;
-    } finally {retry.disabled=false;retry.setAttribute('aria-busy','false');}
+    }
+    document.querySelector<HTMLElement>('[data-proposals-empty]')!.hidden =
+      filtered.proposals.length > 0;
   }
-  for(const section of ['workspace','proposals'] as const) {
-    document.querySelector('[data-'+section+'-retry]')!.addEventListener('click',()=>loadSection(section));
-    void loadSection(section);
+
+  async function showHistory(item: any, btn: HTMLButtonElement) {
+    const requestId = ++historyRequest;
+    destroyHistoryMerge();
+    activeHistory?.button.setAttribute('aria-expanded', 'false');
+    activeHistory = { item, button: btn };
+    btn.setAttribute('aria-expanded', 'true');
+    history.hidden = false;
+    history.setAttribute('aria-busy', 'true');
+    document.querySelector('[data-history-heading]')!.textContent =
+      'تاریخچهٔ ' + (item.title ?? item.slug);
+    const target = document.querySelector<HTMLElement>('[data-revisions]')!;
+    target.replaceChildren();
+    historyStatus.setAttribute('role', 'status');
+    historyStatus.textContent = 'در حال دریافت تاریخچه…';
+    historyRetry.hidden = true;
+    historyRetry.disabled = true;
+    try {
+      const revisions = await api('/workspace/forks/' + encodeURIComponent(item.id) + '/history');
+      if (requestId !== historyRequest || unauthenticated) return;
+      for (const revision of revisions) {
+        const card = document.createElement('div');
+        card.className = 'history-item-card';
+        const header = document.createElement('div');
+        header.className = 'history-item-top';
+        const dt = document.createElement('strong');
+        dt.textContent = new Date(revision.created_at).toLocaleString('fa');
+        const compareBtn = document.createElement('button');
+        compareBtn.type = 'button';
+        compareBtn.className = 'workspace-action-btn';
+        compareBtn.textContent = 'مقایسه با نسخهٔ فعلی';
+        compareBtn.addEventListener('click', () => {
+          void (async () => {
+            destroyHistoryMerge();
+            historyMergeWrap.hidden = false;
+            historyMergeTitle.textContent = `مقایسهٔ نسخهٔ ${new Date(revision.created_at).toLocaleString('fa')}`;
+            const stats = summarizeDiffStats(revision.content, item.custom_content ?? '');
+            historyMergeStats.textContent = stats.changed
+              ? `+${stats.added.toLocaleString('fa')} / -${stats.removed.toLocaleString('fa')} خط`
+              : 'بدون تغییر';
+            const [{ MergeView }, { markdown }, { EditorState }, { EditorView }] = await Promise.all([
+              import('@codemirror/merge'),
+              import('@codemirror/lang-markdown'),
+              import('@codemirror/state'),
+              import('@codemirror/view'),
+            ]);
+            if (requestId !== historyRequest) return;
+            const extensions = [
+              markdown(),
+              EditorState.readOnly.of(true),
+              EditorView.editable.of(false),
+              EditorView.lineWrapping,
+              EditorView.perLineTextDirection.of(true),
+            ];
+            historyMergeView = new MergeView({
+              parent: historyMergeHost,
+              a: { doc: revision.content, extensions },
+              b: { doc: item.custom_content ?? '', extensions },
+              highlightChanges: true,
+              gutter: true,
+            });
+          })();
+        });
+        header.append(dt, compareBtn);
+
+        const detail = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = 'مشاهدهٔ متن خام این نسخه';
+        const pre = document.createElement('pre');
+        pre.textContent = revision.content;
+        pre.tabIndex = 0;
+        pre.dir = 'auto';
+        detail.append(summary, pre);
+        card.append(header, detail);
+        target.append(card);
+      }
+      historyStatus.textContent = revisions.length
+        ? 'برای مقایسه یا مشاهدهٔ متن خام، یکی از نسخه‌ها را انتخاب کنید.'
+        : 'هنوز نسخه‌ای در تاریخچه ثبت نشده است.';
+      history.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (error) {
+      if (requestId !== historyRequest || unauthenticated) return;
+      if (error instanceof ApiError && error.status === 401) {
+        showSignIn();
+        return;
+      }
+      historyStatus.textContent = message(error);
+      historyStatus.setAttribute('role', 'alert');
+      historyRetry.hidden = false;
+    } finally {
+      if (requestId === historyRequest) {
+        history.setAttribute('aria-busy', 'false');
+        historyRetry.disabled = false;
+      }
+    }
   }
+
+  historyRetry.addEventListener('click', () => {
+    if (activeHistory) void showHistory(activeHistory.item, activeHistory.button);
+  });
+
+  document.querySelector('[data-history-close]')!.addEventListener('click', () => {
+    ++historyRequest;
+    destroyHistoryMerge();
+    history.hidden = true;
+    history.setAttribute('aria-busy', 'false');
+    activeHistory?.button.setAttribute('aria-expanded', 'false');
+    activeHistory?.button.focus();
+  });
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    renderFiltered();
+  });
+
+  proposalFilterBar.addEventListener('click', (event) => {
+    const btn = (event.target as Element).closest<HTMLButtonElement>('button[data-status]');
+    if (!btn) return;
+    proposalStatus = btn.dataset.status || 'all';
+    for (const sib of proposalFilterBar.querySelectorAll<HTMLButtonElement>('button[data-status]')) {
+      sib.setAttribute('aria-pressed', String(sib === btn));
+    }
+    renderFiltered();
+  });
+
+  async function initWorkspace() {
+    const user = await getSession();
+    if (!user) {
+      showSignIn();
+      return;
+    }
+
+    document
+      .querySelectorAll<HTMLElement>('[data-private-section]')
+      .forEach((sec) => (sec.hidden = false));
+    statsContainer.hidden = false;
+    filtersContainer.hidden = false;
+
+    await loadWorkspace(
+      (path: string) => api(path),
+      (section: string, state: any) => {
+        const fb = document.querySelector<HTMLElement>(`[data-${section}-feedback]`)!;
+        const retryBtn = document.querySelector<HTMLButtonElement>(`[data-${section}-retry]`)!;
+        if (state.state === 'loading') {
+          retryBtn.disabled = true;
+          retryBtn.hidden = true;
+          fb.setAttribute('role', 'status');
+          fb.textContent =
+            section === 'workspace'
+              ? 'در حال دریافت نسخه‌ها و نشانه‌ها…'
+              : 'در حال دریافت پیشنهادها…';
+          return;
+        }
+        if (state.state === 'error') {
+          if (state.error instanceof ApiError && state.error.status === 401) {
+            showSignIn();
+            return;
+          }
+          fb.setAttribute('role', 'alert');
+          fb.textContent = message(state.error);
+          retryBtn.disabled = false;
+          retryBtn.hidden = false;
+          return;
+        }
+        if (section === 'workspace') {
+          workspaceData = {
+            forks: state.data?.forks ?? [],
+            bookmarks: state.data?.bookmarks ?? [],
+          };
+          fb.textContent = 'نسخه‌ها و نشانه‌ها به‌روز شدند.';
+        } else {
+          proposalsData = Array.isArray(state.data) ? state.data : [];
+          fb.textContent = 'پیشنهادها به‌روز شدند.';
+        }
+        retryBtn.hidden = true;
+        renderFiltered();
+      },
+    );
+  }
+
+  for (const section of ['workspace', 'proposals'] as const) {
+    document
+      .querySelector(`[data-${section}-retry]`)!
+      .addEventListener('click', () => void initWorkspace());
+  }
+
+  window.addEventListener('pagehide', () => {
+    destroyHistoryMerge();
+    destroyProposalMerge();
+  });
+
+  void initWorkspace();
 </script>
