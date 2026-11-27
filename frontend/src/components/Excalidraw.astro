@@ -1,34 +1,126 @@
 <script>
-  const bound=new WeakSet<HTMLElement>();
-  const observer=new IntersectionObserver(entries=>{
-    for(const entry of entries){
-      if(!entry.isIntersecting)continue;
-      observer.unobserve(entry.target);
-      void display(entry.target as HTMLElement);
-    }
-  },{rootMargin:'200px'});
-  async function display(host:HTMLElement){
-    try{
-      const scene=JSON.parse(host.dataset.excalidraw!);
-      for(const file of Object.values(scene.files) as {dataURL:string}[]){
-        if(!file.dataURL.startsWith('/vault/'))continue;
-        const response=await fetch(file.dataURL,{credentials:'omit'});if(!response.ok)throw new Error('Image unavailable');
-        const blob=await response.blob();if(blob.size>5_000_000)throw new Error('Image too large');
-        file.dataURL=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=reject;reader.readAsDataURL(blob);});
+  const bound = new WeakSet<HTMLElement>();
+  const resolvedScenes = new WeakMap<HTMLElement, { elements: any[]; files: Record<string, any>; appState: Record<string, any> }>();
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        void display(entry.target as HTMLElement);
       }
-      (window as Window & {EXCALIDRAW_ASSET_PATH?:string}).EXCALIDRAW_ASSET_PATH='/excalidraw/';
-      const {exportToSvg,restoreElements}=await import('@excalidraw/excalidraw');
-      const svg=await exportToSvg({elements:restoreElements(scene.elements,null),files:scene.files,appState:scene.appState});
-      const image=new Image();image.alt='نقاشی Excalidraw';image.style.maxWidth='100%';image.style.height='auto';
-      // SVG in an image is inert; never insert drawing markup into the private page DOM.
-      const url=URL.createObjectURL(new Blob([svg.outerHTML],{type:'image/svg+xml'}));
-      image.onload=()=>{URL.revokeObjectURL(url);host.dataset.excalidrawLoaded='ready';};
-      image.onerror=()=>{URL.revokeObjectURL(url);host.textContent='نمایش نقاشی ناموفق بود؛ متن اصلی محفوظ است.';host.dataset.excalidrawLoaded='failed';};
-      image.src=url;host.replaceChildren(image);
-    }catch{host.textContent='نمایش نقاشی ناموفق بود؛ متن اصلی محفوظ است.';host.dataset.excalidrawLoaded='failed';}
+    },
+    { rootMargin: '200px' },
+  );
+
+  async function resolveScene(host: HTMLElement) {
+    const cached = resolvedScenes.get(host);
+    if (cached) return cached;
+    const scene = JSON.parse(host.dataset.excalidraw!);
+    for (const file of Object.values(scene.files || {}) as { dataURL: string }[]) {
+      if (!file.dataURL.startsWith('/vault/')) continue;
+      const response = await fetch(file.dataURL, { credentials: 'omit' });
+      if (!response.ok) throw new Error('Image unavailable');
+      const blob = await response.blob();
+      if (blob.size > 5_000_000) throw new Error('Image too large');
+      file.dataURL = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+    resolvedScenes.set(host, scene);
+    return scene;
   }
-  function bind(){for(const host of document.querySelectorAll<HTMLElement>('[data-excalidraw]')){
-    if(bound.has(host))continue;bound.add(host);observer.observe(host);
-  }}
-  bind();new MutationObserver(bind).observe(document.body,{childList:true,subtree:true});
+
+  function createToolbar(host: HTMLElement): HTMLElement {
+    const bar = document.createElement('div');
+    bar.className = 'excalidraw-toolbar';
+    const label = document.createElement('span');
+    label.className = 'excalidraw-toolbar-label';
+    label.textContent = 'طراحی Excalidraw';
+
+    const fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'excalidraw-tool-btn';
+    fsBtn.textContent = 'تمام‌صفحه';
+    fsBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        void host.requestFullscreen?.().catch(() => {});
+      } else {
+        void document.exitFullscreen?.().catch(() => {});
+      }
+    });
+
+    bar.append(label, fsBtn);
+    return bar;
+  }
+
+  async function display(host: HTMLElement) {
+    try {
+      const scene = await resolveScene(host);
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      (window as Window & { EXCALIDRAW_ASSET_PATH?: string }).EXCALIDRAW_ASSET_PATH = '/excalidraw/';
+      const { exportToSvg, restoreElements } = await import('@excalidraw/excalidraw');
+      const svg = await exportToSvg({
+        elements: restoreElements(scene.elements, null),
+        files: scene.files,
+        appState: {
+          ...(scene.appState || {}),
+          exportWithDarkMode: isDark,
+          exportBackground: true,
+        },
+      });
+      const image = new Image();
+      image.alt = 'نقاشی Excalidraw';
+      image.className = 'excalidraw-image';
+      // SVG in an image is inert; never insert drawing markup into the private page DOM.
+      const url = URL.createObjectURL(new Blob([svg.outerHTML], { type: 'image/svg+xml' }));
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        host.dataset.excalidrawLoaded = 'ready';
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        host.textContent = 'نمایش نقاشی ناموفق بود؛ متن اصلی محفوظ است.';
+        host.dataset.excalidrawLoaded = 'failed';
+      };
+      image.src = url;
+      host.classList.add('excalidraw-frame');
+      host.replaceChildren(createToolbar(host), image);
+    } catch {
+      host.textContent = 'نمایش نقاشی ناموفق بود؛ متن اصلی محفوظ است.';
+      host.dataset.excalidrawLoaded = 'failed';
+    }
+  }
+
+  function bind() {
+    for (const host of document.querySelectorAll<HTMLElement>('[data-excalidraw]')) {
+      if (bound.has(host)) continue;
+      bound.add(host);
+      observer.observe(host);
+    }
+  }
+
+  function rerenderTheme() {
+    for (const host of document.querySelectorAll<HTMLElement>('[data-excalidraw]')) {
+      if (resolvedScenes.has(host)) {
+        void display(host);
+      }
+    }
+  }
+
+  document.addEventListener('garden:theme-setting', rerenderTheme);
+  let lastTheme = document.documentElement.dataset.theme;
+  new MutationObserver(() => {
+    const nextTheme = document.documentElement.dataset.theme;
+    if (nextTheme !== lastTheme) {
+      lastTheme = nextTheme;
+      rerenderTheme();
+    }
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  bind();
+  new MutationObserver(bind).observe(document.body, { childList: true, subtree: true });
 </script>

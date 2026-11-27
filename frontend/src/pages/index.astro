@@ -2,11 +2,16 @@
 import Reader from '../layouts/Reader.astro';
 import { fetchBooks } from '../lib/catalogue.mjs';
 import { noteHref } from '../lib/markdown.mjs';
-import { BookOpen, Search, Sparkles, Share2, Compass } from 'lucide-react';
+import { bookDisplayLabel } from '../lib/search-format.mjs';
+import { ArrowLeft, Compass, Search } from 'lucide-react';
 
 export const prerender = false;
 
-const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
+const brandName =
+  import.meta.env.PUBLIC_BRAND_NAME ||
+  process.env.PUBLIC_BRAND_NAME ||
+  process.env.SITE_TITLE ||
+  'باغ ریاضی';
 
 const FALLBACK_BOOKS = [
   {
@@ -14,7 +19,7 @@ const FALLBACK_BOOKS = [
     title: 'جبر خطی آکسلر (Linear Algebra Done Right)',
     edition: 'ویرایش چهارم ۲۰۲۴',
     description:
-      'مرجع کامل مفاهیم، قضایا، برهان‌های ریاضی و تمرینات کتاب آکسلر، شامل فضاهای برداری، پایه‌ها و بعد، ترکیب‌های خطی، زیرفضاها، جمع مستقیم و فرمول گراسمان.',
+      'مرجع مفاهیم، قضایا، برهان‌های ریاضی و تمرینات کتاب آکسلر؛ شامل فضاهای برداری، پایه‌ها و بُعد، ترکیب‌های خطی، زیرفضاها و جمع مستقیم.',
     note_count: 0,
     entry_slug: 'axler-2debc85d452ad205',
     entry_label: 'نقشه راه جامع',
@@ -27,10 +32,10 @@ const FALLBACK_BOOKS = [
   },
   {
     book_slug: 'abstract-algebra',
-    title: 'مبانی جبر و ماتریس‌ها (Abstract Algebra & Matrices)',
+    title: 'جبر مجرد و ماتریس‌ها (Abstract Algebra & Matrices)',
     edition: 'نسخهٔ رسمی',
     description:
-      'مرجع ساختاریافتهٔ مفاهیم ساختارهای جبری، نیم‌گروه‌ها، کاتالوگ مثال‌ها، عناصر همانی و معکوس، توان‌ها، شرکت‌پذیری تعمیم‌یافته، زیرنیم‌گروه‌ها، مسائل و قضایا.',
+      'ساختارهای جبری، نیم‌گروه‌ها، کاتالوگ مثال‌ها، عناصر همانی و معکوس، توان‌ها، شرکت‌پذیری تعمیم‌یافته، مسائل و اثبات‌های صوری.',
     note_count: 0,
     entry_slug: 'alg-232009403065653b',
     entry_label: 'نقشه راه کلان',
@@ -45,49 +50,78 @@ const FALLBACK_BOOKS = [
 
 const booksData = await fetchBooks().catch(() => null);
 const activeBooks = booksData?.books?.length ? booksData.books : FALLBACK_BOOKS;
+const firstEntryHref = activeBooks[0]?.entry_slug ? noteHref(activeBooks[0].entry_slug) : '/search';
+
 if (booksData?.books?.length) {
   Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
 } else {
   Astro.response.headers.set('Cache-Control', 'no-store');
 }
 ---
+
 <Reader title={brandName} hidePageHeading>
   <div class="home-container">
-    <!-- Hero / Lead -->
     <header class="home-hero">
-      <div class="hero-badge">
-        <Sparkles size={14} class="hero-badge-icon" aria-hidden="true" />
-        <span>سامانه جامع آموزش و یادگیری تعاملی ریاضیات</span>
-      </div>
       <h1 class="hero-title">{brandName}</h1>
       <p class="hero-lead">
-        یادداشت‌های اتمیک، برهان‌های دقیق بدون پرش، تجسم‌های تعاملی جئوجبرا و دستیار هوشمند مقید به متن برای درک عمیق ریاضیات دانشگاهی.
+        پایگاه دانش اتمیک ریاضیات؛ قضایا و برهان‌ها با گراف پیوندهای مفهومی، فرمول‌نویسی دقیق KaTeX، نمودارهای تعاملی GeoGebra و فضای یادداشت‌برداری شخصی.
       </p>
+
+      <form action="/search" role="search" class="home-search-form">
+        <label for="home-query" class="sr-only">جست‌وجوی مفهوم، قضیه یا تعریف</label>
+        <div class="search-bar">
+          <Search size={18} aria-hidden="true" class="search-bar-icon" />
+          <input
+            id="home-query"
+            name="q"
+            type="search"
+            maxlength="200"
+            placeholder="مثلاً فضای برداری، قضیه بعد، استقلال خطی، جمع مستقیم…"
+            autocomplete="off"
+          />
+          <button type="submit" class="search-submit-btn">جست‌وجو</button>
+        </div>
+        <div class="quick-tags">
+          <span class="quick-tags-title">جست‌وجوی سریع:</span>
+          <div class="tags-list">
+            <a href="/search?q=%D9%81%D8%B6%D8%A7%DB%8C+%D8%A8%D8%B1%D8%AF%D8%A7%D8%B1%DB%8C">#فضای_برداری</a>
+            <a href="/search?q=%D9%BE%D8%A7%DB%8C%D9%87+%D9%88+%D8%A8%D8%B9%D8%AF">#پایه_و_بعد</a>
+            <a href="/search?q=%D8%A7%D8%B3%D8%AA%D9%82%D9%84%D8%A7%D9%84+%D8%AE%D8%B7%DB%8C">#استقلال_خطی</a>
+            <a href="/search?q=%D8%AC%D9%85%D8%B9+%D9%85%D8%B3%D8%AA%D9%82%DB%8C%D9%85">#جمع_مستقیم</a>
+            <a href="/search?q=%D8%B2%DB%8C%D8%B1%D9%81%D8%B6%D8%A7">#زیرفضا</a>
+            <a href="/search?q=%DA%AF%D8%B1%D8%A7%D8%B3%D9%85%D8%A7%D9%86">#فرمول_گراسمان</a>
+          </div>
+        </div>
+      </form>
+
       <div class="hero-actions">
-        <a class="garden-primary" href="/sample">شروع با نمونهٔ مطالعه</a>
+        <a class="garden-primary" href={firstEntryHref}>
+          <span>شروع مطالعه از نقشهٔ راه</span>
+          <ArrowLeft size={16} aria-hidden="true" />
+        </a>
+        <a class="hero-secondary-link" href="/sample">یادداشت نمونه</a>
+        <a class="hero-secondary-link" href="/search">فهرست کامل و فیلترها</a>
       </div>
     </header>
 
-    <!-- Specialized Knowledge Bases -->
     <section class="kb-section" aria-labelledby="kb-heading">
       <div class="section-header">
-        <h2 id="kb-heading" class="section-title">پایگاه‌های دانش تخصصی</h2>
+        <h2 id="kb-heading" class="section-title">مجموعه‌ها و کتاب‌های فعال</h2>
         <p class="section-subtitle">
           {booksData?.total_notes
             ? `${booksData.total_notes.toLocaleString('fa-IR')} یادداشت اتمیک متصل در گراف مفاهیم`
-            : 'مخازن و جزوات ساختاریافته متصل به گراف مفاهیم و یادداشت‌های اتمیک'}
+            : 'جزوات ساختاریافتهٔ متصل به گراف مفاهیم'}
         </p>
       </div>
 
       <div class="kb-grid">
         {activeBooks.map((book) => (
           <article class="kb-card active-card" data-book-slug={book.book_slug}>
-            <div class="card-glow" aria-hidden="true"></div>
             <div class="card-header">
               <span class="badge active-badge">
                 {book.note_count > 0
-                  ? `فعال · ${book.note_count.toLocaleString('fa-IR')} یادداشت`
-                  : 'فعال'}
+                  ? `${book.note_count.toLocaleString('fa-IR')} یادداشت`
+                  : bookDisplayLabel(book.book_slug)}
               </span>
               {book.edition && <span class="card-tag">{book.edition}</span>}
             </div>
@@ -103,495 +137,417 @@ if (booksData?.books?.length) {
               {(book.highlights || []).map((item) => (
                 <a href={noteHref(item.slug)} class="action-btn secondary-btn">{item.label}</a>
               ))}
+              {book.book_slug && (
+                <a
+                  href={`/search?book=${encodeURIComponent(book.book_slug)}`}
+                  class="action-btn secondary-btn"
+                >
+                  همهٔ یادداشت‌های این کتاب
+                </a>
+              )}
             </div>
           </article>
         ))}
-
-        <!-- Coming Soon Placeholder -->
-        <article class="kb-card coming-card">
-          <div class="card-header">
-            <span class="badge coming-badge">به‌زودی</span>
-          </div>
-          <h3 class="card-title">ریاضی ۳ و حساب دیفرانسیل</h3>
-          <p class="card-desc">
-            حساب دیفرانسیل و انتگرال چندمتغیره، میدان‌های برداری، سری‌های نامتناهی، انتگرال‌های روی خط و سطح، قضایای گرین، استوکس و دیورژانس.
-          </p>
-          <div class="coming-status">
-            <span class="pulse-dot" aria-hidden="true"></span>
-            <span>در حال آماده‌سازی و اتصال مخزن...</span>
-          </div>
-        </article>
       </div>
     </section>
 
-    <!-- Search Section -->
-    <section class="home-search-section" aria-labelledby="discover-title">
-      <h2 id="discover-title" class="discover-heading">دنبال چه قضیه یا مفهومی هستید؟</h2>
-      <form action="/search" role="search" class="home-search-form">
-        <label for="home-query" class="sr-only">جست‌وجوی مفهوم، قضیه یا تعریف</label>
-        <div class="search-bar">
-          <Search size={18} aria-hidden="true" class="search-bar-icon" />
-          <input
-            id="home-query"
-            name="q"
-            type="search"
-            maxlength="200"
-            placeholder="مثلاً فضای برداری، قضیه بعد، استقلال خطی، جمع مستقیم، کانتور..."
-            autocomplete="off"
-          />
-          <button type="submit" class="search-submit-btn">جست‌وجو</button>
-        </div>
-        <div class="quick-tags">
-          <span class="quick-tags-title">کلیدواژه‌های پرکاربرد:</span>
-          <div class="tags-list">
-            <a href="/search?q=%D9%81%D8%B6%D8%A7%DB%8C+%D8%A8%D8%B1%D8%AF%D8%A7%D8%B1%DB%8C">#فضای_برداری</a>
-            <a href="/search?q=%D9%BE%D8%A7%DB%8C%D9%87+%D9%88+%D8%A8%D8%B9%D8%AF">#پایه_و_بعد</a>
-            <a href="/search?q=%D8%A7%D8%B3%D8%AA%D9%82%D9%84%D8%A7%D9%84+%D8%AE%D8%B7%DB%8C">#استقلال_خطی</a>
-            <a href="/search?q=%D8%AC%D9%85%D8%B9+%D9%85%D8%B3%D8%AA%D9%82%DB%8C%D9%85">#جمع_مستقیم</a>
-            <a href="/search?q=%D8%B2%DB%8C%D8%B1%D9%81%D8%B6%D8%A7">#زیرفضا</a>
-            <a href="/search?q=%DA%AF%D8%B1%D8%A7%D8%B3%D9%85%D8%A7%D9%86">#فرمول_گراسمان</a>
-          </div>
-        </div>
-      </form>
-    </section>
-
-    <!-- Key Features / Benefits -->
-    <section class="features-section" aria-label="ویژگی‌های باغ ریاضی">
-      <div class="features-grid">
-        <article class="feature-card">
-          <div class="feature-icon-box">
-            <BookOpen size={22} aria-hidden="true" />
-          </div>
-          <h3 class="feature-title">یادداشت‌های اتمیک و ساختاریافته</h3>
-          <p class="feature-desc">
-            از تعاریف و اصول موضوعه تا قضایای پیشرفته، به تفکیک و قابل ارجاع با فرمول‌نویسی دوطرفه و اثبات بدون پرش محاسباتی.
-          </p>
-        </article>
-
-        <article class="feature-card">
-          <div class="feature-icon-box">
-            <Share2 size={22} aria-hidden="true" />
-          </div>
-          <h3 class="feature-title">پیوندهای دوطرفه و گراف مفهومی</h3>
-          <p class="feature-desc">
-            مشاهده نقشه ارتباط میان قضایا، بک‌لینک‌ها و درک توالی پیش‌نیازها به همراه پیش‌نمایش شناور یادداشت‌ها.
-          </p>
-        </article>
-
-        <article class="feature-card">
-          <div class="feature-icon-box">
-            <Sparkles size={22} aria-hidden="true" />
-          </div>
-          <h3 class="feature-title">دستیار هوش مصنوعی و نسخه شخصی</h3>
-          <p class="feature-desc">
-            امکان پرسش و رفع اشکال حین مطالعه با دستیار متصل به پایگاه دانش، و ایجاد نسخه و یادداشت‌های شخصی.
-          </p>
-        </article>
-      </div>
+    <section class="explore-section" aria-labelledby="explore-heading">
+      <h2 id="explore-heading" class="explore-title">مرور سریع بر اساس نوع یا ابزار</h2>
+      <nav class="explore-strip" aria-label="ورودهای سریع به باغ ریاضی">
+        <a href="/search?kind=assertion" class="explore-link">قضایا و گزاره‌ها</a>
+        <a href="/search?kind=concept" class="explore-link">مفاهیم و تعاریف</a>
+        <a href="/search?kind=problem" class="explore-link">مسائل و تمرین‌ها</a>
+        <a href="/notes/axler-a354fd365fa3e3ed" class="explore-link">تجسم‌های هندسی GeoGebra</a>
+        <a href="/library" class="explore-link">کتابخانهٔ شخصی</a>
+      </nav>
     </section>
   </div>
 </Reader>
 
 <style>
-.home-container {
-  display: flex;
-  flex-direction: column;
-  gap: 2.75rem;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 1rem 0.5rem 3rem;
-}
+  .home-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1.5rem 0.5rem 3.5rem;
+  }
 
-.home-hero {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
-}
+  .home-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.1rem;
+  }
 
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--primary-text);
-  background: var(--primary-soft);
-  border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent);
-  border-radius: 9999px;
-  padding: 4px 12px;
-}
-
-.hero-badge-icon {
-  color: var(--primary);
-}
-
-.hero-title {
-  font-size: 2.4rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin: 0;
-  color: var(--foreground);
-}
-
-.hero-lead {
-  font-size: 1.05rem;
-  line-height: 1.85;
-  color: var(--muted-foreground);
-  max-width: 640px;
-  margin: 0 auto;
-}
-
-/* Section Header */
-.section-header {
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-
-.section-title {
-  font-size: 1.45rem;
-  font-weight: 700;
-  margin: 0 0 0.4rem;
-  color: var(--foreground);
-}
-
-.section-subtitle {
-  font-size: 0.9rem;
-  color: var(--muted-foreground);
-  margin: 0;
-}
-
-/* KB Grid */
-.kb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 1.25rem;
-}
-
-.kb-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 1.4rem;
-  border-radius: 14px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  overflow: hidden;
-}
-
-.active-card {
-  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
-  background: linear-gradient(180deg, color-mix(in oklch, var(--primary) 6%, var(--card)) 0%, var(--card) 100%);
-  box-shadow: 0 4px 20px -4px color-mix(in oklch, var(--primary) 12%, transparent);
-}
-
-.active-card:hover {
-  border-color: var(--primary);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px -6px color-mix(in oklch, var(--primary) 22%, transparent);
-}
-
-.coming-card {
-  opacity: 0.85;
-  border-style: dashed;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.85rem;
-}
-
-.badge {
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-variant-numeric: tabular-nums;
-}
-
-.active-badge {
-  color: var(--primary-text);
-  background: var(--primary-soft);
-  border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
-}
-
-.coming-badge {
-  color: var(--muted-foreground);
-  background: var(--surface-subtle);
-}
-
-.card-tag {
-  font-size: 0.72rem;
-  color: var(--muted-foreground);
-}
-
-.card-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin: 0 0 0.6rem;
-  line-height: 1.45;
-}
-
-.card-title a {
-  color: var(--foreground);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.card-title a:hover {
-  color: var(--primary-text);
-}
-
-.card-desc {
-  font-size: 0.875rem;
-  line-height: 1.7;
-  color: var(--muted-foreground);
-  margin: 0 0 1.25rem;
-  flex: 1;
-}
-
-.card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.action-btn {
-  font-size: 0.78rem;
-  padding: 4px 10px;
-  border-radius: 6px;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-
-.primary-btn {
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font-weight: 600;
-}
-
-.primary-btn:hover {
-  background: var(--primary-hover);
-  color: var(--primary-foreground);
-}
-
-.secondary-btn {
-  background: var(--surface-subtle);
-  color: var(--muted-foreground);
-  border: 1px solid var(--border);
-}
-
-.secondary-btn:hover {
-  background: var(--surface-hover);
-  color: var(--foreground);
-}
-
-.coming-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
-  color: var(--muted-foreground);
-  margin-top: auto;
-  padding-top: 0.5rem;
-}
-
-.pulse-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f59e0b;
-  animation: pulse-dot 2s infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 0.4; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.15); }
-}
-
-/* Search Section */
-.home-search-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 1.25rem;
-  padding: 2.25rem 1.5rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-}
-
-.discover-heading {
-  font-size: 1.35rem;
-  font-weight: 700;
-  margin: 0;
-  color: var(--foreground);
-}
-
-.home-search-form {
-  width: 100%;
-  max-width: 600px;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.search-bar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-:global(.search-bar-icon) {
-  position: absolute;
-  inset-inline-start: 14px;
-  color: var(--muted-foreground);
-  pointer-events: none;
-}
-
-.search-bar input {
-  width: 100%;
-  height: 46px;
-  padding: 8px 16px;
-  padding-inline-start: 42px;
-  padding-inline-end: 90px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--background);
-  color: inherit;
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.search-bar input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 22%, transparent);
-}
-
-.search-submit-btn {
-  position: absolute;
-  inset-inline-end: 6px;
-  height: 34px;
-  padding: 0 16px;
-  border-radius: 7px;
-  border: 0;
-  background: var(--foreground);
-  color: var(--background);
-  font-size: 0.825rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
-
-.search-submit-btn:hover {
-  opacity: 0.9;
-}
-
-.quick-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 0.8rem;
-}
-
-.quick-tags-title {
-  color: var(--muted-foreground);
-}
-
-.tags-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tags-list a {
-  color: var(--primary-text);
-  text-decoration: none;
-  background: var(--surface-subtle);
-  border: 1px solid var(--border);
-  padding: 2px 8px;
-  border-radius: 5px;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.tags-list a:hover {
-  background: var(--primary-soft);
-  border-color: color-mix(in oklch, var(--primary) 35%, transparent);
-}
-
-/* Features Section */
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.25rem;
-}
-
-.feature-card {
-  padding: 1.25rem;
-  border-radius: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-}
-
-.feature-icon-box {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: var(--primary-soft);
-  color: var(--primary-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 0.85rem;
-}
-
-.feature-title {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem;
-  color: var(--foreground);
-}
-
-.feature-desc {
-  font-size: 0.84rem;
-  line-height: 1.7;
-  color: var(--muted-foreground);
-  margin: 0;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-
-@media (max-width: 640px) {
   .hero-title {
-    font-size: 1.85rem;
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0;
+    color: var(--foreground);
+    line-height: 1.3;
   }
+
+  .hero-lead {
+    font-size: 1.02rem;
+    line-height: 1.85;
+    color: var(--muted-foreground);
+    max-width: 65ch;
+    margin: 0;
+  }
+
+  .home-search-form {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+  }
+
+  .search-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  :global(.search-bar-icon) {
+    position: absolute;
+    inset-inline-start: 14px;
+    color: var(--muted-foreground);
+    pointer-events: none;
+  }
+
+  .search-bar input {
+    width: 100%;
+    height: 48px;
+    padding: 8px 16px;
+    padding-inline-start: 42px;
+    padding-inline-end: 94px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--foreground);
+    font-size: 0.92rem;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .search-bar input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .search-bar input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+
+  .search-submit-btn {
+    position: absolute;
+    inset-inline-end: 6px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 7px;
+    border: 0;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .search-submit-btn:hover {
+    background: var(--primary-hover);
+  }
+
+  .quick-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.8rem;
+  }
+
+  .quick-tags-title {
+    color: var(--muted-foreground);
+  }
+
+  .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .tags-list a {
+    color: var(--primary-text);
+    text-decoration: none;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    padding: 2px 9px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .tags-list a:hover {
+    background: var(--primary-soft);
+    border-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+  }
+
+  .garden-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 18px;
+    border-radius: 8px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+  }
+
+  .garden-primary:hover {
+    background: var(--primary-hover);
+  }
+
+  .hero-secondary-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .hero-secondary-link:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.15rem;
+  }
+
+  .section-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--foreground);
+  }
+
+  .section-subtitle {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    margin: 0;
+  }
+
   .kb-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 1.25rem;
   }
-  .features-grid {
-    grid-template-columns: 1fr;
+
+  .kb-card {
+    display: flex;
+    flex-direction: column;
+    padding: 1.35rem;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 10px -2px oklch(0 0 0 / 0.06);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-}
+
+  .kb-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 6px 20px -4px oklch(0 0 0 / 0.1);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .badge {
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 9999px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .active-badge {
+    color: var(--primary-text);
+    background: var(--primary-soft);
+    border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
+  }
+
+  .card-tag {
+    font-size: 0.74rem;
+    color: var(--muted-foreground);
+  }
+
+  .card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0 0 0.55rem;
+    line-height: 1.45;
+  }
+
+  .card-title a {
+    color: var(--foreground);
+    text-decoration: none;
+  }
+
+  .card-title a:hover {
+    color: var(--primary-text);
+  }
+
+  .card-desc {
+    font-size: 0.875rem;
+    line-height: 1.75;
+    color: var(--muted-foreground);
+    margin: 0 0 1.25rem;
+    flex: 1;
+  }
+
+  .card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .action-btn {
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .primary-btn {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-weight: 600;
+  }
+
+  .primary-btn:hover {
+    background: var(--primary-hover);
+  }
+
+  .secondary-btn {
+    background: var(--surface-subtle);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+  }
+
+  .secondary-btn:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  .explore-section {
+    padding: 1.1rem 1.25rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .explore-title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .explore-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .explore-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--primary-text);
+    font-size: 0.84rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .explore-link:hover {
+    background: var(--primary-soft);
+    border-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  @media (max-width: 640px) {
+    .kb-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .hero-actions {
+      width: 100%;
+    }
+    .garden-primary,
+    .hero-secondary-link {
+      flex: 1 1 auto;
+      justify-content: center;
+    }
+  }
 </style>

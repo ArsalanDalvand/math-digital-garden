@@ -1,6 +1,16 @@
 import { Dialog } from '@base-ui/react/dialog';
-import { BookOpen, CornerDownLeft, Loader2, Search, X } from 'lucide-react';
+import {
+  BookOpen,
+  Compass,
+  CornerDownLeft,
+  FolderOpen,
+  Loader2,
+  Search,
+  SunMoon,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { bookDisplayLabel, stripInlineMarkdown } from '../../lib/search-format.mjs';
 
 interface SearchResultItem {
   slug: string;
@@ -13,14 +23,18 @@ interface SearchResultItem {
   snippet?: string;
 }
 
-const BOOK_LABELS: Record<string, string> = {
-  axler: 'جبر خطی آکسلر',
-  'abstract-algebra': 'مبانی جبر و ماتریس‌ها',
-};
+const KIND_FILTERS: Array<{ key: string; label: string }> = [
+  { key: '', label: 'همه' },
+  { key: 'assertion', label: 'قضیه' },
+  { key: 'concept', label: 'مفهوم' },
+  { key: 'problem', label: 'مسئله' },
+  { key: 'visual_lab', label: 'آزمایشگاه' },
+];
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [selectedKind, setSelectedKind] = useState('');
   const [items, setItems] = useState<SearchResultItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -28,6 +42,7 @@ export function CommandPalette() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   const openPalette = useCallback(() => {
@@ -77,6 +92,7 @@ export function CommandPalette() {
       try {
         const params = new URLSearchParams({ limit: '12' });
         if (query.trim()) params.set('q', query.trim());
+        if (selectedKind) params.set('kind', selectedKind);
         const res = await fetch(`/api/search?${params.toString()}`, {
           signal: controller.signal,
         });
@@ -102,13 +118,17 @@ export function CommandPalette() {
           setLoading(false);
         }
       }
-    }, 180);
+    }, 160);
 
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [open, query]);
+  }, [open, query, selectedKind]);
+
+  useEffect(() => {
+    itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
 
   const navigateToItem = useCallback((item: SearchResultItem | undefined) => {
     if (!item?.slug) return;
@@ -133,21 +153,25 @@ export function CommandPalette() {
     }
   };
 
-  const fullSearchHref = `/search${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''}`;
+  const fullSearchParams = new URLSearchParams();
+  if (query.trim()) fullSearchParams.set('q', query.trim());
+  if (selectedKind) fullSearchParams.set('kind', selectedKind);
+  const fullSearchQuery = fullSearchParams.toString();
+  const fullSearchHref = `/search${fullSearchQuery ? `?${fullSearchQuery}` : ''}`;
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-[2px] transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+        <Dialog.Backdrop className="fixed inset-0 z-[80] bg-black/45 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
         <Dialog.Popup
           dir="rtl"
           data-command-palette
           initialFocus={inputRef}
-          className="fixed inset-x-0 top-[9vh] z-[80] mx-auto flex max-h-[80vh] w-[min(640px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-2xl outline-none"
+          className="fixed inset-x-0 top-[8vh] z-[80] mx-auto flex max-h-[82vh] w-[min(660px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl outline-none"
         >
           <Dialog.Title className="sr-only">جست‌وجوی سریع یادداشت‌ها</Dialog.Title>
 
-          <div className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5">
+          <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5">
             {loading ? (
               <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
             ) : (
@@ -163,18 +187,103 @@ export function CommandPalette() {
               maxLength={200}
               placeholder="جست‌وجوی قضیه، تعریف، عنوان یا متن یادداشت…"
               aria-label="جست‌وجوی سریع"
-              className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
             />
+            {query.length > 0 && (
+              <button
+                type="button"
+                aria-label="پاک کردن عبارت"
+                onClick={() => {
+                  setQuery('');
+                  inputRef.current?.focus();
+                }}
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            )}
             <Dialog.Close
               type="button"
               aria-label="بستن"
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <X className="size-4" aria-hidden="true" />
             </Dialog.Close>
           </div>
 
-          <div className="min-h-[140px] max-h-[54vh] overflow-y-auto p-2">
+          <fieldset
+            className="m-0 flex items-center gap-1.5 overflow-x-auto border-0 border-b border-border bg-muted/30 px-3.5 py-2"
+            data-command-kind-filters
+          >
+            <legend className="sr-only">فیلتر نوع یادداشت</legend>
+            {KIND_FILTERS.map((kf) => {
+              const pressed = selectedKind === kf.key;
+              return (
+                <button
+                  key={kf.key || 'all'}
+                  type="button"
+                  data-command-kind={kf.key}
+                  aria-pressed={pressed}
+                  onClick={() => setSelectedKind(kf.key)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    pressed
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-surface text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}
+                >
+                  {kf.label}
+                </button>
+              );
+            })}
+          </fieldset>
+
+          <div className="min-h-[160px] max-h-[52vh] overflow-y-auto p-2">
+            {!query.trim() && !selectedKind && (
+              <div className="mb-2 border-b border-border pb-2" data-command-quick-actions>
+                <div className="px-2.5 pb-1 text-[11px] font-semibold text-muted-foreground">
+                  دسترسی سریع
+                </div>
+                <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+                  <button
+                    type="button"
+                    data-command-action="theme"
+                    onClick={() => {
+                      document.querySelector<HTMLButtonElement>('[data-theme-toggle]')?.click();
+                      setOpen(false);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-accent"
+                  >
+                    <SunMoon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span>تغییر پوسته</span>
+                  </button>
+                  <a
+                    href="/search"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground no-underline hover:bg-accent"
+                  >
+                    <Search className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span>جست‌وجوی کامل</span>
+                  </a>
+                  <a
+                    href="/sample"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground no-underline hover:bg-accent"
+                  >
+                    <Compass className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span>یادداشت نمونه</span>
+                  </a>
+                  <a
+                    href="/library"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground no-underline hover:bg-accent"
+                  >
+                    <FolderOpen className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span>کتابخانه</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
             {errorMsg ? (
               <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
                 {errorMsg}
@@ -183,20 +292,28 @@ export function CommandPalette() {
               <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
                 {loading
                   ? 'در حال جست‌وجو…'
-                  : 'یادداشتی با این عبارت پیدا نشد. عبارت کوتاه‌تر یا واژهٔ کلیدی دیگری بنویسید.'}
+                  : 'یادداشتی با این عبارت پیدا نشد. عبارت کوتاه‌تر یا نوع دیگری انتخاب کنید.'}
               </p>
             ) : (
-              <ul className="m-0 flex list-none flex-col gap-1 p-0" data-command-results>
+              <ul
+                aria-label="نتایج جست‌وجو"
+                className="m-0 flex list-none flex-col gap-1 p-0"
+                data-command-results
+              >
                 {items.map((item, idx) => {
                   const isActive = idx === activeIndex;
-                  const subtitle = item.slogan || item.snippet || '';
-                  const bookLabel = (item.book_slug && BOOK_LABELS[item.book_slug]) || item.book_slug;
+                  const subtitle = stripInlineMarkdown(item.slogan || item.snippet || '');
+                  const bookLabel = bookDisplayLabel(item.book_slug);
                   return (
                     <li key={item.slug}>
                       <a
+                        ref={(el) => {
+                          itemRefs.current[idx] = el;
+                        }}
                         href={`/notes/${encodeURIComponent(item.slug)}`}
                         data-command-item={item.slug}
                         data-active={isActive ? 'true' : undefined}
+                        aria-current={isActive ? 'true' : undefined}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={`flex items-start gap-3 rounded-lg px-3 py-2.5 text-right no-underline transition-colors ${
                           isActive
@@ -213,7 +330,7 @@ export function CommandPalette() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-semibold">{item.title}</span>
                             {item.kind_label && (
-                              <span className="rounded border border-border bg-background/70 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                              <span className="rounded border border-border bg-background/80 px-1.5 py-0.5 text-[11px] text-muted-foreground">
                                 {item.kind_label}
                               </span>
                             )}
@@ -247,19 +364,28 @@ export function CommandPalette() {
           <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/40 px-3.5 py-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-3">
               <span>
-                <kbd dir="ltr" className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]">
+                <kbd
+                  dir="ltr"
+                  className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]"
+                >
                   ↑↓
                 </kbd>{' '}
                 حرکت
               </span>
               <span>
-                <kbd dir="ltr" className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]">
+                <kbd
+                  dir="ltr"
+                  className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]"
+                >
                   Enter
                 </kbd>{' '}
                 باز کردن
               </span>
               <span>
-                <kbd dir="ltr" className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]">
+                <kbd
+                  dir="ltr"
+                  className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px]"
+                >
                   Esc
                 </kbd>{' '}
                 بستن

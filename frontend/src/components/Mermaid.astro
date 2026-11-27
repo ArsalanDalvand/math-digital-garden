@@ -1,22 +1,85 @@
 <script>
+  import { showToast } from '../scripts/toast';
+
   let mermaidPromise: Promise<any> | null = null;
   const rendered = new WeakSet<HTMLElement>();
+  const zoomLevels = new WeakMap<HTMLElement, number>();
 
   async function getMermaid() {
     if (!mermaidPromise) {
-      mermaidPromise = import('mermaid').then(m => {
+      mermaidPromise = import('mermaid').then((m) => {
         const isDark = document.documentElement.dataset.theme === 'dark';
         m.default.initialize({
           startOnLoad: false,
           theme: isDark ? 'dark' : 'default',
           fontFamily: 'Vazirmatn, sans-serif',
           securityLevel: 'strict',
-          flowchart: { htmlLabels: true, curve: 'basis' }
+          flowchart: { htmlLabels: true, curve: 'basis' },
         });
         return m.default;
       });
     }
     return mermaidPromise;
+  }
+
+  function applyZoom(figure: HTMLElement) {
+    const scale = zoomLevels.get(figure) ?? 1;
+    const svg = figure.querySelector<SVGElement>('.mermaid-chart svg');
+    if (!svg) return;
+    svg.style.transform = scale === 1 ? '' : `scale(${scale})`;
+    svg.style.transformOrigin = 'top center';
+    svg.style.marginBottom = scale > 1 ? `${Math.round((scale - 1) * svg.getBoundingClientRect().height * 0.45)}px` : '';
+  }
+
+  function ensureToolbar(figure: HTMLElement, code: string) {
+    if (figure.querySelector('.mermaid-toolbar')) return;
+    const bar = document.createElement('div');
+    bar.className = 'mermaid-toolbar';
+
+    const label = document.createElement('span');
+    label.className = 'mermaid-toolbar-label';
+    label.textContent = 'نمودار Mermaid';
+
+    const actions = document.createElement('div');
+    actions.className = 'mermaid-toolbar-actions';
+
+    const mkBtn = (text: string, title: string, onClick: () => void) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mermaid-tool-btn';
+      btn.textContent = text;
+      btn.title = title;
+      btn.addEventListener('click', onClick);
+      return btn;
+    };
+
+    const setScale = (next: number) => {
+      const clamped = Math.min(2.2, Math.max(0.6, Number(next.toFixed(2))));
+      zoomLevels.set(figure, clamped);
+      applyZoom(figure);
+    };
+
+    actions.append(
+      mkBtn('+', 'بزرگ‌نمایی نمودار', () => setScale((zoomLevels.get(figure) ?? 1) + 0.2)),
+      mkBtn('۱۰۰٪', 'اندازهٔ اصلی', () => setScale(1)),
+      mkBtn('−', 'کوچک‌نمایی نمودار', () => setScale((zoomLevels.get(figure) ?? 1) - 0.2)),
+      mkBtn('کپی کد', 'کپی کد منبع Mermaid', () => {
+        void navigator.clipboard
+          .writeText(code)
+          .then(() => showToast('کد منبع نمودار کپی شد.', { variant: 'success', durationMs: 2200 }))
+          .catch(() => showToast('کپی کد ممکن نشد.', { variant: 'error', durationMs: 2400 }));
+      }),
+      mkBtn('تمام‌صفحه', 'نمایش تمام‌صفحه', () => {
+        if (!document.fullscreenElement) {
+          void figure.requestFullscreen?.().catch(() => {});
+        } else {
+          void document.exitFullscreen?.().catch(() => {});
+        }
+      }),
+    );
+
+    bar.append(label, actions);
+    figure.prepend(bar);
   }
 
   async function renderDiagram(figure: HTMLElement, force = false) {
@@ -26,23 +89,26 @@
     const rawSource = chart.dataset.mermaidSource;
     if (!rawSource) return;
     const code = decodeURIComponent(rawSource);
+    ensureToolbar(figure, code);
     try {
       const mermaid = await getMermaid();
-      const id = 'mermaid-' + Math.random().toString(36).slice(2, 9);
+      const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`;
       const isDark = document.documentElement.dataset.theme === 'dark';
       mermaid.initialize({
         startOnLoad: false,
         theme: isDark ? 'dark' : 'default',
         fontFamily: 'Vazirmatn, sans-serif',
-        securityLevel: 'loose',
-        flowchart: { htmlLabels: true, curve: 'basis' }
+        securityLevel: 'strict',
+        flowchart: { htmlLabels: true, curve: 'basis' },
       });
       const { svg } = await mermaid.render(id, code);
       chart.innerHTML = svg;
       rendered.add(figure);
       figure.dataset.mermaidLoaded = 'ready';
+      applyZoom(figure);
     } catch {
-      chart.innerHTML = '<p class="mermaid-error" role="alert">خطا در ترسیم نمودار؛ کد منبع در بخش زیر در دسترس است.</p>';
+      chart.innerHTML =
+        '<p class="mermaid-error" role="alert">خطا در ترسیم نمودار؛ کد منبع در بخش زیر در دسترس است.</p>';
       figure.dataset.mermaidLoaded = 'error';
     }
   }
