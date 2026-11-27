@@ -24,6 +24,15 @@ router = APIRouter()
 
 class Publication(Contract):
     visibility: Literal["private", "unlisted", "public"]
+    rotate_token: bool = True
+
+
+def _next_share_token(item: LibraryItem, visibility: str, rotate_token: bool) -> str | None:
+    if visibility != "unlisted":
+        return None
+    if rotate_token or not item.share_token:
+        return secrets.token_urlsafe(32)
+    return item.share_token
 
 
 @router.put("/items/{item_id}/publication")
@@ -40,13 +49,13 @@ async def publish(item_id: UUID, body: Publication, db: DB, user: Me, _: Writes)
             .values(published=body.visibility != "private")
         )
         item.visibility = body.visibility
-        item.share_token = secrets.token_urlsafe(32) if body.visibility == "unlisted" else None
+        item.share_token = _next_share_token(item, body.visibility, body.rotate_token)
         item.published_title = item.title if body.visibility != "private" else None
         item.published_content = item.content if body.visibility != "private" else None
         item.published_hash = item.current_hash if body.visibility != "private" else None
     elif item.kind == "folder":
         item.visibility = body.visibility
-        item.share_token = secrets.token_urlsafe(32) if body.visibility == "unlisted" else None
+        item.share_token = _next_share_token(item, body.visibility, body.rotate_token)
         item.published_title = item.title if body.visibility != "private" else None
         item.published_content = None
         item.published_hash = "folder" if body.visibility != "private" else None
@@ -82,9 +91,7 @@ async def publish(item_id: UUID, body: Publication, db: DB, user: Me, _: Writes)
                         )
                     else:
                         desc.published_content = None
-                        desc.published_hash = (
-                            "folder" if body.visibility != "private" else None
-                        )
+                        desc.published_hash = "folder" if body.visibility != "private" else None
                     next_frontier.append(desc.id)
             frontier = next_frontier
 
@@ -103,13 +110,19 @@ async def public_item(db: AsyncSession, *, item_id=None, token=None, note_id=Non
     if item is None:
         raise HTTPException(404, "Page not found")
 
+    await ancestors(db, item, item.user_id)
     if item.kind == "note":
-        await ancestors(db, item, item.user_id)
         return dto(item, public=True)
 
-    all_user_items = (
-        await db.scalars(
-            select(LibraryItem).where(
+    meta_rows = (
+        await db.execute(
+            select(
+                LibraryItem.id,
+                LibraryItem.parent_id,
+                LibraryItem.kind,
+                LibraryItem.title,
+                LibraryItem.published_title,
+            ).where(
                 LibraryItem.user_id == item.user_id,
                 LibraryItem.trashed_at.is_(None),
                 LibraryItem.published_hash.is_not(None),
@@ -118,29 +131,34 @@ async def public_item(db: AsyncSession, *, item_id=None, token=None, note_id=Non
     ).all()
 
     tree, flat_notes, path_map = collect_folder_tree_and_notes(
-        item.id, list(all_user_items), use_published=True
+        item.id, list(meta_rows), use_published=True
     )
-    descendants = [it for it in all_user_items if it.id in path_map]
     descendant_ids = set(path_map.keys())
 
-    target_note: LibraryItem | None = None
+    target_id: UUID | None = None
     if note_id:
         try:
             target_uuid = UUID(note_id) if isinstance(note_id, str) else note_id
             if target_uuid in descendant_ids:
-                target_note = next(
-                    (it for it in all_user_items if it.id == target_uuid and it.kind == "note"),
+                meta = next(
+                    (it for it in meta_rows if it.id == target_uuid and it.kind == "note"),
                     None,
                 )
+                if meta is not None:
+                    target_id = meta.id
         except (ValueError, TypeError):
             pass
 
-    if target_note is None:
-        notes = [it for it in descendants if it.kind == "note"]
-        target_note = next(
+    if target_id is None:
+        notes = [it for it in meta_rows if it.id in descendant_ids and it.kind == "note"]
+        chosen = next(
             (n for n in notes if n.title.lower() in ("readme", "راهنما", "index")),
             notes[0] if notes else None,
         )
+        if chosen is not None:
+            target_id = chosen.id
+
+    target_note = await db.get(LibraryItem, target_id) if target_id is not None else None
 
     res = dto(item, public=True)
     res["tree"] = tree
@@ -156,8 +174,7 @@ async def public_item(db: AsyncSession, *, item_id=None, token=None, note_id=Non
         res["content"] = target_note.published_content or ""
         res["current_hash"] = target_note.published_hash or ""
         res["verified"] = bool(
-            target_note.published_hash
-            and target_note.verified_hash == target_note.published_hash
+            target_note.published_hash and target_note.verified_hash == target_note.published_hash
         )
     else:
         res["active_note_id"] = None
@@ -168,9 +185,7 @@ async def public_item(db: AsyncSession, *, item_id=None, token=None, note_id=Non
 
 
 @router.get("/public")
-async def publications(
-    db: DB, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)
-):
+async def publications(db: DB, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
     hidden = select(LibraryItem.id).where(LibraryItem.trashed_at.is_not(None)).cte(recursive=True)
     hidden = hidden.union_all(
         select(LibraryItem.id).join(hidden, LibraryItem.parent_id == hidden.c.id)

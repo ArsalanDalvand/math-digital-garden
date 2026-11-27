@@ -402,7 +402,7 @@ x = 42
       const input = '<iframe src="https://example.org/embed" width="600" height="400"></iframe>';
       const html = await renderMarkdown(input);
 
-      assert.match(html, /<iframe src="https:\/\/example\.org\/embed" width="600" height="400" sandbox="allow-scripts allow-same-origin allow-popups" loading="lazy"><\/iframe>/);
+      assert.match(html, /<iframe src="https:\/\/example\.org\/embed" width="600" height="400" sandbox="allow-scripts allow-popups" loading="lazy" referrerpolicy="no-referrer"><\/iframe>/);
     });
 
     it('strips iframes with unsafe or javascript/data src protocols', async () => {
@@ -736,7 +736,7 @@ graph LR
       assert.match(html, /<section data-footnotes class="footnotes">/);
 
       // Verify Sanitized Iframe
-      assert.match(html, /<iframe src="https:\/\/example\.org\/visualizer" width="600" height="350" sandbox="allow-scripts allow-same-origin allow-popups" loading="lazy"><\/iframe>/);
+      assert.match(html, /<iframe src="https:\/\/example\.org\/visualizer" width="600" height="350" sandbox="allow-scripts allow-popups" loading="lazy" referrerpolicy="no-referrer"><\/iframe>/);
     });
 
     it('buildKnowledge pipeline: correctly resolves graph relations, note transclusions, and block references', async () => {

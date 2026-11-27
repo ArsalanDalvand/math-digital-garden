@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, Response
-from sqlalchemy import and_, or_, select, text, update
+from sqlalchemy import and_, exists, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from backend.app.library_models import (
     LibraryCanonical,
@@ -58,6 +59,36 @@ def dto(item: LibraryItem, public: bool = False) -> dict:
     return result
 
 
+async def _ancestor_chain_rows(db: AsyncSession, item: LibraryItem, user_id: UUID):
+    if not item.parent_id:
+        return []
+    base = select(
+        LibraryItem.id,
+        LibraryItem.parent_id,
+        LibraryItem.trashed_at,
+        LibraryItem.visibility,
+        LibraryItem.share_token,
+        LibraryItem.published_hash,
+        literal(1).label("depth"),
+    ).where(LibraryItem.id == item.parent_id, LibraryItem.user_id == user_id)
+    tree = base.cte("ancestor_tree", recursive=True)
+    parent_alias = aliased(LibraryItem)
+    tree = tree.union_all(
+        select(
+            parent_alias.id,
+            parent_alias.parent_id,
+            parent_alias.trashed_at,
+            parent_alias.visibility,
+            parent_alias.share_token,
+            parent_alias.published_hash,
+            (tree.c.depth + 1).label("depth"),
+        )
+        .join(tree, parent_alias.id == tree.c.parent_id)
+        .where(parent_alias.user_id == user_id, tree.c.depth < 50)
+    )
+    return (await db.execute(select(tree))).fetchall()
+
+
 async def ancestors(db: AsyncSession, item: LibraryItem | None, user_id: UUID, forbidden=None):
     if item is None:
         return
@@ -68,24 +99,7 @@ async def ancestors(db: AsyncSession, item: LibraryItem | None, user_id: UUID, f
     if not item.parent_id:
         return
 
-    query = text("""
-        WITH RECURSIVE tree AS (
-            SELECT id, parent_id, trashed_at, 1 AS depth, ARRAY[id] AS path
-            FROM library_items
-            WHERE id = :item_id AND user_id = :user_id
-            UNION ALL
-            SELECT parent.id, parent.parent_id, parent.trashed_at,
-                   tree.depth + 1, path || parent.id
-            FROM library_items parent
-            JOIN tree ON parent.id = tree.parent_id
-            WHERE parent.user_id = :user_id
-              AND NOT (parent.id = ANY(tree.path))
-              AND tree.depth < 50
-        )
-        SELECT id, parent_id, trashed_at FROM tree;
-    """)
-    res = await db.execute(query, {"item_id": item.parent_id, "user_id": user_id})
-    rows = res.fetchall()
+    rows = await _ancestor_chain_rows(db, item, user_id)
     seen = {item.id}
     for row in rows:
         if row.id in seen or row.id == forbidden:
@@ -93,6 +107,27 @@ async def ancestors(db: AsyncSession, item: LibraryItem | None, user_id: UUID, f
         seen.add(row.id)
         if row.trashed_at is not None:
             raise HTTPException(404, "Item not found")
+
+
+async def _matches_ancestor_share_token(
+    db: AsyncSession, item: LibraryItem, token: str | None
+) -> bool:
+    if not token or not item.parent_id:
+        return False
+    rows = await _ancestor_chain_rows(db, item, item.user_id)
+    seen = {item.id}
+    for row in rows:
+        if row.id in seen or row.trashed_at is not None:
+            return False
+        seen.add(row.id)
+        if (
+            row.visibility == "unlisted"
+            and row.published_hash
+            and row.share_token
+            and secrets.compare_digest(row.share_token.encode(), token.encode())
+        ):
+            return True
+    return False
 
 
 async def owned(db: AsyncSession, user_id: UUID, item_id: UUID, *, active=True, lock=False):
@@ -138,18 +173,23 @@ async def accessible(db: AsyncSession, item_id: UUID, user, token=None, *, lock=
     if item is None:
         raise HTTPException(404, "Item not found")
     await ancestors(db, item, item.user_id)
-    if item.user_id != user.id and not (
-        item.published_hash
-        and (
-            item.visibility == "public"
-            or (
-                item.visibility == "unlisted"
-                and token
-                and secrets.compare_digest((item.share_token or "").encode(), token.encode())
-            )
+    if item.user_id != user.id:
+        direct_unlisted = (
+            item.visibility == "unlisted"
+            and bool(token)
+            and bool(item.share_token)
+            and secrets.compare_digest((item.share_token or "").encode(), token.encode())
         )
-    ):
-        raise HTTPException(404, "Item not found")
+        folder_unlisted = (
+            item.visibility == "unlisted"
+            and bool(token)
+            and await _matches_ancestor_share_token(db, item, token)
+        )
+        if not (
+            item.published_hash
+            and (item.visibility == "public" or direct_unlisted or folder_unlisted)
+        ):
+            raise HTTPException(404, "Item not found")
     return item
 
 
@@ -235,6 +275,30 @@ async def subscriptions(db: AsyncSession, user, model, offset: int, limit: int):
     hidden = hidden.union_all(
         select(LibraryItem.id).join(hidden, LibraryItem.parent_id == hidden.c.id)
     )
+    unlisted_ancestors = (
+        select(
+            LibraryItem.id,
+            LibraryItem.share_token,
+            literal(1).label("depth"),
+        )
+        .where(
+            LibraryItem.visibility == "unlisted",
+            LibraryItem.published_hash.is_not(None),
+            LibraryItem.share_token.is_not(None),
+            LibraryItem.trashed_at.is_(None),
+        )
+        .cte("unlisted_ancestors", recursive=True)
+    )
+    unlisted_child = aliased(LibraryItem)
+    unlisted_ancestors = unlisted_ancestors.union_all(
+        select(
+            unlisted_child.id,
+            unlisted_ancestors.c.share_token,
+            (unlisted_ancestors.c.depth + 1).label("depth"),
+        )
+        .join(unlisted_ancestors, unlisted_child.parent_id == unlisted_ancestors.c.id)
+        .where(unlisted_child.trashed_at.is_(None), unlisted_ancestors.c.depth < 50)
+    )
     return (
         await db.execute(
             select(LibraryItem, model)
@@ -250,7 +314,15 @@ async def subscriptions(db: AsyncSession, user, model, offset: int, limit: int):
                             LibraryItem.visibility == "public",
                             and_(
                                 LibraryItem.visibility == "unlisted",
-                                model.access_token == LibraryItem.share_token,
+                                or_(
+                                    model.access_token == LibraryItem.share_token,
+                                    exists(
+                                        select(literal(1)).where(
+                                            unlisted_ancestors.c.id == LibraryItem.id,
+                                            unlisted_ancestors.c.share_token == model.access_token,
+                                        )
+                                    ),
+                                ),
                             ),
                         ),
                     ),
@@ -266,8 +338,9 @@ async def subscriptions(db: AsyncSession, user, model, offset: int, limit: int):
 def subscription_link(item: LibraryItem, user, entry) -> str:
     if item.user_id == user.id:
         return "/library/" + str(item.id)
-    return (
-        "/shared/" + entry.access_token
-        if item.visibility == "unlisted"
-        else "/published/" + str(item.id)
-    )
+    if item.visibility == "unlisted":
+        token = getattr(entry, "access_token", None) or item.share_token or ""
+        if item.kind == "note" and not item.share_token:
+            return f"/shared/{token}?note={item.id}"
+        return "/shared/" + token
+    return "/published/" + str(item.id)

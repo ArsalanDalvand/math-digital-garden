@@ -2,18 +2,16 @@ import type { APIRoute } from 'astro';
 import { getKnowledgeIndex } from '../../lib/catalogue.mjs';
 import { renderNoteWithIndex } from '../../lib/markdown.mjs';
 import { previewBlocks } from '../../lib/preview-blocks.mjs';
+import { isAllowedRequestOrigin } from '../../lib/proxy-origin.mjs';
 
 export const POST: APIRoute = async ({ request }) => {
-  const url = new URL(request.url);
-  if (
-    request.headers.get('x-requested-with') !== 'MathGarden' ||
-    (request.headers.has('origin') && request.headers.get('origin') !== url.origin)
-  ) {
+  if (!isAllowedRequestOrigin(request)) {
     return new Response(null, { status: 403 });
   }
   const headers = { 'Cache-Control': 'no-store' };
   try {
-    const origin = process.env.API_BASE_URL || import.meta.env.API_BASE_URL || 'http://127.0.0.1:8000';
+    const origin =
+      process.env.API_BASE_URL || import.meta.env.API_BASE_URL || 'http://127.0.0.1:8000';
     const auth = await fetch(`${origin}/api/auth/me`, {
       headers: { Cookie: request.headers.get('cookie') ?? '' },
       signal: AbortSignal.timeout(5000),
@@ -27,7 +25,7 @@ export const POST: APIRoute = async ({ request }) => {
         ? await Promise.all(
             previewBlocks(body)
               .slice(0, 128)
-              .map(async ({ raw }) => ({ raw, html: await renderNoteWithIndex(raw, index) }))
+              .map(async ({ raw }) => ({ raw, html: await renderNoteWithIndex(raw, index) })),
           )
         : undefined;
     return Response.json({ html: await renderNoteWithIndex(body, index), blocks }, { headers });

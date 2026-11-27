@@ -1,5 +1,7 @@
 <script>
+  import { escapeHtml, safeExternalUrl } from '../lib/canvas-sanitize.mjs';
   const activeCanvas = new WeakSet<HTMLElement>();
+  let canvasMarkerSeq = 0;
 
   const OBSIDIAN_COLORS: Record<string, string> = {
     '1': '#e93535',
@@ -83,11 +85,17 @@
 
       renderCanvasBoard(container, data);
     } catch {
-      container.innerHTML = `
-        <div class="canvas-error" role="alert">
-          <p>بارگذاری بوم ابسیدین امکان‌پذیر نشد. پیوند فایل: <a href="${container.dataset.canvasUrl || '#'}">${container.dataset.canvasTitle || 'فایل بوم'}</a></p>
-        </div>
-      `;
+      const errWrap = document.createElement('div');
+      errWrap.className = 'canvas-error';
+      errWrap.setAttribute('role', 'alert');
+      const errP = document.createElement('p');
+      errP.append('بارگذاری بوم ابسیدین امکان‌پذیر نشد. پیوند فایل: ');
+      const errLink = document.createElement('a');
+      errLink.href = safeExternalUrl(container.dataset.canvasUrl) || '#';
+      errLink.textContent = container.dataset.canvasTitle || 'فایل بوم';
+      errP.append(errLink);
+      errWrap.append(errP);
+      container.replaceChildren(errWrap);
     }
   }
 
@@ -113,10 +121,11 @@
     maxY += padding;
     const boardWidth = maxX - minX;
     const boardHeight = maxY - minY;
+    const arrowId = `canvas-arrow-${++canvasMarkerSeq}`;
 
     container.innerHTML = `
       <div class="canvas-toolbar" role="toolbar" aria-label="ابزارهای بوم">
-        <span class="canvas-title-label">${container.dataset.canvasTitle || 'بوم ابسیدین'}</span>
+        <span class="canvas-title-label">${escapeHtml(container.dataset.canvasTitle || 'بوم ابسیدین')}</span>
         <div class="canvas-actions">
           <button type="button" data-act="zoom-in" title="بزرگ‌نمایی">+</button>
           <button type="button" data-act="reset" title="اندازه طبیعی">۱۰۰٪</button>
@@ -128,7 +137,7 @@
         <div class="canvas-stage" style="width: ${boardWidth}px; height: ${boardHeight}px;">
           <svg class="canvas-edges-layer" width="${boardWidth}" height="${boardHeight}">
             <defs>
-              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker id="${arrowId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="currentColor"/>
               </marker>
             </defs>
@@ -159,27 +168,62 @@
       }
 
       if (n.type === 'text') {
-        nodeEl.innerHTML = `<div class="canvas-node-content"><p>${(n.text || '').replace(/\n/g, '<br>')}</p></div>`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'canvas-node-content';
+        const p = document.createElement('p');
+        const textLines = String(n.text || '').split('\n');
+        textLines.forEach((line, idx) => {
+          if (idx > 0) p.append(document.createElement('br'));
+          p.append(document.createTextNode(line));
+        });
+        contentDiv.append(p);
+        nodeEl.append(contentDiv);
       } else if (n.type === 'file') {
         const fileName = (n.file || '').split('/').pop()?.replace(/\.md$/, '') || 'یادداشت';
-        nodeEl.innerHTML = `
-          <div class="canvas-node-file-header">
-            <span class="canvas-file-icon">📄</span>
-            <span class="canvas-file-title" title="${n.file}">${fileName}</span>
-          </div>
-          <div class="canvas-node-file-body">
-            <a href="/notes/${encodeURIComponent(fileName)}" class="canvas-open-link">مشاهدهٔ یادداشت ←</a>
-          </div>
-        `;
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'canvas-node-file-header';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'canvas-file-icon';
+        iconSpan.textContent = '📄';
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'canvas-file-title';
+        titleSpan.title = String(n.file || '');
+        titleSpan.textContent = fileName;
+        headerDiv.append(iconSpan, titleSpan);
+
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'canvas-node-file-body';
+        const link = document.createElement('a');
+        link.href = `/notes/${encodeURIComponent(fileName)}`;
+        link.className = 'canvas-open-link';
+        link.textContent = 'مشاهدهٔ یادداشت ←';
+        bodyDiv.append(link);
+        nodeEl.append(headerDiv, bodyDiv);
       } else if (n.type === 'link') {
-        nodeEl.innerHTML = `
-          <div class="canvas-node-link-content">
-            <span class="canvas-link-icon">🔗</span>
-            <a href="${n.url}" target="_blank" rel="noopener noreferrer">${n.url}</a>
-          </div>
-        `;
+        const linkDiv = document.createElement('div');
+        linkDiv.className = 'canvas-node-link-content';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'canvas-link-icon';
+        iconSpan.textContent = '🔗';
+        const validated = safeExternalUrl(n.url);
+        if (validated) {
+          const anchor = document.createElement('a');
+          anchor.href = validated;
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          anchor.textContent = validated;
+          linkDiv.append(iconSpan, anchor);
+        } else {
+          const span = document.createElement('span');
+          span.textContent = String(n.url || 'پیوند نامعتبر');
+          linkDiv.append(iconSpan, span);
+        }
+        nodeEl.append(linkDiv);
       } else if (n.type === 'group') {
-        nodeEl.innerHTML = `<span class="canvas-group-label">${n.label || ''}</span>`;
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'canvas-group-label';
+        labelSpan.textContent = String(n.label || '');
+        nodeEl.append(labelSpan);
       }
 
       nodesLayer.appendChild(nodeEl);
@@ -202,7 +246,7 @@
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', `M ${sx1} ${sy1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${sx2} ${sy2}`);
       path.setAttribute('class', 'canvas-edge-path');
-      path.setAttribute('marker-end', 'url(#arrow)');
+      path.setAttribute('marker-end', `url(#${arrowId})`);
 
       if (edge.color) {
         const hex = OBSIDIAN_COLORS[edge.color] || edge.color;
@@ -257,19 +301,33 @@
       viewport.style.cursor = 'grabbing';
     });
 
-    window.addEventListener('mousemove', (e) => {
+    const onMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
+      if (!container.isConnected) {
+        isDragging = false;
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        return;
+      }
       panX = e.clientX - startX;
       panY = e.clientY - startY;
       applyTransform();
-    });
+    };
 
-    window.addEventListener('mouseup', () => {
+    const onMouseUp = () => {
+      if (!container.isConnected) {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        return;
+      }
       if (isDragging) {
         isDragging = false;
         viewport.style.cursor = 'grab';
       }
-    });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
 
     viewport.addEventListener('wheel', (e) => {
       e.preventDefault();

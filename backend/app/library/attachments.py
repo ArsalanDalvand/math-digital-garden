@@ -162,6 +162,14 @@ async def delete_attachment(attachment_id: UUID, db: DB, user: Me, _: Writes):
     return Response(status_code=204)
 
 
+def _page_allows_item(page: dict, item_id: UUID) -> bool:
+    if page["id"] == item_id:
+        return True
+    return page.get("kind") == "folder" and any(
+        entry.get("id") == str(item_id) for entry in page.get("notes", [])
+    )
+
+
 @router.get("/public/{item_id}/attachments")
 async def published_attachments(
     item_id: UUID,
@@ -170,8 +178,12 @@ async def published_attachments(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
 ):
-    page = await public_item(db, token=token) if token else await public_item(db, item_id=item_id)
-    if page["id"] != item_id:
+    page = (
+        await public_item(db, token=token, note_id=str(item_id))
+        if token
+        else await public_item(db, item_id=item_id)
+    )
+    if not _page_allows_item(page, item_id):
         raise HTTPException(404, "Page not found")
     rows = (
         await db.scalars(
@@ -186,11 +198,13 @@ async def published_attachments(
 
 
 @router.get("/public/{item_id}/attachments/{attachment_id}")
-async def published_download(
-    item_id: UUID, attachment_id: UUID, db: DB, token: str | None = None
-):
-    page = await public_item(db, token=token) if token else await public_item(db, item_id=item_id)
-    if page["id"] != item_id:
+async def published_download(item_id: UUID, attachment_id: UUID, db: DB, token: str | None = None):
+    page = (
+        await public_item(db, token=token, note_id=str(item_id))
+        if token
+        else await public_item(db, item_id=item_id)
+    )
+    if not _page_allows_item(page, item_id):
         raise HTTPException(404, "Page not found")
     attachment = await db.scalar(
         select(LibraryAttachment).where(

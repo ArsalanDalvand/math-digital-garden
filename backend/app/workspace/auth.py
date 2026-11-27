@@ -21,6 +21,7 @@ from backend.app.workspace.security import (
     Me,
     digest,
     limiter,
+    optional_user,
     passwords,
     user_json,
     write_guard,
@@ -38,16 +39,10 @@ class Registration(Credentials):
     full_name: str | None = Field(default=None, max_length=255)
 
 
-async def issue_session(
-    db: AsyncSession, user: User, response: Response, request: Request
-) -> None:
+async def issue_session(db: AsyncSession, user: User, response: Response, request: Request) -> None:
     old = request.cookies.get("garden_session")
     if old:
-        await db.execute(
-            delete(AuthSession).where(
-                AuthSession.token_hash == digest(old), AuthSession.user_id == user.id
-            )
-        )
+        await db.execute(delete(AuthSession).where(AuthSession.token_hash == digest(old)))
     token = token_urlsafe(32)
     db.add(
         AuthSession(
@@ -106,20 +101,30 @@ async def login(
     return user_json(user)
 
 
+@router.get("/auth/session")
+async def session_status(request: Request, response: Response, db: DB) -> dict[str, object]:
+    """Return authentication status with HTTP 200 for both guests and signed-in users."""
+    from backend.app.account_settings import account_json
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie"
+    user = await optional_user(request, db)
+    if user is None:
+        return {"authenticated": False, "account": None}
+    return {"authenticated": True, "account": account_json(user)}
+
+
 @router.get("/auth/me")
 async def me(user: Me) -> dict[str, object]:
     return user_json(user)
 
 
 @router.post("/auth/logout", status_code=204, dependencies=[Depends(write_guard)])
-async def logout(request: Request, response: Response, user: Me, db: DB) -> None:
-    await db.execute(
-        delete(AuthSession).where(
-            AuthSession.token_hash == digest(request.cookies.get("garden_session", "")),
-            AuthSession.user_id == user.id,
-        )
-    )
-    await db.commit()
+async def logout(request: Request, response: Response, db: DB) -> None:
+    old = request.cookies.get("garden_session", "")
+    if old and len(old) <= 128:
+        await db.execute(delete(AuthSession).where(AuthSession.token_hash == digest(old)))
+        await db.commit()
     response.delete_cookie(
         "garden_session",
         path="/",
