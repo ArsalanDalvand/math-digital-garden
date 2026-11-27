@@ -2324,13 +2324,20 @@
     .workspace-document {
       padding-inline: 20px;
     }
+    .document-toolbar {
+      position: relative;
+    }
+    .document-options {
+      position: static;
+    }
     .reading-settings-panel,
     .note-outline-panel,
     .workspace-more-panel {
-      position: fixed;
-      top: calc(var(--header-height) + 52px);
+      position: absolute;
+      top: calc(100% + 6px);
       inset-inline-end: 12px;
-      max-height: calc(100dvh - var(--header-height) - 72px);
+      width: min(300px, calc(100vw - 24px));
+      max-height: calc(100dvh - var(--header-height) - 110px);
     }
   }
 
@@ -2341,12 +2348,6 @@
     }
     .note-extra-actions {
       display: none;
-    }
-    .reading-settings-panel,
-    .note-outline-panel,
-    .workspace-more-panel {
-      top: calc(var(--header-height) + 84px);
-      max-height: calc(100dvh - var(--header-height) - 104px);
     }
     .garden-toast-region {
       inset-inline: 12px;

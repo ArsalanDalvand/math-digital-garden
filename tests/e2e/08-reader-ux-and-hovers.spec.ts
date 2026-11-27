@@ -57,7 +57,9 @@ test.describe('Phase B: Reader UX, Toolbar, Sidebar, Callouts, Tables & Hover Pr
     const bookmarkToast = page.locator('.garden-toast').last();
     await expect(bookmarkToast).toBeVisible();
     await expect(bookmarkToast.locator('a[href="/account"]')).toBeVisible();
-    await page.keyboard.press('Escape');
+    if (await page.locator('#workspace-more-panel').isVisible()) {
+      await page.keyboard.press('Escape');
+    }
 
     expect(unauthorizedUrls).toEqual([]);
 
@@ -203,12 +205,13 @@ test.describe('Phase B: Reader UX, Toolbar, Sidebar, Callouts, Tables & Hover Pr
   }) => {
     const roadmapRes = await page.goto(NOTE_ROADMAP);
     if (roadmapRes?.status() === 200) {
-      const tables = page.locator('.note table');
+      const canonicalArticle = page.locator('article.note[data-ai-scope="canonical"]');
+      const tables = canonicalArticle.locator('table');
       const tableCount = await tables.count();
       if (tableCount > 0) {
-        const allTablesText = (await page.locator('.note').textContent()) ?? '';
+        const allTablesText = (await canonicalArticle.textContent()) ?? '';
         expect(allTablesText).not.toMatch(/\[\[[^\]]+\|[^\]]+\]\]/);
-        expect(await page.locator('.note table a.wiki-link').count()).toBeGreaterThan(10);
+        expect(await canonicalArticle.locator('table a.wiki-link').count()).toBeGreaterThan(10);
       }
     }
 
