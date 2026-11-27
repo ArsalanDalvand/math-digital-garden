@@ -6,19 +6,107 @@ type PublicNode = { label: string; link?: string; items?: PublicNode[]; count?: 
 type Item = { id: string; title: string; kind: 'note' | 'folder'; canonical_slug?: string };
 const root = document.querySelector<HTMLElement>('[data-library-navigation]');
 
+function normalizeChar(ch: string): string {
+  const code = ch.charCodeAt(0);
+  if (code >= 0x06f0 && code <= 0x06f9) return String(code - 0x06f0);
+  if (code >= 0x0660 && code <= 0x0669) return String(code - 0x0660);
+  if ((code >= 0x064b && code <= 0x065f) || code === 0x0670) return '';
+  if (ch === 'ك') return 'ک';
+  if (ch === 'ي') return 'ی';
+  if (ch === 'آ' || ch === 'أ' || ch === 'إ') return 'ا';
+  return ch.toLowerCase();
+}
+
 function normalizeText(str: string): string {
-  const pDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-  const aDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  let s = str.toLowerCase();
-  for (let i = 0; i < 10; i++) {
-    s = s.replaceAll(pDigits[i], String(i)).replaceAll(aDigits[i], String(i));
+  let out = '';
+  for (const ch of str) out += normalizeChar(ch);
+  return out.trim();
+}
+
+function normalizePathname(value: string): string {
+  const pathOnly = (value.split(/[?#]/)[0] || '').trim();
+  if (!pathOnly) return '';
+  return pathOnly.length > 1 && pathOnly.endsWith('/') ? pathOnly.slice(0, -1) : pathOnly;
+}
+
+function appendHighlightedLabel(container: HTMLElement, text: string, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    container.textContent = text;
+    return;
   }
-  return s
-    .replace(/[\u064B-\u065F\u0670]/g, '') // remove arabic diacritics
-    .replace(/[ك]/g, 'ک')
-    .replace(/[ي]/g, 'ی')
-    .replace(/[آأإ]/g, 'ا')
-    .trim();
+  let normText = '';
+  const map: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const nc = normalizeChar(text[i]);
+    if (!nc) continue;
+    for (let k = 0; k < nc.length; k++) {
+      normText += nc[k];
+      map.push(i);
+    }
+  }
+  const matchIdx = normText.indexOf(normalizedQuery);
+  if (matchIdx === -1) {
+    container.textContent = text;
+    return;
+  }
+  const startOrig = map[matchIdx];
+  const lastNormIdx = matchIdx + normalizedQuery.length - 1;
+  const endOrig = (map[lastNormIdx] ?? text.length - 1) + 1;
+
+  container.replaceChildren();
+  if (startOrig > 0) container.append(document.createTextNode(text.slice(0, startOrig)));
+  const mark = document.createElement('mark');
+  mark.className = 'library-filter-mark';
+  mark.textContent = text.slice(startOrig, endOrig);
+  container.append(mark);
+  if (endOrig < text.length) container.append(document.createTextNode(text.slice(endOrig)));
+}
+
+function decodeSlugFromHref(link?: string): string {
+  if (!link || !link.startsWith('/notes/')) return '';
+  try {
+    return decodeURIComponent(link.slice('/notes/'.length).split('#')[0] || '');
+  } catch {
+    return link;
+  }
+}
+
+function countTreeLeaves(nodes: PublicNode[]): number {
+  let total = 0;
+  for (const node of nodes) {
+    if (node.items) total += countTreeLeaves(node.items);
+    else if (node.link) total += 1;
+  }
+  return total;
+}
+
+function filterPublicTree(nodes: PublicNode[], normQuery: string): PublicNode[] {
+  const result: PublicNode[] = [];
+  for (const node of nodes) {
+    if (node.items) {
+      const folderMatches = normalizeText(node.label).includes(normQuery);
+      if (folderMatches) {
+        result.push({
+          ...node,
+          count: countTreeLeaves(node.items),
+        });
+      } else {
+        const filteredChildren = filterPublicTree(node.items, normQuery);
+        if (filteredChildren.length > 0) {
+          result.push({
+            label: node.label,
+            items: filteredChildren,
+            count: countTreeLeaves(filteredChildren),
+          });
+        }
+      }
+    } else if (node.link) {
+      const labelMatches = normalizeText(node.label).includes(normQuery);
+      const slugMatches = normalizeText(decodeSlugFromHref(node.link)).includes(normQuery);
+      if (labelMatches || slugMatches) result.push(node);
+    }
+  }
+  return result;
 }
 
 if (root) {
@@ -31,8 +119,21 @@ if (root) {
   const feedback = dialog.querySelector<HTMLElement>('[data-create-status]')!;
   const submit = form.querySelector<HTMLButtonElement>('[type=submit]')!;
   const filterInput = root.querySelector<HTMLInputElement>('[data-library-filter]');
+  const filterClear = root.querySelector<HTMLButtonElement>('[data-library-filter-clear]');
   const expandBtn = root.querySelector<HTMLButtonElement>('[data-library-expand]');
   const collapseBtn = root.querySelector<HTMLButtonElement>('[data-library-collapse]');
+  const addBtn = root.querySelector<HTMLButtonElement>('[data-library-add]');
+  if (addBtn) addBtn.hidden = true;
+
+  const publicHost = document.createElement('div');
+  publicHost.className = 'library-public-nodes';
+  const ownedHost = document.createElement('div');
+  ownedHost.className = 'library-owned-nodes';
+  const emptyNotice = document.createElement('p');
+  emptyNotice.className = 'library-empty-state';
+  emptyNotice.textContent = 'یادداشتی با این عبارت پیدا نشد.';
+  emptyNotice.hidden = true;
+  tree.append(publicHost, ownedHost, emptyNotice);
 
   let generation = 0,
     identity: string | null | undefined,
@@ -41,6 +142,9 @@ if (root) {
     createVersion = 0;
   let trigger: HTMLElement | null = null;
   const expanded = new Set<string>();
+  let cachedPublicNodes: PublicNode[] = [];
+  let savedOpenPaths: Set<string> | null = null;
+  let scrolledToActiveOnce = false;
 
   const icon = (type: string) =>
     root
@@ -63,9 +167,7 @@ if (root) {
     title.focus();
   };
 
-  root
-    .querySelector<HTMLButtonElement>('[data-library-add]')
-    ?.addEventListener('click', (event) => openCreate(event.currentTarget as HTMLElement));
+  addBtn?.addEventListener('click', (event) => openCreate(event.currentTarget as HTMLElement));
   dialog.querySelector('[data-create-cancel]')?.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
     createVersion++;
@@ -101,7 +203,7 @@ if (root) {
       document.dispatchEvent(new Event('garden:library'));
       if (item.kind === 'note')
         location.assign('/library/' + encodeURIComponent(item.id) + '?edit=1');
-      else root.querySelector<HTMLButtonElement>('[data-library-add]')?.focus();
+      else addBtn?.focus();
     } catch (error) {
       if (version === createVersion && epoch === generation) feedback.textContent = message(error);
     } finally {
@@ -113,33 +215,116 @@ if (root) {
   });
   title.addEventListener('input', () => title.setCustomValidity(''));
 
-  const link = (label: string, href: string) => {
+  const currentPath = normalizePathname(location.pathname);
+
+  const link = (label: string, href: string, highlightQuery = '') => {
     const a = document.createElement('a'),
       text = document.createElement('span');
-    text.textContent = label;
+    appendHighlightedLabel(text, label, highlightQuery);
     a.href = href;
     a.title = label;
     a.append(icon('note'), text);
-    if (location.pathname === href) a.setAttribute('aria-current', 'page');
+    if (currentPath && normalizePathname(href) === currentPath) {
+      a.setAttribute('aria-current', 'page');
+      a.classList.add('is-active');
+    }
     return a;
   };
 
-  const folder = (label: string, count?: number) => {
+  const folder = (label: string, count?: number, pathKey = label, highlightQuery = '') => {
     const details = document.createElement('details'),
       summary = document.createElement('summary'),
       text = document.createElement('span'),
       children = document.createElement('div');
-    text.textContent = label;
+    details.dataset.folderPath = pathKey;
+    appendHighlightedLabel(text, label, highlightQuery);
     summary.append(icon('caret'), icon('folder'), text);
     if (typeof count === 'number' && count > 0) {
       const badge = document.createElement('span');
       badge.className = 'tree-badge';
-      badge.textContent = String(count);
+      badge.textContent = count.toLocaleString('fa-IR');
       summary.append(badge);
     }
     children.className = 'folder-tree';
     details.append(summary, children);
     return { details, summary, children };
+  };
+
+  const subtreeHasActive = (items: PublicNode[]): boolean =>
+    items.some(
+      (n) =>
+        (n.link && normalizePathname(n.link) === currentPath) || subtreeHasActive(n.items ?? []),
+    );
+
+  const renderPublicBranch = (
+    host: HTMLElement,
+    nodes: PublicNode[],
+    options: {
+      isRoot?: boolean;
+      parentPath?: string;
+      forceOpenAll?: boolean;
+      restorePaths?: Set<string> | null;
+      highlightQuery?: string;
+    } = {},
+  ) => {
+    const {
+      isRoot = false,
+      parentPath = '',
+      forceOpenAll = false,
+      restorePaths = null,
+      highlightQuery = '',
+    } = options;
+    const anyRootActive = isRoot && nodes.some((n) => subtreeHasActive(n.items ?? []));
+
+    nodes.forEach((node, idx) => {
+      if (node.link) {
+        insert(host, link(node.label, node.link, highlightQuery), node.label);
+        return;
+      }
+      const pathKey = parentPath ? `${parentPath}/${node.label}` : node.label;
+      const { details, children } = folder(node.label, node.count, pathKey, highlightQuery);
+      let loaded = false;
+      const hasActive = subtreeHasActive(node.items ?? []);
+      const defaultRootOpen = isRoot && !anyRootActive && idx === 0 && !restorePaths;
+      const shouldOpen =
+        forceOpenAll ||
+        hasActive ||
+        defaultRootOpen ||
+        (restorePaths ? restorePaths.has(pathKey) : false);
+
+      const loadChildren = () => {
+        if (loaded) return;
+        loaded = true;
+        renderPublicBranch(children, node.items ?? [], {
+          isRoot: false,
+          parentPath: pathKey,
+          forceOpenAll,
+          restorePaths,
+          highlightQuery,
+        });
+      };
+
+      details.addEventListener('toggle', () => {
+        if (details.open) loadChildren();
+      });
+
+      if (shouldOpen) {
+        details.open = true;
+        loadChildren();
+      }
+      insert(host, details, node.label);
+    });
+  };
+
+  const scrollActiveIntoView = () => {
+    if (scrolledToActiveOnce) return;
+    requestAnimationFrame(() => {
+      const current = tree.querySelector<HTMLElement>('a[aria-current="page"]');
+      if (current) {
+        scrolledToActiveOnce = true;
+        current.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    });
   };
 
   const publicNodes = async (
@@ -156,38 +341,10 @@ if (root) {
         })
       : nodes;
     if (version !== generation || !host.isConnected) return;
-    for (const node of visible) {
-      if (node.link) {
-        insert(host, link(node.label, node.link), node.label);
-        continue;
-      }
-      const { details, children } = folder(node.label, node.count);
-      let loaded = false;
-      const active = (items: PublicNode[]): boolean =>
-        items.some((n) => n.link === location.pathname || active(n.items ?? []));
-      const hasActive = active(node.items ?? []);
-      details.addEventListener('toggle', () => {
-        if (details.open && !loaded) {
-          loaded = true;
-          void publicNodes(children, node.items ?? [], version, signedIn).catch((error) => {
-            loaded = false;
-            if (version === generation) status.textContent = message(error);
-          });
-        }
-      });
-      // Open if it contains the active page OR if it is the top-level book folder
-      if (hasActive || node.label.includes('جبر خطی آکسلر')) {
-        details.open = true;
-        if (!loaded) {
-          loaded = true;
-          void publicNodes(children, node.items ?? [], version, signedIn).catch((error) => {
-            loaded = false;
-            if (version === generation) status.textContent = message(error);
-          });
-        }
-      }
-      insert(host, details, node.label);
-    }
+    cachedPublicNodes = visible;
+    host.replaceChildren();
+    renderPublicBranch(host, visible, { isRoot: true });
+    scrollActiveIntoView();
   };
 
   const populate = async (host: HTMLElement, id: string | null, version: number, offset = 0) => {
@@ -258,66 +415,118 @@ if (root) {
     }
   };
 
-  // Quick Filter Implementation
-  let filterTimer: any = null;
-  filterInput?.addEventListener('input', () => {
-    clearTimeout(filterTimer);
-    filterTimer = setTimeout(applyFilter, 150);
-  });
+  function captureOpenPaths(): Set<string> {
+    const paths = new Set<string>();
+    publicHost.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((d) => {
+      if (d.dataset.folderPath) paths.add(d.dataset.folderPath);
+    });
+    return paths;
+  }
 
   function applyFilter() {
-    const q = normalizeText(filterInput?.value || '');
-    const allLinks = tree.querySelectorAll<HTMLAnchorElement>('a');
-    const allDetails = tree.querySelectorAll<HTMLDetailsElement>('details');
+    const rawVal = filterInput?.value || '';
+    const q = normalizeText(rawVal);
+    if (filterClear) filterClear.hidden = rawVal.length === 0;
 
     if (!q) {
-      allLinks.forEach((a) => (a.style.display = ''));
-      allDetails.forEach((d) => {
+      emptyNotice.hidden = true;
+      if (savedOpenPaths) {
+        publicHost.replaceChildren();
+        renderPublicBranch(publicHost, cachedPublicNodes, {
+          isRoot: true,
+          restorePaths: savedOpenPaths,
+        });
+        savedOpenPaths = null;
+      }
+      ownedHost.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => (a.style.display = ''));
+      ownedHost.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
         d.style.display = '';
-        // If not top-level or active, close it
         const hasCurrent = d.querySelector('a[aria-current="page"]');
-        const isMainBook = d.querySelector('summary')?.textContent?.includes('جبر خطی آکسلر');
-        if (!hasCurrent && !isMainBook) d.open = false;
+        if (!hasCurrent && !expanded.has(d.dataset.folderPath || '')) d.open = false;
       });
       return;
     }
 
-    // Step 1: Open all details so children are rendered / evaluated
-    allDetails.forEach((d) => {
+    if (!savedOpenPaths) savedOpenPaths = captureOpenPaths();
+
+    const filteredPublic = filterPublicTree(cachedPublicNodes, q);
+    publicHost.replaceChildren();
+    if (filteredPublic.length > 0) {
+      renderPublicBranch(publicHost, filteredPublic, {
+        isRoot: true,
+        forceOpenAll: true,
+        highlightQuery: q,
+      });
+    }
+
+    const ownedDetails = ownedHost.querySelectorAll<HTMLDetailsElement>('details');
+    ownedDetails.forEach((d) => {
       d.open = true;
       d.style.display = '';
     });
-
-    // Step 2: Show/Hide links
-    allLinks.forEach((a) => {
-      const match = normalizeText(a.textContent || '').includes(q);
+    let ownedMatchCount = 0;
+    ownedHost.querySelectorAll<HTMLAnchorElement>('a').forEach((a) => {
+      const textSpan = a.querySelector('span');
+      const label = a.title || textSpan?.textContent || '';
+      const match = normalizeText(label).includes(q);
       a.style.display = match ? 'flex' : 'none';
+      if (textSpan) appendHighlightedLabel(textSpan, label, match ? q : '');
+      if (match) ownedMatchCount++;
     });
+    Array.from(ownedDetails)
+      .reverse()
+      .forEach((d) => {
+        const hasVisibleLink = Array.from(d.querySelectorAll('a')).some(
+          (a) => a.style.display !== 'none',
+        );
+        d.style.display = hasVisibleLink ? '' : 'none';
+        if (hasVisibleLink) d.open = true;
+      });
 
-    // Step 3: Hide details with no visible links
-    // Process details from leaf to root
-    const detailsArr = Array.from(allDetails).reverse();
-    detailsArr.forEach((d) => {
-      const hasVisibleLink = Array.from(d.querySelectorAll('a')).some(
-        (a) => a.style.display !== 'none',
-      );
-      d.style.display = hasVisibleLink ? '' : 'none';
-      if (hasVisibleLink) d.open = true;
-    });
+    emptyNotice.hidden = filteredPublic.length > 0 || ownedMatchCount > 0;
   }
 
-  // Expand All / Collapse All
+  let filterTimer: ReturnType<typeof setTimeout> | undefined;
+  filterInput?.addEventListener('input', () => {
+    if (filterClear) filterClear.hidden = filterInput.value.length === 0;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(applyFilter, 120);
+  });
+  filterClear?.addEventListener('click', () => {
+    if (!filterInput) return;
+    filterInput.value = '';
+    applyFilter();
+    filterInput.focus();
+  });
+
   expandBtn?.addEventListener('click', () => {
-    tree.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
+    savedOpenPaths = null;
+    if (filterInput?.value.trim()) {
+      publicHost.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => (d.open = true));
+    } else if (cachedPublicNodes.length > 0) {
+      publicHost.replaceChildren();
+      renderPublicBranch(publicHost, cachedPublicNodes, { isRoot: true, forceOpenAll: true });
+    }
+    ownedHost.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
       d.open = true;
       d.dispatchEvent(new Event('toggle'));
     });
   });
 
   collapseBtn?.addEventListener('click', () => {
-    tree.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
-      const isMain = d.querySelector('summary')?.textContent?.includes('جبر خطی آکسلر');
-      if (!isMain) d.open = false;
+    savedOpenPaths = null;
+    if (filterInput?.value) filterInput.value = '';
+    if (filterClear) filterClear.hidden = true;
+    emptyNotice.hidden = true;
+    if (cachedPublicNodes.length > 0) {
+      publicHost.replaceChildren();
+      renderPublicBranch(publicHost, cachedPublicNodes, {
+        isRoot: true,
+        restorePaths: new Set<string>(),
+      });
+    }
+    ownedHost.querySelectorAll<HTMLDetailsElement>('details').forEach((d) => {
+      if (!d.querySelector('a[aria-current="page"]')) d.open = false;
     });
   });
 
@@ -325,17 +534,22 @@ if (root) {
   void publicTree.catch(() => {});
   const load = () => {
     const version = ++generation;
-    tree.replaceChildren();
+    savedOpenPaths = null;
+    scrolledToActiveOnce = false;
+    publicHost.replaceChildren();
+    ownedHost.replaceChildren();
+    emptyNotice.hidden = true;
     void getSession().then((user) => {
       if (version !== generation) return;
       const signedIn = !!user;
+      if (addBtn) addBtn.hidden = !signedIn;
       void publicTree
-        .then((nodes) => publicNodes(tree, nodes, version, signedIn))
+        .then((nodes) => publicNodes(publicHost, nodes, version, signedIn))
         .catch((error) => {
           if (version === generation) status.textContent = message(error);
         });
       if (signedIn) {
-        void populate(tree, null, version).catch((error) => {
+        void populate(ownedHost, null, version).catch((error) => {
           if (version === generation && !(error instanceof ApiError && error.status === 401))
             status.textContent = message(error);
         });

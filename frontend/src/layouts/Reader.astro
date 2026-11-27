@@ -17,8 +17,8 @@ import '@fontsource/vazirmatn/700.css';
 import 'katex/dist/katex.min.css';
 import '../styles/app.css';
 interface HeadingItem { depth: number; slug: string; text: string }
-interface Props { title: string; headings?: HeadingItem[]; documentPage?: boolean }
-const {title,documentPage=false}=Astro.props;
+interface Props { title: string; headings?: HeadingItem[]; documentPage?: boolean; hidePageHeading?: boolean }
+const {title,documentPage=false,hidePageHeading=false}=Astro.props;
 const tools=Astro.slots.has('tools');
 const note=tools||documentPage;
 const brandName = import.meta.env.PUBLIC_BRAND_NAME || process.env.PUBLIC_BRAND_NAME || process.env.SITE_TITLE || 'باغ ریاضی';
@@ -74,12 +74,13 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
       </div>}
     </div>
   </div>
-  <div data-editor-toolbar-slot></div></div>
-  <div class="workspace-document"><h1>{title}</h1><slot/></div>
+  <div data-editor-toolbar-slot></div>{note&&<div class="reading-progress" aria-hidden="true" data-reading-progress></div>}</div>
+  <div class="workspace-document">{!hidePageHeading&&<h1>{title}</h1>}<slot/></div>
 </main>
 {tools&&<aside id="workspace-study-tools" class="workspace-tools" aria-label="ابزارهای مطالعه"><slot name="tools"/></aside>}
 </div><Excalidraw/><Mermaid/><CanvasViewer/><Presentation/><CommandPalette client:load/>
 <script>
+ import { showToast } from '../scripts/toast';
  const openCmdk = () => {
   if (document.documentElement.dataset.cmdkReady !== 'true') {
    (window as { __gardenOpenCmdkQueued?: boolean }).__gardenOpenCmdkQueued = true;
@@ -153,6 +154,58 @@ const siteDir = import.meta.env.PUBLIC_SITE_DIR || process.env.PUBLIC_SITE_DIR |
   else if(moreToggle?.getAttribute('aria-expanded')==='true'){setMore(false,true);event.preventDefault();}
   else if(navToggle?.getAttribute('aria-expanded')==='true'){setNavigation(false,true);event.preventDefault();}
  });
- document.addEventListener('pointerdown',event=>{const target=event.target as Node;if(reading?.open&&!reading.contains(target))reading.open=false;if(moreToggle?.getAttribute('aria-expanded')==='true'&&!more?.contains(target))setMore(false);});
+ document.addEventListener('pointerdown',event=>{const target=event.target as Node;if(reading?.open&&!reading.contains(target))reading.open=false;if(outline?.open&&!outline.contains(target))outline.open=false;if(moreToggle?.getAttribute('aria-expanded')==='true'&&!more?.contains(target))setMore(false);});
  mobileNavigation.addEventListener('change',event=>{mobile=event.matches;setMore(false);setNavigation(!mobile&&document.documentElement.dataset.readingFocus!=='true',navigation?.contains(document.activeElement));});
+
+ const progressEl=document.querySelector<HTMLElement>('[data-reading-progress]');
+ const articleEl=document.querySelector<HTMLElement>('article.note:not([data-live-preview])')||document.querySelector<HTMLElement>('.workspace-document');
+ if(progressEl&&articleEl){
+  let rafPending=false;
+  const updateProgress=()=>{
+   rafPending=false;
+   const rect=articleEl.getBoundingClientRect();
+   const viewH=window.innerHeight||1;
+   const maxTravel=Math.max(1,rect.height-viewH*0.65);
+   const scrolled=Math.max(0,Math.min(1,(viewH*0.25-rect.top)/maxTravel));
+   progressEl.style.setProperty('--reading-progress',scrolled.toFixed(4));
+  };
+  const onScroll=()=>{if(!rafPending){rafPending=true;requestAnimationFrame(updateProgress);}};
+  window.addEventListener('scroll',onScroll,{passive:true});
+  window.addEventListener('resize',onScroll,{passive:true});
+  updateProgress();
+ }
+
+ const COPY_ICON_SVG='<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+ function decorateDisplayMath(){
+  document.querySelectorAll<HTMLElement>('.note .katex-display').forEach(block=>{
+   if(block.querySelector('.katex-copy-btn'))return;
+   const tex=block.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim();
+   if(!tex)return;
+   const btn=document.createElement('button');
+   btn.type='button';
+   btn.className='katex-copy-btn';
+   btn.setAttribute('aria-label','کپی کد LaTeX فرمول');
+   btn.title='کپی کد LaTeX';
+   btn.innerHTML=COPY_ICON_SVG+'<span>LaTeX</span>';
+   btn.addEventListener('click',async(event)=>{
+    event.preventDefault();
+    event.stopPropagation();
+    try{
+     await navigator.clipboard.writeText(tex);
+     btn.classList.add('is-copied');
+     showToast('کد LaTeX فرمول کپی شد.',{variant:'success',durationMs:2200});
+     setTimeout(()=>btn.classList.remove('is-copied'),1200);
+    }catch{
+     showToast('کپی کد LaTeX ممکن نشد.',{variant:'error',durationMs:2600});
+    }
+   });
+   block.append(btn);
+  });
+ }
+ decorateDisplayMath();
+ const mathHost=document.querySelector('.workspace-document');
+ if(mathHost){
+  const mathObserver=new MutationObserver(()=>decorateDisplayMath());
+  mathObserver.observe(mathHost,{childList:true,subtree:true});
+ }
 </script></body></html>

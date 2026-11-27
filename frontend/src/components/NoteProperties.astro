@@ -1,169 +1,312 @@
 ---
+import type { IndexedNote } from '../lib/markdown.mjs';
+import { noteHref } from '../lib/markdown.mjs';
+import { renderInlineMathHtml, filterDisplayTags } from '../lib/inline-katex.mjs';
 import { UMKO_KINDS, UMKO_SUBTYPES, UMKO_LEVELS, UMKO_TRACKS, UMKO_STATUSES } from '../lib/umko.mjs';
 
 interface Props {
-  note: any;
+  note: IndexedNote;
+  statusText?: string;
 }
 
-const { note } = Astro.props;
-if (!note) return;
+const { note, statusText = 'نسخهٔ رسمی' } = Astro.props;
+const kindInfo = (UMKO_KINDS as Record<string, { label: string; color: string; dark?: string }>)[note.kind];
+const subtypeLabel = (UMKO_SUBTYPES as Record<string, string>)[note.subtype] || note.subtype;
+const levelInfo = (UMKO_LEVELS as Record<string, { label: string; short: string }>)[note.level];
+const statusInfo = (UMKO_STATUSES as Record<string, { label: string; color: string }>)[note.status];
+const tracks = note.tracks.map((t) => (UMKO_TRACKS as Record<string, string>)[t] || t);
+const displayTags = filterDisplayTags(note.tags);
+const sloganHtml = renderInlineMathHtml(note.slogan_fa);
 
-const kindInfo = UMKO_KINDS[note.kind] || { label: note.kind, color: 'var(--primary)' };
-const subtypeLabel = UMKO_SUBTYPES[note.subtype] || note.subtype;
-const levelInfo = UMKO_LEVELS[note.level] || (note.level ? { label: note.level } : null);
-const statusInfo = UMKO_STATUSES[note.status] || { label: note.status || 'نسخهٔ رسمی', color: 'var(--muted-foreground)' };
-const tracks = Array.isArray(note.tracks) ? note.tracks : [];
-const tags = Array.isArray(note.tags) ? note.tags : [];
+const hasSecondaryMeta =
+  tracks.length > 0 ||
+  Boolean(note.msc_primary || note.msc_secondary.length || note.uid || note.title_en || note.authors.length || note.sources.length || note.theory_scope || note.updated) ||
+  displayTags.length > 0;
 ---
 
-<div class="note-properties" data-uid={note.uid}>
+<section class="note-properties" aria-label="مشخصات علمی یادداشت">
+  <div class="note-header-bar">
+    <div class="note-core-badges">
+      {kindInfo && (
+        <span class="note-badge note-badge-kind" style={`--kind-color: ${kindInfo.color}`}>
+          <span class="note-kind-dot" aria-hidden="true"></span>
+          <span>{kindInfo.label}</span>
+          {subtypeLabel && <span class="note-subtype-sep" aria-hidden="true">·</span>}
+          {subtypeLabel && <span class="note-subtype-text">{subtypeLabel}</span>}
+        </span>
+      )}
+      {levelInfo && (
+        <span class="note-badge note-badge-neutral" title={levelInfo.label}>
+          <span dir="ltr">{levelInfo.short}</span>
+          <span>{levelInfo.label}</span>
+        </span>
+      )}
+      {statusInfo && note.status && note.status !== 'canonical' && (
+        <span class="note-badge note-badge-status" style={`--status-color: ${statusInfo.color}`}>
+          {statusInfo.label}
+        </span>
+      )}
+    </div>
+    <span class="note-status">{statusText}</span>
+  </div>
+
   {note.status === 'deprecated' && (
     <div class="note-deprecated-alert" role="alert">
-      <strong>⚠️ هشدار منسوخ‌شدن:</strong> این یادداشت طبق استاندارد پایگاه دانش منسوخ (Deprecated) شده است.
+      <strong>این یادداشت منسوخ شده است</strong>
       {note.superseded_by && (
-        <span> لطفاً به نسخهٔ جدید مراجعه کنید: <a href={`/notes/${encodeURIComponent(note.superseded_by)}`}>{note.superseded_by}</a></span>
+        <span>
+          — نسخه جایگزین: <a href={noteHref(note.superseded_by)} class="wiki-link">{note.superseded_by}</a>
+        </span>
       )}
     </div>
   )}
 
-  {note.slogan_fa && (
-    <p class="note-slogan">
-      <span class="slogan-quote-mark" aria-hidden="true">«</span>
-      {note.slogan_fa}
-      <span class="slogan-quote-mark" aria-hidden="true">»</span>
-    </p>
+  {sloganHtml && <p class="note-slogan" set:html={sloganHtml} />}
+
+  {hasSecondaryMeta && (
+    <details class="note-meta-details">
+      <summary>
+        <span>شناسنامه و برچسب‌ها</span>
+        <span class="note-meta-summary-hint">
+          {displayTags.length > 0 ? `${displayTags.length.toLocaleString('fa-IR')} برچسب` : 'جزئیات علمی'}
+        </span>
+      </summary>
+      <div class="note-meta-grid">
+        {note.title_en && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">عنوان انگلیسی</span>
+            <span class="note-meta-val" dir="ltr">{note.title_en}</span>
+          </div>
+        )}
+        {tracks.length > 0 && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">مسیرهای یادگیری</span>
+            <span class="note-meta-val">{tracks.join('، ')}</span>
+          </div>
+        )}
+        {note.msc_primary && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">کد موضوعی MSC</span>
+            <span class="note-meta-val font-mono" dir="ltr">
+              {note.msc_primary}
+              {note.msc_secondary.length > 0 ? `, ${note.msc_secondary.join(', ')}` : ''}
+            </span>
+          </div>
+        )}
+        {note.theory_scope && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">بستر نظری</span>
+            <span class="note-meta-val">{note.theory_scope}</span>
+          </div>
+        )}
+        {note.authors.length > 0 && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">نویسندگان</span>
+            <span class="note-meta-val">{note.authors.join('، ')}</span>
+          </div>
+        )}
+        {note.sources.length > 0 && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">منابع</span>
+            <span class="note-meta-val">{note.sources.join('، ')}</span>
+          </div>
+        )}
+        {note.uid && (
+          <div class="note-meta-row">
+            <span class="note-meta-key">شناسه</span>
+            <span class="note-meta-val font-mono" dir="ltr">{note.uid}</span>
+          </div>
+        )}
+        {displayTags.length > 0 && (
+          <div class="note-meta-row note-meta-tags-row">
+            <span class="note-meta-key">برچسب‌ها</span>
+            <div class="note-meta-tags">
+              {displayTags.map((tag) => (
+                <a class="note-tag" href={`/search?tag=${encodeURIComponent(tag)}`}>#{tag}</a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </details>
   )}
-
-  <div class="note-meta-strip">
-    {note.kind && (
-      <span class="meta-badge meta-badge-kind" style={`--badge-color: ${kindInfo.color}`}>
-        {subtypeLabel ? `${kindInfo.label} (${subtypeLabel})` : kindInfo.label}
-      </span>
-    )}
-
-    {levelInfo && (
-      <span class="meta-badge meta-badge-level" title="سطح آموزشی">
-        🎓 {levelInfo.label}
-      </span>
-    )}
-
-    {tracks.map((t: string) => (
-      <a class="meta-badge meta-badge-track" href={`/search?track=${encodeURIComponent(t)}`} title="مسیر مطالعه">
-        🎯 {UMKO_TRACKS[t] || t}
-      </a>
-    ))}
-
-    {note.msc_primary && (
-      <span class="meta-badge meta-badge-msc" title="کد رده‌بندی جهانی ریاضیات MSC2020">
-        📐 MSC {note.msc_primary}
-      </span>
-    )}
-
-    {note.status && (
-      <span class="meta-badge meta-badge-status" style={`--status-color: ${statusInfo.color}`}>
-        ● {statusInfo.label}
-      </span>
-    )}
-
-    {note.uid && (
-      <span class="meta-badge meta-badge-uid" title="شناسه پایدار یکتا">
-        #{note.uid}
-      </span>
-    )}
-
-    {note.title_en && (
-      <span class="meta-badge meta-badge-en" dir="ltr" title="International Mathematical Title">
-        {note.title_en}
-      </span>
-    )}
-
-    {tags.map((tag: string) => (
-      <a class="tag" href={`/search?tag=${encodeURIComponent(tag)}`}>#{tag}</a>
-    ))}
-  </div>
-</div>
+</section>
 
 <style>
   .note-properties {
-    margin-block: var(--space-3) var(--space-6);
-  }
-
-  .note-deprecated-alert {
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
-    background: color-mix(in srgb, #dc2626 12%, var(--surface));
-    border: 1px solid #dc2626;
-    color: var(--fg);
-    margin-block-end: 1rem;
-    font-size: 0.95rem;
-  }
-  .note-deprecated-alert a {
-    color: #dc2626;
-    font-weight: 600;
-    text-decoration: underline;
-  }
-
-  .note-slogan {
-    font-size: 1.1rem;
-    line-height: 1.85;
-    color: var(--primary-text);
-    font-weight: 500;
-    margin-block: 0 var(--space-4);
-    padding-inline: 0.75rem;
-    border-inline-start: 3px solid var(--primary);
-  }
-  .slogan-quote-mark {
-    font-family: serif;
-    opacity: 0.6;
-  }
-
-  .note-meta-strip {
+    margin: 0 0 1.25rem;
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius-panel);
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.825rem;
-    line-height: 1.5;
+    flex-direction: column;
+    gap: 0.625rem;
   }
 
-  .meta-badge {
+  .note-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .note-core-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .note-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.2rem 0.6rem;
-    border-radius: 6px;
-    background: var(--surface);
+    gap: 0.35rem;
+    padding: 0.22rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.4;
     border: 1px solid var(--border);
-    color: var(--fg);
-    text-decoration: none;
-    font-size: 0.8rem;
+    background: var(--surface);
+    color: var(--foreground);
+  }
+
+  .note-badge-kind {
+    background: color-mix(in oklch, var(--kind-color) 11%, var(--surface));
+    border-color: color-mix(in oklch, var(--kind-color) 32%, var(--border));
+  }
+
+  .note-kind-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--kind-color);
+    flex-shrink: 0;
+  }
+
+  .note-subtype-sep,
+  .note-subtype-text {
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  .note-badge-neutral {
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  .note-badge-status {
+    background: color-mix(in oklch, var(--status-color) 12%, var(--surface));
+    border-color: color-mix(in oklch, var(--status-color) 35%, var(--border));
+  }
+
+  .note-status {
+    margin-inline-start: auto;
+    font-size: 0.76rem;
+    color: var(--muted-foreground);
     white-space: nowrap;
   }
 
-  .meta-badge-kind {
-    border-color: var(--badge-color);
-    color: var(--badge-color);
+  .note-deprecated-alert {
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--radius-control);
+    background: var(--destructive-surface);
+    color: var(--foreground);
+    border: 1px solid color-mix(in oklch, var(--destructive) 35%, var(--border));
+    font-size: 0.875rem;
+  }
+
+  .note-slogan {
+    margin: 0;
+    font-size: 0.96rem;
+    line-height: 1.85;
+    color: var(--foreground);
+    overflow-wrap: anywhere;
+  }
+
+  .note-meta-details {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+  }
+
+  .note-meta-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.78rem;
     font-weight: 600;
-    background: color-mix(in srgb, var(--badge-color) 8%, var(--surface));
+    color: var(--muted-foreground);
+    padding: 0.2rem 0.15rem;
+    user-select: none;
   }
 
-  .meta-badge-track:hover {
-    border-color: var(--primary);
+  .note-meta-details > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .note-meta-details > summary:hover {
+    color: var(--foreground);
+  }
+
+  .note-meta-summary-hint {
+    font-weight: 400;
+    font-size: 0.74rem;
+  }
+
+  .note-meta-grid {
+    display: grid;
+    gap: 0.45rem;
+    padding-top: 0.55rem;
+    font-size: 0.8rem;
+  }
+
+  .note-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+  }
+
+  .note-meta-key {
+    min-width: 6.5rem;
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  .note-meta-val {
+    flex: 1;
+    min-width: 0;
+    color: var(--foreground);
+    overflow-wrap: anywhere;
+  }
+
+  .note-meta-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    flex: 1;
+  }
+
+  .note-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12rem 0.5rem;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
     color: var(--primary-text);
+    text-decoration: none;
+    font-size: 0.76rem;
+    transition: background-color 120ms ease;
   }
 
-  .meta-badge-status {
-    color: var(--status-color);
-    border-color: color-mix(in srgb, var(--status-color) 40%, var(--border));
-  }
-
-  .meta-badge-msc, .meta-badge-uid {
-    font-family: monospace;
-    letter-spacing: 0.02em;
-    color: var(--muted-foreground);
-  }
-
-  .meta-badge-en {
-    color: var(--muted-foreground);
-    font-style: italic;
+  .note-tag:hover {
+    background: var(--surface-hover);
+    text-decoration: underline;
   }
 </style>

@@ -9,16 +9,16 @@ const {id='',canonicalSlug='',publicView=false,token=''}=Astro.props;
     <button type="button" data-library-command="comments" class="mobile-only-action">دیدگاه‌ها</button>
     <button type="button" data-library-command="link">کپی پیوند</button>
     <button type="button" data-library-command="markdown">کپی Markdown</button>
-    <button type="button" data-library-command="favorite">افزودن به علاقه‌مندی‌ها</button>
-    <button type="button" data-library-command="watch">پیگیری یادداشت</button>
+    <button type="button" data-library-command="favorite" data-auth-only>افزودن به علاقه‌مندی‌ها</button>
+    <button type="button" data-library-command="watch" data-auth-only>پیگیری یادداشت</button>
     <button type="button" data-library-command="width">عرض کامل</button>
-    <button type="button" data-library-command="history">تاریخچه</button>
-    <button type="button" data-library-command="attachments">پیوست‌ها</button>
-    <button type="button" data-library-command="rename">تغییر نام</button>
-    <button type="button" data-library-command="move">انتقال</button>
-    <button type="button" data-library-command="gitsync" hidden>🔄 بروزرسانی از گیت</button>
+    <button type="button" data-library-command="history" data-auth-only>تاریخچه</button>
+    <button type="button" data-library-command="attachments" data-auth-only>پیوست‌ها</button>
+    <button type="button" data-library-command="rename" data-auth-only>تغییر نام</button>
+    <button type="button" data-library-command="move" data-auth-only>انتقال</button>
+    <button type="button" data-library-command="gitsync" hidden>بروزرسانی از گیت</button>
     <button type="button" data-library-command="verify" hidden>تأیید نسخهٔ منتشرشده</button>
-    <button type="button" data-library-command="trash">انتقال به زباله‌دان</button>
+    <button type="button" data-library-command="trash" data-auth-only>انتقال به زباله‌دان</button>
     <small data-library-info></small>
   </div>
   <p role="status" aria-live="polite" data-library-status></p>

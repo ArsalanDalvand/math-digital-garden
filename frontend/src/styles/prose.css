@@ -21,14 +21,62 @@ pre {
 
 .katex {
   display: inline-block;
+  font-size: calc(1.05em * var(--math-scale, 1));
 }
 
 .katex-display {
+  position: relative;
   display: block;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0.75rem 0.5rem;
+  padding: 0.85rem 0.5rem;
+}
+
+.katex-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+  direction: ltr;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.katex-display:hover .katex-copy-btn,
+.katex-display:focus-within .katex-copy-btn,
+.katex-copy-btn.is-copied {
+  opacity: 1;
+}
+
+.katex-copy-btn:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.katex-copy-btn.is-copied {
+  background: var(--success-surface);
+  border-color: color-mix(in oklch, var(--success) 45%, var(--border));
+  color: var(--foreground);
+}
+
+@media (pointer: coarse) {
+  .katex-copy-btn {
+    opacity: 0.72;
+  }
 }
 
 [data-math-field] math-field {
@@ -183,6 +231,8 @@ pre {
   .note .table-wrapper,
   .note div:has(> table) {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     margin: 1.75rem 0;
@@ -232,18 +282,6 @@ pre {
     text-align: center;
   }
 
-  .note table td a,
-  .note table th a {
-    display: flex;
-    margin-bottom: 4px;
-    line-height: 1.6;
-  }
-
-  .note table td a:last-child,
-  .note table th a:last-child {
-    margin-bottom: 0;
-  }
-
   @media (max-width: 50rem) {
     .note th,
     .note td {
@@ -278,6 +316,31 @@ pre {
     margin-block-end: 0;
     user-select: none;
     min-height: 36px;
+    list-style: none;
+  }
+
+  details[data-callout] summary[data-callout-title]::-webkit-details-marker {
+    display: none;
+  }
+
+  details[data-callout] summary[data-callout-title]::after {
+    content: '';
+    margin-inline-start: auto;
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    background-color: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    transition: transform 150ms ease;
+  }
+
+  details[data-callout][open] summary[data-callout-title]::after {
+    transform: rotate(-90deg);
   }
 
   details[data-callout][open] summary[data-callout-title] {
@@ -383,6 +446,86 @@ pre {
 
   [data-callout-type='pitfall'] {
     --callout-color: #b45309;
+  }
+
+  :root[data-theme='dark'] [data-callout] {
+    --callout-bg: color-mix(in srgb, var(--callout-color) 13%, var(--surface));
+    border-color: color-mix(in srgb, var(--callout-color) 32%, var(--border));
+  }
+  :root[data-theme='dark'] [data-callout-type='note'],
+  :root[data-theme='dark'] [data-callout-type='seealso'] {
+    --callout-color: #60a5fa;
+  }
+  :root[data-theme='dark'] [data-callout-type='abstract'],
+  :root[data-theme='dark'] [data-callout-type='summary'],
+  :root[data-theme='dark'] [data-callout-type='tldr'] {
+    --callout-color: #a78bfa;
+  }
+  :root[data-theme='dark'] [data-callout-type='info'],
+  :root[data-theme='dark'] [data-callout-type='todo'] {
+    --callout-color: #22d3ee;
+  }
+  :root[data-theme='dark'] [data-callout-type='tip'],
+  :root[data-theme='dark'] [data-callout-type='hint'],
+  :root[data-theme='dark'] [data-callout-type='important'],
+  :root[data-theme='dark'] [data-callout-type='warning'],
+  :root[data-theme='dark'] [data-callout-type='caution'],
+  :root[data-theme='dark'] [data-callout-type='attention'] {
+    --callout-color: #fbbf24;
+  }
+  :root[data-theme='dark'] [data-callout-type='success'],
+  :root[data-theme='dark'] [data-callout-type='check'],
+  :root[data-theme='dark'] [data-callout-type='done'] {
+    --callout-color: #4ade80;
+  }
+  :root[data-theme='dark'] [data-callout-type='question'],
+  :root[data-theme='dark'] [data-callout-type='help'],
+  :root[data-theme='dark'] [data-callout-type='faq'] {
+    --callout-color: #fb923c;
+  }
+  :root[data-theme='dark'] [data-callout-type='failure'],
+  :root[data-theme='dark'] [data-callout-type='fail'],
+  :root[data-theme='dark'] [data-callout-type='missing'] {
+    --callout-color: #f87171;
+  }
+  :root[data-theme='dark'] [data-callout-type='danger'],
+  :root[data-theme='dark'] [data-callout-type='error'],
+  :root[data-theme='dark'] [data-callout-type='bug'] {
+    --callout-color: #fb7185;
+  }
+  :root[data-theme='dark'] [data-callout-type='example'] {
+    --callout-color: #c084fc;
+  }
+  :root[data-theme='dark'] [data-callout-type='quote'],
+  :root[data-theme='dark'] [data-callout-type='cite'],
+  :root[data-theme='dark'] [data-callout-type='proof'],
+  :root[data-theme='dark'] [data-callout-type='remark'] {
+    --callout-color: #94a3b8;
+  }
+  :root[data-theme='dark'] [data-callout-type='theorem'] {
+    --callout-color: #60a5fa;
+  }
+  :root[data-theme='dark'] [data-callout-type='definition'] {
+    --callout-color: #2dd4bf;
+  }
+  :root[data-theme='dark'] [data-callout-type='lemma'],
+  :root[data-theme='dark'] [data-callout-type='solution'] {
+    --callout-color: #34d399;
+  }
+  :root[data-theme='dark'] [data-callout-type='corollary'] {
+    --callout-color: #818cf8;
+  }
+  :root[data-theme='dark'] [data-callout-type='axiom'] {
+    --callout-color: #22d3ee;
+  }
+  :root[data-theme='dark'] [data-callout-type='property'] {
+    --callout-color: #a5b4fc;
+  }
+  :root[data-theme='dark'] [data-callout-type='algorithm'] {
+    --callout-color: #38bdf8;
+  }
+  :root[data-theme='dark'] [data-callout-type='pitfall'] {
+    --callout-color: #fbbf24;
   }
 
   /* Mermaid Diagrams */

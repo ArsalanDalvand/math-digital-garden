@@ -1,149 +1,198 @@
 ---
+import type { IndexedNote } from '../lib/markdown.mjs';
 import { noteHref } from '../lib/markdown.mjs';
-import { UMKO_RELATIONS } from '../lib/umko.mjs';
-
-type Note = {
-  slug: string;
-  title: string;
-  kind?: string;
-  resolvedRelations?: Record<string, string[]>;
-  reverseRelations?: Record<string, string[]>;
-};
+import { UMKO_KINDS, UMKO_RELATION_PLANES, UMKO_RELATIONS } from '../lib/umko.mjs';
 
 interface Props {
-  note: Note;
-  garden?: Note[];
-  bySlug?: Map<string, Note>;
+  note: IndexedNote;
+  bySlug: Map<string, IndexedNote>;
 }
 
-const { note, garden = [], bySlug } = Astro.props;
-if (!note) return;
-const resolveNote = (s: string) => bySlug?.get(s) ?? garden.find(n => n.slug === s);
-const relationsMap: Record<string, { forward?: string; reverse?: string; icon?: string }> = UMKO_RELATIONS;
+const { note, bySlug } = Astro.props;
 
-const forward = Object.entries(note.resolvedRelations || {}).filter(([_, slugs]) => slugs.length > 0);
-const reverse = Object.entries(note.reverseRelations || {}).filter(([_, slugs]) => slugs.length > 0);
-const hasRelations = forward.length > 0 || reverse.length > 0;
+type RelationEntry = {
+  key: string;
+  label: string;
+  planeColor: string;
+  nodes: Array<{ slug: string; title: string; kindLabel: string; kindColor: string }>;
+};
+
+const kinds = UMKO_KINDS as Record<string, { label: string; color: string }>;
+const planes = UMKO_RELATION_PLANES as Record<string, { label: string; light: string }>;
+const relations = UMKO_RELATIONS as Record<
+  string,
+  { forward: string; reverse: string; plane?: string }
+>;
+
+const entries: RelationEntry[] = [];
+
+const resolveNodes = (slugs: string[]) =>
+  slugs
+    .map((s) => bySlug.get(s))
+    .filter((n): n is IndexedNote => Boolean(n))
+    .map((n) => {
+      const k = n.kind ? kinds[n.kind] : undefined;
+      return {
+        slug: n.slug,
+        title: n.title_fa || n.title,
+        kindLabel: k?.label ?? '',
+        kindColor: k?.color ?? 'var(--primary)',
+      };
+    });
+
+for (const [relKey, slugs] of Object.entries(note.resolvedRelations || {})) {
+  const def = relations[relKey];
+  if (!def || !slugs.length) continue;
+  const nodes = resolveNodes(slugs);
+  if (!nodes.length) continue;
+  const planeColor = (def.plane && planes[def.plane]?.light) || 'var(--primary)';
+  entries.push({ key: `fwd-${relKey}`, label: def.forward, planeColor, nodes });
+}
+
+for (const [relKey, slugs] of Object.entries(note.reverseRelations || {})) {
+  const def = relations[relKey];
+  if (!def || !slugs.length) continue;
+  const nodes = resolveNodes(slugs);
+  if (!nodes.length) continue;
+  const planeColor = (def.plane && planes[def.plane]?.light) || 'var(--primary)';
+  entries.push({ key: `rev-${relKey}`, label: def.reverse, planeColor, nodes });
+}
 ---
 
-{hasRelations && (
-  <div class="semantic-connections-panel">
-    <h3 class="semantic-header">شبکهٔ مفهومی و روابط ساختاری (UMKO v1.1)</h3>
+{entries.length > 0 && (
+  <section class="semantic-connections" aria-label="روابط معنایی یادداشت">
+    <h2 class="semantic-connections-title">روابط علمی این یادداشت</h2>
     <div class="semantic-groups">
-      {forward.map(([relKey, slugs]) => {
-        const info = relationsMap[relKey] || { forward: relKey, icon: '🔗' };
-        const relNotes = slugs.map(resolveNote).filter(Boolean);
-        return (
-          <div class="semantic-group">
-            <h4 class="semantic-group-title">
-              <span class="rel-icon" aria-hidden="true">{info.icon}</span>
-              {info.forward}
-              <span class="rel-count">({relNotes.length.toLocaleString('fa-IR')})</span>
-            </h4>
-            <ul class="semantic-link-list">
-              {relNotes.map(rn => rn && (
-                <li>
-                  <a class="semantic-link" href={noteHref(rn.slug)}>
-                    {rn.title}
-                    {rn.kind && <span class="semantic-link-kind">[{rn.kind}]</span>}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
-
-      {reverse.map(([relKey, slugs]) => {
-        const info = relationsMap[relKey] || { reverse: relKey, icon: '🔗' };
-        const relNotes = slugs.map(resolveNote).filter(Boolean);
-        return (
-          <div class="semantic-group semantic-group-reverse">
-            <h4 class="semantic-group-title">
-              <span class="rel-icon" aria-hidden="true">{info.icon}</span>
-              {info.reverse}
-              <span class="rel-count">({relNotes.length.toLocaleString('fa-IR')})</span>
-            </h4>
-            <ul class="semantic-link-list">
-              {relNotes.map(rn => rn && (
-                <li>
-                  <a class="semantic-link" href={noteHref(rn.slug)}>
-                    {rn.title}
-                    {rn.kind && <span class="semantic-link-kind">[{rn.kind}]</span>}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+      {entries.map((entry) => (
+        <div class="semantic-group" style={`--plane-color: ${entry.planeColor}`}>
+          <h3 class="semantic-group-heading">
+            <span class="semantic-plane-dot" aria-hidden="true"></span>
+            <span>{entry.label}</span>
+          </h3>
+          <ul class="semantic-node-list">
+            {entry.nodes.map((node) => (
+              <li>
+                <a class="semantic-node-link" href={noteHref(node.slug)} data-note-preview={node.slug}>
+                  {node.kindLabel && (
+                    <span class="semantic-kind-pill" style={`--kind-color: ${node.kindColor}`}>
+                      <span class="semantic-kind-dot" aria-hidden="true"></span>
+                      <span>{node.kindLabel}</span>
+                    </span>
+                  )}
+                  <span class="semantic-node-name">{node.title}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
-  </div>
+  </section>
 )}
 
 <style>
-  .semantic-connections-panel {
-    margin-block: var(--space-6) var(--space-4);
-    padding: var(--space-4);
-    background: var(--surface);
+  .semantic-connections {
+    margin-block: 1.75rem 1.25rem;
+    padding: 1rem 1.15rem;
     border: 1px solid var(--border);
-    border-radius: 0.75rem;
+    border-radius: var(--radius-panel);
+    background: var(--surface-subtle);
   }
-  .semantic-header {
+
+  .semantic-connections-title {
+    margin: 0 0 0.85rem;
     font-size: 0.95rem;
     font-weight: 700;
-    color: var(--fg);
-    margin-block: 0 var(--space-3);
+    color: var(--foreground);
   }
+
   .semantic-groups {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.85rem;
   }
+
   .semantic-group {
-    background: var(--bg);
+    padding: 0.7rem 0.85rem;
+    border-radius: var(--radius-control);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
   }
-  .semantic-group-title {
+
+  .semantic-group-heading {
+    margin: 0;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--primary-text);
-    margin: 0 0 0.5rem 0;
-  }
-  .rel-count {
-    font-size: 0.75rem;
+    gap: 0.45rem;
+    font-size: 0.8rem;
+    font-weight: 700;
     color: var(--muted-foreground);
   }
-  .semantic-link-list {
+
+  .semantic-plane-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--plane-color);
+    flex-shrink: 0;
+  }
+
+  .semantic-node-list {
     list-style: none;
-    padding: 0 !important;
     margin: 0;
-  }
-  .semantic-link-list > li {
-    margin-block-end: 0.35rem;
-  }
-  .semantic-link-list > li:last-child {
-    margin-block-end: 0;
-  }
-  .semantic-link {
-    display: inline-flex;
-    align-items: center;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
     gap: 0.35rem;
-    font-size: 0.85rem;
+  }
+
+  .semantic-node-link {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.35rem 0.45rem;
+    border-radius: 6px;
     color: var(--foreground);
     text-decoration: none;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    transition: background-color 120ms ease;
   }
-  .semantic-link:hover {
+
+  .semantic-node-link:hover {
+    background: var(--surface-hover);
+  }
+
+  .semantic-node-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: var(--primary-text);
-    text-decoration: underline;
+    font-weight: 500;
   }
-  .semantic-link-kind {
-    font-size: 0.75rem;
-    color: var(--muted-foreground);
+
+  .semantic-kind-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: color-mix(in oklch, var(--kind-color) 11%, var(--surface-subtle));
+    border: 1px solid color-mix(in oklch, var(--kind-color) 28%, var(--border));
+    color: var(--foreground);
+    white-space: nowrap;
+  }
+
+  .semantic-kind-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--kind-color);
   }
 </style>

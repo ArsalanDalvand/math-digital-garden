@@ -51,7 +51,7 @@ if (booksData?.books?.length) {
   Astro.response.headers.set('Cache-Control', 'no-store');
 }
 ---
-<Reader title={brandName}>
+<Reader title={brandName} hidePageHeading>
   <div class="home-container">
     <!-- Hero / Lead -->
     <header class="home-hero">
