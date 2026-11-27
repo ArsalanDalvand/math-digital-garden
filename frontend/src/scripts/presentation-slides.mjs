@@ -17,12 +17,8 @@ export function sectionSlides(nodes) {
   return slides;
 }
 
-const normalizeTitle = (/** @type {string} */ value) =>
-  value.trim().replace(/\s+/g, ' ').toLowerCase();
-
 /**
- * Build presentation slides and skip the generated cover slide if content already begins
- * with a matching H1 heading.
+ * Build presentation slides and skip generating an extra cover slide when content already starts with H1.
  * @param {Node[]} nodes
  * @param {string} title
  * @param {string} [slogan]
@@ -36,15 +32,7 @@ export function buildPresentationSlides(nodes, title, slogan = '') {
     firstNode.nodeType === 1 &&
     /** @type {Element} */ (firstNode).tagName === 'H1'
   ) {
-    const firstNorm = normalizeTitle(firstNode.textContent || '');
-    const titleNorm = normalizeTitle(title || '');
-    if (
-      firstNorm &&
-      titleNorm &&
-      (firstNorm === titleNorm || firstNorm.includes(titleNorm) || titleNorm.includes(firstNorm))
-    ) {
-      return bodySlides;
-    }
+    return bodySlides;
   }
 
   const doc = nodes.find((n) => n.ownerDocument)?.ownerDocument || globalThis.document;

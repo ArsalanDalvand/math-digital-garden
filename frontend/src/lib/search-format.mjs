@@ -28,6 +28,9 @@ export function bookDisplayLabel(bookSlug) {
 export function stripInlineMarkdown(text) {
   if (!text || typeof text !== 'string') return '';
   return text
+    .replace(/\[![a-zA-Z0-9_-]+\][+-]?/g, '')
+    .replace(/(?:^|\s)#{1,6}\s+/g, ' ')
+    .replace(/(?:^|\s)>\s+/g, ' ')
     .replace(/!?\[\[[^\]\n|]+\|([^\]\n]+)\]\]/g, '$1')
     .replace(/!?\[\[([^\]\n]+)\]\]/g, '$1')
     .replace(/\[([^\]]+)\]\((?:[^)]+)\)/g, '$1')

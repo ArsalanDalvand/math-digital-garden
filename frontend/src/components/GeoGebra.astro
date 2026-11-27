@@ -129,6 +129,7 @@
         controller = new AbortController();
         const signal = controller.signal;
         loadButton.disabled = true;
+        loadButton.hidden = true;
 
         const host = figure.querySelector<HTMLElement>('[data-geogebra-host]');
         if (!host) return;

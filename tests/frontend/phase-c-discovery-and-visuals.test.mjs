@@ -25,12 +25,12 @@ describe('Phase C Pure Helpers (Strict TDD)', () => {
       assert.equal(bookDisplayLabel(''), '');
     });
 
-    it('strips wikilinks and inline markdown syntax into clean plain prose', () => {
+    it('strips wikilinks, callout markers, heading hashes, and inline markdown syntax into clean plain prose', () => {
       const input =
-        'در [[01-basics/05-complex|اعداد مختلط]] و [[VectorSpace]] مقدار **بُعد** یا *پایه* با ==تاکید== و `code` می‌آید.';
+        '# تعریف ۲۰.۱ > [!TLDR] چکیده مفهومی > در [[01-basics/05-complex|اعداد مختلط]] و [[VectorSpace]] مقدار **بُعد** یا *پایه* با ==تاکید== و `code` می‌آید.';
       assert.equal(
         stripInlineMarkdown(input),
-        'در اعداد مختلط و VectorSpace مقدار بُعد یا پایه با تاکید و code می‌آید.',
+        'تعریف ۲۰.۱ چکیده مفهومی در اعداد مختلط و VectorSpace مقدار بُعد یا پایه با تاکید و code می‌آید.',
       );
     });
 
