@@ -35,6 +35,21 @@ describe('Phase B Pure Helpers (Strict TDD)', () => {
       assert.match(out, /\| col \| \[\[in-fence\|ignored\]\] \|/);
     });
 
+    it('escapes [[...|...]] across ALL subsequent table rows even when earlier rows contain inline backticks', () => {
+      const input = [
+        '| ردیف | درس | نوع |',
+        '| :---: | --- | --- |',
+        '| **۱** | [[01-foo/01-a|اول]] | `graphing` |',
+        '| **۲** | [[01-foo/02-b|دوم]] | `graphing` |',
+        '| **۳** | [[01-foo/03-c|سوم]] | `3d` |',
+      ].join('\n');
+
+      const out = escapePipesInTableWikilinks(input);
+      assert.match(out, /\[\[01-foo\/01-a\\\|اول\]\]/);
+      assert.match(out, /\[\[01-foo\/02-b\\\|دوم\]\]/);
+      assert.match(out, /\[\[01-foo\/03-c\\\|سوم\]\]/);
+    });
+
     it('renders wikilinks with | aliases inside GFM tables as clickable links inside single cells', async () => {
       const notes = [
         {

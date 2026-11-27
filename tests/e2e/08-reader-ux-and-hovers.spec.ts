@@ -52,10 +52,12 @@ test.describe('Phase B: Reader UX, Toolbar, Sidebar, Callouts, Tables & Hover Pr
     await expect(editToast).toBeVisible();
     await expect(editToast.locator('a[href="/account"]')).toBeVisible();
 
+    await page.locator('[data-more-toggle]').click();
     await page.locator('[data-bookmark]').click();
     const bookmarkToast = page.locator('.garden-toast').last();
     await expect(bookmarkToast).toBeVisible();
     await expect(bookmarkToast.locator('a[href="/account"]')).toBeVisible();
+    await page.keyboard.press('Escape');
 
     expect(unauthorizedUrls).toEqual([]);
 
@@ -202,10 +204,11 @@ test.describe('Phase B: Reader UX, Toolbar, Sidebar, Callouts, Tables & Hover Pr
     const roadmapRes = await page.goto(NOTE_ROADMAP);
     if (roadmapRes?.status() === 200) {
       const tables = page.locator('.note table');
-      if ((await tables.count()) > 0) {
-        const rawText = (await tables.first().textContent()) ?? '';
-        expect(rawText).not.toMatch(/\[\[[^\]]+\|/);
-        expect(await tables.first().locator('a.wiki-link').count()).toBeGreaterThan(0);
+      const tableCount = await tables.count();
+      if (tableCount > 0) {
+        const allTablesText = (await page.locator('.note').textContent()) ?? '';
+        expect(allTablesText).not.toMatch(/\[\[[^\]]+\|[^\]]+\]\]/);
+        expect(await page.locator('.note table a.wiki-link').count()).toBeGreaterThan(10);
       }
     }
 

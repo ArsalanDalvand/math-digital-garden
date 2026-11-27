@@ -19,7 +19,7 @@ import { getVaultAssets } from './vault-assets.mjs';
 import { UMKO_RELATIONS } from './umko.mjs';
 import { sanitizeRawHtml } from './html-sanitize.mjs';
 
-export const RENDERER_VERSION = 'v3-table-wikilink-cache';
+export const RENDERER_VERSION = 'v4-table-wikilink-cache';
 
 /**
  * @typedef {{
@@ -132,7 +132,7 @@ const GFM_TABLE_DELIM_RE = /^\s*(?:>\s*)?\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{0,}:?\s
  */
 export function escapePipesInTableWikilinks(content) {
   if (!content || !content.includes('[[')) return content;
-  const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g);
+  const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g);
   return parts
     .map((part, index) => {
       if (index % 2 === 1 || !part.includes('[[')) return part;
@@ -145,9 +145,15 @@ export function escapePipesInTableWikilinks(content) {
           return lines
             .map((line) => {
               if (!line.includes('[[') || !line.includes('|')) return line;
-              return line.replace(/(!?\[\[[^\]\n]+\]\])/g, (wiki) =>
-                wiki.replace(/(?<!\\)\|/g, '\\|')
-              );
+              const lineParts = line.split(/(`[^`\n]+`)/g);
+              return lineParts
+                .map((lp, lIdx) => {
+                  if (lIdx % 2 === 1 || !lp.includes('[[')) return lp;
+                  return lp.replace(/(!?\[\[[^\]\n]+\]\])/g, (wiki) =>
+                    wiki.replace(/(?<!\\)\|/g, '\\|')
+                  );
+                })
+                .join('');
             })
             .join('\n');
         })
