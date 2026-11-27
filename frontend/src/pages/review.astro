@@ -1,84 +1,522 @@
 ---
 import Reader from '../layouts/Reader.astro';
 ---
-<Reader title="بازبینی پیشنهادهای اصلاح">
-  <p>دسترسی این صفحه نیازمند نقش مؤلف یا مدیر است.</p><p><a href="/account">حساب کاربری</a></p>
-  <div class="garden-row"><p role="status" aria-live="polite" data-review-status>در حال دریافت…</p><button type="button" data-review-retry hidden>تلاش دوباره</button></div><ul class="garden-review-list" data-review-list></ul>
-  <section class="garden-panel garden-stack" data-review-panel hidden aria-busy="false">
-    <h2 data-review-title></h2><p data-student-comment></p><p class="garden-field-help">نسخهٔ مبدأ و متن پیشنهادی برای مقایسه؛ این پیش‌نمایش قابل ویرایش نیست.</p><div data-review-diff></div>
-    <label>نظر مؤلف <textarea data-review-comment maxlength="4000"></textarea></label>
-    <div class="garden-row"><button type="button" class="garden-button-primary" data-decision="approve">تأیید و ادغام</button>
-    <button type="button" data-decision="changes_requested">درخواست اصلاح</button>
-    <button type="button" data-decision="reject">رد</button>
-    </div><details><summary>همگام‌سازی و دستیار</summary><div class="garden-row">
-    <button type="button" data-sync>تلاش مجدد خروجی گیت</button>
-    <button type="button" data-index>ایندکس رسمی برای دستیار</button>
-    </div></details>
-  </section>
+
+<Reader title="بازبینی پیشنهادهای اصلاح" hidePageHeading>
+  <div class="review-page-shell">
+    <header class="review-page-header">
+      <div>
+        <h1>بازبینی پیشنهادهای اصلاح</h1>
+        <p class="review-page-subtitle">
+          مقایسهٔ دقیق تغییرات پیشنهادی دانشجویان و ادغام ایمن با نسخهٔ رسمی یادداشت‌ها.
+        </p>
+      </div>
+      <div class="review-header-links">
+        <a href="/workspace" class="workspace-action-btn">جزوه‌های من</a>
+        <a href="/account" class="workspace-action-btn">حساب کاربری</a>
+      </div>
+    </header>
+
+    <div class="garden-panel review-auth-gate" data-review-auth-gate hidden>
+      <h2>ورود برای بازبینی پیشنهادها</h2>
+      <p>دسترسی به صف بازبینی پیشنهادهای اصلاح نیازمند ورود با نقش مؤلف یا مدیر است.</p>
+      <a href="/account" class="garden-button-primary">ورود به حساب کاربری</a>
+    </div>
+
+    <div class="garden-panel review-auth-gate" data-review-role-gate hidden>
+      <h2>دسترسی محدود به مؤلفان</h2>
+      <p>
+        این صفحه فقط برای حساب‌های دارای نقش مؤلف یا مدیر در دسترس است. وضعیت پیشنهادهای ارسالی خودتان را در صفحهٔ «جزوه‌های من» دنبال کنید.
+      </p>
+      <div class="garden-row">
+        <a href="/workspace" class="garden-button-primary">رفتن به جزوه‌های من</a>
+        <a href="/account" class="workspace-action-btn">حساب کاربری</a>
+      </div>
+    </div>
+
+    <div class="garden-row review-status-bar">
+      <p role="status" aria-live="polite" data-review-status>در حال بررسی نشست کاربری…</p>
+      <button type="button" data-review-retry hidden>تلاش دوباره</button>
+    </div>
+
+    <div class="review-workbench" data-review-workbench hidden>
+      <aside class="garden-panel review-queue-panel" aria-label="فهرست پیشنهادهای اصلاح">
+        <div class="review-queue-controls">
+          <input
+            type="search"
+            data-review-search
+            placeholder="جست‌وجو در عنوان، نویسنده یا توضیح…"
+            aria-label="جست‌وجو در پیشنهادهای اصلاح"
+          />
+          <div
+            class="review-filter-tabs"
+            data-review-status-filter
+            role="group"
+            aria-label="فیلتر وضعیت پیشنهادها"
+          >
+            <button type="button" data-status="all" aria-pressed="true">همه</button>
+            <button type="button" data-status="pending" aria-pressed="false">در انتظار</button>
+            <button type="button" data-status="approved" aria-pressed="false">تأییدشده</button>
+            <button type="button" data-status="changes_requested" aria-pressed="false">نیازمند اصلاح</button>
+            <button type="button" data-status="rejected" aria-pressed="false">ردشده</button>
+          </div>
+        </div>
+        <ul class="garden-review-list" data-review-list></ul>
+        <p class="workspace-empty-state" data-review-empty hidden>
+          پیشنهادی با این فیلتر یافت نشد.
+        </p>
+      </aside>
+
+      <section class="garden-panel garden-stack review-detail-panel" data-review-panel hidden aria-busy="false">
+        <div class="review-empty-detail" data-review-placeholder>
+          یک پیشنهاد را از ستون کناری انتخاب کنید تا تفاوت خط‌به‌خط و متن کامل آن نمایش داده شود.
+        </div>
+
+        <div class="review-selected-body" data-review-selected hidden>
+          <div class="review-detail-header">
+            <div class="review-detail-titles">
+              <h2 data-review-title></h2>
+              <div class="review-detail-badges">
+                <span class="review-status-pill" data-review-status-pill></span>
+                <span class="review-sync-pill" data-review-sync-pill hidden></span>
+                <span class="merge-stats-badge" data-review-diff-stats></span>
+              </div>
+              <p class="review-detail-meta" data-review-meta></p>
+            </div>
+            <div class="review-detail-links">
+              <a class="workspace-action-btn" data-review-note-link href="#">مشاهدهٔ یادداشت</a>
+              <button type="button" class="workspace-action-btn" data-sync hidden>
+                همگام‌سازی مجدد گیت
+              </button>
+            </div>
+          </div>
+
+          <div class="review-student-note-box">
+            <strong>توضیح ارسال‌کننده:</strong>
+            <p data-student-comment></p>
+          </div>
+
+          <div class="review-view-tabs" role="tablist" aria-label="نحوهٔ نمایش پیشنهاد">
+            <button
+              type="button"
+              role="tab"
+              aria-selected="true"
+              data-review-tab="diff"
+            >
+              مقایسهٔ خط‌به‌خط (Diff)
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-review-tab="preview"
+            >
+              پیش‌نمایش رندرشده
+            </button>
+          </div>
+
+          <div class="review-diff-pane" data-review-diff-wrap>
+            <div class="merge-pane-labels">
+              <span>نسخهٔ مبدأ رسمی</span>
+              <span>متن پیشنهادی</span>
+            </div>
+            <div data-review-diff></div>
+          </div>
+
+          <article class="note review-preview-article" data-review-preview hidden></article>
+
+          <div class="review-decision-box" data-review-decision-area>
+            <label>
+              نظر مؤلف (اختیاری)
+              <textarea
+                data-review-comment
+                maxlength="4000"
+                placeholder="توضیح یا بازخورد خود برای نویسندهٔ پیشنهاد…"
+              ></textarea>
+            </label>
+            <div class="garden-row review-decision-actions">
+              <button type="button" class="garden-button-primary" data-decision="approve">
+                تأیید و ادغام
+              </button>
+              <button type="button" data-decision="changes_requested">درخواست اصلاح</button>
+              <button type="button" data-decision="reject">رد</button>
+            </div>
+          </div>
+
+          <div class="review-decision-summary" data-review-decision-summary hidden></div>
+        </div>
+      </section>
+    </div>
+  </div>
 </Reader>
+
 <script>
-  import {api,message} from '../scripts/api';
-  import {MergeView} from '@codemirror/merge';
-  import {EditorState} from '@codemirror/state';
-  import {EditorView} from '@codemirror/view';
-  import {markdown} from '@codemirror/lang-markdown';
-  const status=document.querySelector<HTMLElement>('[data-review-status]')!;
-  const panel=document.querySelector<HTMLElement>('[data-review-panel]')!;
-  const list=document.querySelector<HTMLElement>('[data-review-list]')!;
-  const retry=document.querySelector<HTMLButtonElement>('[data-review-retry]')!;
-  const comment=document.querySelector<HTMLTextAreaElement>('[data-review-comment]')!;
-  const labels:Record<string,string>={pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده',changes_requested:'نیازمند بازنگری',synced:'همگام شده',failed:'ناموفق'};
-  let selected:any,merge:MergeView|undefined,busy=false;
-  function setBusy(value:boolean){
-    busy=value;panel.setAttribute('aria-busy',String(value));
-    document.querySelectorAll<HTMLButtonElement>('[data-review-list] button,[data-review-panel] button').forEach(button=>button.disabled=value);
-    comment.disabled=value;
+  import type { MergeView as CodeMirrorMergeView } from '@codemirror/merge';
+  import { summarizeDiffStats } from '../lib/editor-sync.mjs';
+  import { filterReviewProposals } from '../lib/review-filter.mjs';
+  import { api, message } from '../scripts/api';
+  import { getSession } from '../scripts/session';
+  import { showToast } from '../scripts/toast';
+
+  const status = document.querySelector<HTMLElement>('[data-review-status]')!;
+  const authGate = document.querySelector<HTMLElement>('[data-review-auth-gate]')!;
+  const roleGate = document.querySelector<HTMLElement>('[data-review-role-gate]')!;
+  const workbench = document.querySelector<HTMLElement>('[data-review-workbench]')!;
+  const panel = document.querySelector<HTMLElement>('[data-review-panel]')!;
+  const placeholder = document.querySelector<HTMLElement>('[data-review-placeholder]')!;
+  const selectedBody = document.querySelector<HTMLElement>('[data-review-selected]')!;
+  const list = document.querySelector<HTMLElement>('[data-review-list]')!;
+  const emptyQueue = document.querySelector<HTMLElement>('[data-review-empty]')!;
+  const searchInput = document.querySelector<HTMLInputElement>('[data-review-search]')!;
+  const filterBar = document.querySelector<HTMLElement>('[data-review-status-filter]')!;
+  const retry = document.querySelector<HTMLButtonElement>('[data-review-retry]')!;
+  const comment = document.querySelector<HTMLTextAreaElement>('[data-review-comment]')!;
+  const diffWrap = document.querySelector<HTMLElement>('[data-review-diff-wrap]')!;
+  const diffHost = document.querySelector<HTMLElement>('[data-review-diff]')!;
+  const previewArticle = document.querySelector<HTMLElement>('[data-review-preview]')!;
+  const decisionArea = document.querySelector<HTMLElement>('[data-review-decision-area]')!;
+  const decisionSummary = document.querySelector<HTMLElement>('[data-review-decision-summary]')!;
+  const syncButton = document.querySelector<HTMLButtonElement>('[data-sync]')!;
+
+  const labels: Record<string, string> = {
+    pending: 'در انتظار بررسی',
+    approved: 'تأییدشده',
+    rejected: 'ردشده',
+    changes_requested: 'نیازمند اصلاح',
+    synced: 'همگام‌سازی شده با گیت',
+    failed: 'خطای خروجی گیت',
+  };
+
+  const tabLabels: Record<string, string> = {
+    all: 'همه',
+    pending: 'در انتظار',
+    approved: 'تأییدشده',
+    changes_requested: 'نیازمند اصلاح',
+    rejected: 'ردشده',
+  };
+
+  let allProposals: any[] = [];
+  let selected: any = null;
+  let merge: CodeMirrorMergeView | undefined;
+  let busy = false;
+  let activeQuery = '';
+  let activeStatus: 'all' | 'pending' | 'approved' | 'changes_requested' | 'rejected' = 'all';
+  let activeViewTab: 'diff' | 'preview' = 'diff';
+  let previewSeq = 0;
+
+  function setBusy(value: boolean) {
+    busy = value;
+    panel.setAttribute('aria-busy', String(value));
+    document
+      .querySelectorAll<HTMLButtonElement>('[data-review-list] button, [data-review-panel] button')
+      .forEach((btn) => (btn.disabled = value));
+    comment.disabled = value;
   }
-  function feedback(text:string,error=false){status.setAttribute('role',error?'alert':'status');status.textContent=text;}
-  function showStatus(item:any){feedback(`${labels[item.status] ?? 'وضعیت نامشخص'} — خروجی گیت: ${labels[item.sync_status] ?? item.sync_status}`);}
-  async function load(){
-    if(busy)return;
-    setBusy(true);retry.disabled=true;retry.hidden=true;feedback('در حال دریافت پیشنهادها…');
-    try {
-      const proposals=await api('/review');list.replaceChildren();
-      panel.hidden=true;selected=undefined;merge?.destroy();merge=undefined;
-      for(const item of proposals){
-        const li=document.createElement('li'),button=document.createElement('button');
-        button.type='button';button.textContent=`${item.slug} — ${labels[item.status] ?? 'وضعیت نامشخص'}`;
-        button.addEventListener('click',async()=>{
-          if(busy)return;setBusy(true);feedback('در حال دریافت متن پیشنهاد…');
-          try {
-            const proposal=await api('/review/'+item.id);
-            selected=proposal;panel.hidden=false;comment.value='';
-            document.querySelector('[data-review-title]')!.textContent=selected.slug;
-            document.querySelector('[data-student-comment]')!.textContent=selected.student_comment;
-            const target=document.querySelector<HTMLElement>('[data-review-diff]')!;merge?.destroy();target.replaceChildren();
-            const extensions=[markdown(),EditorState.readOnly.of(true),EditorView.editable.of(false),EditorView.lineWrapping,EditorView.perLineTextDirection.of(true)];
-            merge=new MergeView({parent:target,a:{doc:selected.base_content,extensions},b:{doc:selected.proposed_content,extensions}});
-            showStatus(selected);document.querySelector<HTMLElement>('[data-review-title]')!.setAttribute('tabindex','-1');document.querySelector<HTMLElement>('[data-review-title]')!.focus();
-          }catch(error){feedback(message(error),true);}finally{setBusy(false);}
+
+  function feedback(text: string, isError = false) {
+    status.setAttribute('role', isError ? 'alert' : 'status');
+    status.textContent = text;
+  }
+
+  function renderFilterCounts(counts: Record<string, number>) {
+    for (const btn of filterBar.querySelectorAll<HTMLButtonElement>('button[data-status]')) {
+      const key = btn.dataset.status || 'all';
+      const count = counts[key] ?? 0;
+      btn.textContent = `${tabLabels[key] ?? key} (${count.toLocaleString('fa')})`;
+      btn.setAttribute('aria-pressed', String(key === activeStatus));
+    }
+  }
+
+  function renderQueue() {
+    const { items, counts } = filterReviewProposals(allProposals, activeQuery, activeStatus);
+    renderFilterCounts(counts);
+    list.replaceChildren();
+    emptyQueue.hidden = items.length > 0;
+
+    for (const item of items) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'review-queue-card';
+      if (selected?.id === item.id) btn.setAttribute('aria-current', 'true');
+
+      const top = document.createElement('div');
+      top.className = 'review-queue-card-top';
+      const title = document.createElement('strong');
+      title.textContent = item.title || item.slug;
+      const badge = document.createElement('span');
+      badge.className = 'review-status-pill';
+      badge.dataset.status = item.status;
+      badge.textContent = labels[item.status] ?? 'وضعیت نامشخص';
+      top.append(title, badge);
+
+      const meta = document.createElement('div');
+      meta.className = 'review-queue-card-meta';
+      const who = document.createElement('span');
+      who.textContent = item.author_name || 'دانشجو';
+      const when = document.createElement('time');
+      when.textContent = new Date(item.created_at).toLocaleDateString('fa');
+      meta.append(who, when);
+
+      const excerpt = document.createElement('p');
+      excerpt.className = 'review-queue-card-excerpt';
+      excerpt.textContent = item.student_comment || 'بدون توضیح';
+
+      btn.append(top, meta, excerpt);
+      btn.addEventListener('click', () => void openProposalDetail(item.id));
+      li.append(btn);
+      list.append(li);
+    }
+  }
+
+  function switchViewTab(tab: 'diff' | 'preview') {
+    activeViewTab = tab;
+    for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
+      btn.setAttribute('aria-selected', String(btn.dataset.reviewTab === tab));
+    }
+    diffWrap.hidden = tab !== 'diff';
+    previewArticle.hidden = tab !== 'preview';
+
+    if (tab === 'preview' && selected) {
+      const seq = ++previewSeq;
+      const targetId = selected.id;
+      previewArticle.textContent = 'در حال آماده‌سازی پیش‌نمایش رندرشده…';
+      void fetch('/api/preview', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'MathGarden' },
+        body: selected.proposed_content,
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('پیش‌نمایش در دسترس نیست.');
+          return res.json();
+        })
+        .then((data) => {
+          if (seq !== previewSeq || selected?.id !== targetId) return;
+          previewArticle.innerHTML = data.html;
+        })
+        .catch(() => {
+          if (seq !== previewSeq || selected?.id !== targetId) return;
+          previewArticle.textContent = 'خطا در آماده‌سازی پیش‌نمایش رندرشده.';
         });
-        li.append(button);list.append(li);
+    }
+  }
+
+  function syncSelectedPanelMeta(proposal: any) {
+    const titleEl = document.querySelector<HTMLElement>('[data-review-title]')!;
+    titleEl.textContent = proposal.title || proposal.slug;
+    const noteLink = document.querySelector<HTMLAnchorElement>('[data-review-note-link]')!;
+    noteLink.href = '/notes/' + encodeURIComponent(proposal.slug);
+
+    const statusPill = document.querySelector<HTMLElement>('[data-review-status-pill]')!;
+    statusPill.dataset.status = proposal.status;
+    statusPill.textContent = labels[proposal.status] ?? 'وضعیت نامشخص';
+
+    const syncPill = document.querySelector<HTMLElement>('[data-review-sync-pill]')!;
+    if (proposal.status === 'approved') {
+      syncPill.hidden = false;
+      syncPill.dataset.sync = proposal.sync_status;
+      syncPill.textContent = labels[proposal.sync_status] ?? proposal.sync_status;
+    } else {
+      syncPill.hidden = true;
+    }
+
+    syncButton.hidden = !(proposal.status === 'approved' && proposal.sync_status !== 'synced');
+
+    const stats = summarizeDiffStats(proposal.base_content, proposal.proposed_content);
+    const diffBadge = document.querySelector<HTMLElement>('[data-review-diff-stats]')!;
+    diffBadge.textContent = stats.changed
+      ? `+${stats.added.toLocaleString('fa')} / -${stats.removed.toLocaleString('fa')} خط`
+      : 'بدون تغییر';
+
+    const metaEl = document.querySelector<HTMLElement>('[data-review-meta]')!;
+    const submitter = proposal.author_name || 'دانشجو';
+    const createdStr = new Date(proposal.created_at).toLocaleString('fa');
+    metaEl.textContent = `ارسال‌شده توسط ${submitter} در ${createdStr}`;
+
+    document.querySelector('[data-student-comment]')!.textContent =
+      proposal.student_comment || 'توضیحی ثبت نشده است.';
+
+    if (proposal.status === 'pending') {
+      decisionArea.hidden = false;
+      decisionSummary.hidden = true;
+    } else {
+      decisionArea.hidden = true;
+      decisionSummary.hidden = false;
+      decisionSummary.replaceChildren();
+      const heading = document.createElement('strong');
+      heading.textContent = `نتیجهٔ بازبینی: ${labels[proposal.status] ?? proposal.status}`;
+      decisionSummary.append(heading);
+      if (proposal.author_review_comment) {
+        const noteP = document.createElement('p');
+        noteP.textContent = proposal.author_review_comment;
+        decisionSummary.append(noteP);
       }
-      feedback(proposals.length?'یک پیشنهاد را برای مقایسه انتخاب کنید.':'پیشنهادی برای بازبینی وجود ندارد؛ پیشنهادهای تازه پس از ارسال دانشجو اینجا نمایش داده می‌شوند.');
-    }catch(error){feedback(message(error),true);retry.hidden=false;}
-    finally{setBusy(false);retry.disabled=false;}
+      if (proposal.reviewed_at) {
+        const timeEl = document.createElement('small');
+        timeEl.textContent = `ثبت‌شده در ${new Date(proposal.reviewed_at).toLocaleString('fa')}`;
+        decisionSummary.append(timeEl);
+      }
+    }
   }
-  async function mutate(path:string,body?:unknown,method?:string){
-    if(!selected || busy)return;
-    setBusy(true);feedback('در حال ثبت درخواست…');
-    try{
-      const result=await api(path,body,method);
-      if(path.endsWith('/canonical'))feedback(`${result.chunks} قطعه ایندکس شد.`);
-      else{selected=result;showStatus(selected);}
-    }catch(error){feedback(message(error),true);}finally{setBusy(false);}
+
+  async function openProposalDetail(proposalId: string) {
+    if (busy) return;
+    setBusy(true);
+    feedback('در حال دریافت متن پیشنهاد…');
+    try {
+      const proposal = await api('/review/' + proposalId);
+      selected = proposal;
+      comment.value = '';
+      panel.hidden = false;
+      placeholder.hidden = true;
+      selectedBody.hidden = false;
+
+      syncSelectedPanelMeta(proposal);
+      renderQueue();
+      switchViewTab('diff');
+
+      merge?.destroy();
+      diffHost.replaceChildren();
+      const [{ MergeView }, { EditorState }, { EditorView }, { markdown }] = await Promise.all([
+        import('@codemirror/merge'),
+        import('@codemirror/state'),
+        import('@codemirror/view'),
+        import('@codemirror/lang-markdown'),
+      ]);
+      const extensions = [
+        markdown(),
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+        EditorView.lineWrapping,
+        EditorView.perLineTextDirection.of(true),
+      ];
+      merge = new MergeView({
+        parent: diffHost,
+        a: { doc: proposal.base_content, extensions },
+        b: { doc: proposal.proposed_content, extensions },
+        highlightChanges: true,
+        gutter: true,
+      });
+
+      feedback(`نمایش پیشنهاد برای «${proposal.title || proposal.slug}»`);
+      const titleEl = document.querySelector<HTMLElement>('[data-review-title]')!;
+      titleEl.setAttribute('tabindex', '-1');
+      titleEl.focus({ preventScroll: true });
+    } catch (error) {
+      feedback(message(error), true);
+    } finally {
+      setBusy(false);
+    }
   }
-  for(const button of document.querySelectorAll<HTMLElement>('[data-decision]'))button.addEventListener('click',()=>{
-    if(selected)void mutate('/review/'+selected.id,{decision:button.dataset.decision,comment:comment.value});
+
+  async function load() {
+    if (busy) return;
+    authGate.hidden = true;
+    roleGate.hidden = true;
+    retry.hidden = true;
+
+    const currentUser = await getSession();
+    if (!currentUser) {
+      workbench.hidden = true;
+      panel.hidden = true;
+      authGate.hidden = false;
+      feedback('برای دسترسی به صفحهٔ بازبینی وارد حساب کاربری شوید.');
+      return;
+    }
+    if (!['author', 'admin'].includes(currentUser.role)) {
+      workbench.hidden = true;
+      panel.hidden = true;
+      roleGate.hidden = false;
+      feedback('صفحهٔ بازبینی مخصوص مؤلفان و مدیران است.');
+      return;
+    }
+
+    setBusy(true);
+    feedback('در حال دریافت پیشنهادها…');
+    try {
+      allProposals = await api('/review');
+      workbench.hidden = false;
+      panel.hidden = false;
+      placeholder.hidden = false;
+      selectedBody.hidden = true;
+      selected = null;
+      merge?.destroy();
+      merge = undefined;
+      renderQueue();
+      feedback(
+        allProposals.length
+          ? `${allProposals.length.toLocaleString('fa')} پیشنهاد بارگذاری شد؛ یک مورد را انتخاب کنید.`
+          : 'پیشنهادی برای بازبینی وجود ندارد؛ پیشنهادهای تازه پس از ارسال دانشجو اینجا نمایش داده می‌شوند.',
+      );
+      const firstPending = allProposals.find((p) => p.status === 'pending') || allProposals[0];
+      if (firstPending) {
+        setBusy(false);
+        await openProposalDetail(firstPending.id);
+      }
+    } catch (error) {
+      feedback(message(error), true);
+      retry.hidden = false;
+    } finally {
+      setBusy(false);
+      retry.disabled = false;
+    }
+  }
+
+  async function mutate(path: string, body?: unknown, method?: string) {
+    if (!selected || busy) return;
+    setBusy(true);
+    feedback('در حال ثبت تصمیم…');
+    try {
+      const result = await api(path, body, method);
+      selected = result;
+      allProposals = allProposals.map((item) => (item.id === result.id ? result : item));
+      syncSelectedPanelMeta(selected);
+      renderQueue();
+      feedback(`${labels[result.status] ?? result.status}`);
+      showToast('تصمیم بازبینی ثبت شد.', { variant: 'success' });
+    } catch (error) {
+      feedback(message(error), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  searchInput.addEventListener('input', () => {
+    activeQuery = searchInput.value;
+    renderQueue();
   });
-  document.querySelector('[data-sync]')!.addEventListener('click',()=>{if(selected)void mutate('/review/'+selected.id+'/sync',undefined,'POST');});
-  document.querySelector('[data-index]')!.addEventListener('click',()=>{if(selected)void mutate('/ai/index/canonical',{slug:selected.slug});});
-  retry.addEventListener('click',()=>void load());
-  window.addEventListener('pagehide',()=>merge?.destroy());
+
+  filterBar.addEventListener('click', (event) => {
+    const btn = (event.target as Element).closest<HTMLButtonElement>('button[data-status]');
+    if (!btn) return;
+    activeStatus = (btn.dataset.status as typeof activeStatus) || 'all';
+    renderQueue();
+  });
+
+  for (const tabBtn of document.querySelectorAll<HTMLButtonElement>('[data-review-tab]')) {
+    tabBtn.addEventListener('click', () => {
+      switchViewTab((tabBtn.dataset.reviewTab as 'diff' | 'preview') || 'diff');
+    });
+  }
+
+  for (const btn of document.querySelectorAll<HTMLElement>('[data-decision]')) {
+    btn.addEventListener('click', () => {
+      if (selected) {
+        void mutate('/review/' + selected.id, {
+          decision: btn.dataset.decision,
+          comment: comment.value,
+        });
+      }
+    });
+  }
+
+  syncButton.addEventListener('click', () => {
+    if (selected) void mutate('/review/' + selected.id + '/sync', undefined, 'POST');
+  });
+
+  retry.addEventListener('click', () => void load());
+  window.addEventListener('pagehide', () => merge?.destroy());
   void load();
 </script>

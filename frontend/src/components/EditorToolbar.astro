@@ -11,7 +11,9 @@ import {
   Table as TableIcon,
   Undo2,
   Redo2,
-  Calculator
+  Calculator,
+  Columns2,
+  MessageSquareQuote
 } from 'lucide-react';
 ---
 <div data-editor-toolbar class="markdown-toolbar-host" hidden>
@@ -80,6 +82,9 @@ import {
       <button type="button" data-toolbar-action="table" aria-label="درج جدول" title="درج جدول">
         <TableIcon size={15} strokeWidth={2.4} />
       </button>
+      <button type="button" data-toolbar-action="callout" aria-label="درج کادر نکته (Callout)" title="درج کادر نکته (Callout)">
+        <MessageSquareQuote size={15} strokeWidth={2.2} />
+      </button>
     </div>
 
     <span class="toolbar-divider" aria-hidden="true"></span>
@@ -90,6 +95,22 @@ import {
       </button>
       <button type="button" data-toolbar-action="redo" aria-label="ازنو (Ctrl+Y)" title="ازنو (Ctrl+Y)">
         <Redo2 size={15} strokeWidth={2.4} />
+      </button>
+    </div>
+
+    <span class="toolbar-divider" aria-hidden="true"></span>
+
+    <div class="toolbar-group">
+      <button
+        type="button"
+        data-toolbar-split
+        class="toolbar-split-btn"
+        aria-pressed="false"
+        aria-label="پیش‌نمایش کنار متن (Ctrl+Shift+P)"
+        title="پیش‌نمایش کنار متن (Ctrl/⌘+Shift+P)"
+      >
+        <Columns2 size={14} strokeWidth={2.2} />
+        <span>پیش‌نمایش زنده</span>
       </button>
     </div>
   </div>
@@ -230,6 +251,20 @@ import {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--primary-foreground);
+}
+.toolbar-split-btn {
+  gap: 5px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.toolbar-split-btn[aria-pressed="true"] {
+  background: var(--primary-soft);
+  border-color: color-mix(in oklch, var(--primary) 42%, transparent);
+  color: var(--primary-text);
 }
 
 /* Divider */

@@ -55,12 +55,19 @@ export function commandChanges(doc,from,to,action,options={}){
     const after=to<doc.length&&!/[\r\n]/.test(doc[to])?eol:'';
     return replace(from,to,before+['| ستون ۱ | ستون ۲ |','| --- | --- |','|  |  |'].join(eol)+after);
   }
-  if(!['paragraph','h1','h2','h3','quote','bullet','numbered','checklist'].includes(action))return null;
+  if(!['paragraph','h1','h2','h3','quote','callout','bullet','numbered','checklist'].includes(action))return null;
   const start=from===0?0:Math.max(doc.lastIndexOf('\n',from-1),doc.lastIndexOf('\r',from-1))+1;
   const selectedEnd=to>from&&/[\r\n]/.test(doc[to-1])?to-1:to;
   let end=selectedEnd;
   while(end<doc.length&&!/[\r\n]/.test(doc[end]))end++;
   if(end>start&&doc[end-1]==='\r')end--;
+  if(action==='callout'){
+    const body=doc.slice(start,end)||'نکته';
+    const quoted=body.split(/(\r\n|\r|\n)/).map((part,index)=>index%2?part:'> '+part.replace(/^>[ \t]?/,'')).join('');
+    const insert=`> [!note]${eol}${quoted}`;
+    const bodyStart=start+`> [!note]${eol}> `.length;
+    return replace(start,end,insert,bodyStart,start+insert.length);
+  }
   let number=0;
   const insert=doc.slice(start,end).split(/(\r\n|\r|\n)/).map((line,index)=>{
     if(index%2)return line;

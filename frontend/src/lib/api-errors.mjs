@@ -52,7 +52,10 @@ export function formatApiError(status, detail) {
     if (/account changed/i.test(normalized)) {
       return 'حساب کاربری تغییر کرده است؛ صفحه را تازه کنید.';
     }
-    if (/note changed/i.test(normalized) || !normalized) {
+    if (
+      /note changed|content changed|personal or canonical version changed/i.test(normalized) ||
+      !normalized
+    ) {
       return 'نسخه تغییر کرده است؛ متن خود را دریافت کنید و پس از بارگذاری دوباره مقایسه کنید.';
     }
     return normalized;
