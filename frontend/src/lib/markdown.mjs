@@ -19,7 +19,7 @@ import { getVaultAssets } from './vault-assets.mjs';
 import { UMKO_RELATIONS } from './umko.mjs';
 import { sanitizeRawHtml } from './html-sanitize.mjs';
 
-export const RENDERER_VERSION = 'v2-per-note-cache';
+export const RENDERER_VERSION = 'v3-table-wikilink-cache';
 
 /**
  * @typedef {{
@@ -121,6 +121,41 @@ function stripObsidianComments(content) {
   }).join('');
 }
 
+const GFM_TABLE_DELIM_RE = /^\s*(?:>\s*)?\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{0,}:?\s*$/;
+
+/**
+ * Escape unescaped `|` inside `[[target|alias]]` wikilinks appearing inside GFM table
+ * blocks so `remark-gfm` does not split the cell before `remark-wiki-link` parses them.
+ * Raw Markdown in storage/editor stays untouched; only render-time text is adapted.
+ * @param {string} content
+ * @returns {string}
+ */
+export function escapePipesInTableWikilinks(content) {
+  if (!content || !content.includes('[[')) return content;
+  const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]+`)/g);
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1 || !part.includes('[[')) return part;
+      return part
+        .split(/(\r?\n\s*\r?\n)/)
+        .map((block, bIdx) => {
+          if (bIdx % 2 === 1 || !block.includes('[[')) return block;
+          const lines = block.split('\n');
+          if (!lines.some((line) => GFM_TABLE_DELIM_RE.test(line))) return block;
+          return lines
+            .map((line) => {
+              if (!line.includes('[[') || !line.includes('|')) return line;
+              return line.replace(/(!?\[\[[^\]\n]+\]\])/g, (wiki) =>
+                wiki.replace(/(?<!\\)\|/g, '\\|')
+              );
+            })
+            .join('\n');
+        })
+        .join('');
+    })
+    .join('');
+}
+
 const wikiParser = unified().use(remarkParse).use(remarkWikiLink, { aliasDivider: '|' });
 const htmlParser = unified().use(rehypeParse, { fragment: true });
 const htmlStringifier = unified().use(rehypeStringify, { allowDangerousHtml: true });
@@ -192,7 +227,8 @@ function extractRawWikiLinks(raw) {
       const beforePipe = match[2].split('|')[0] ?? '';
       const hashIdx = beforePipe.indexOf('#');
       const targetPart = hashIdx >= 0 ? beforePipe.slice(0, hashIdx) : beforePipe;
-      const anchor = hashIdx >= 0 ? beforePipe.slice(hashIdx + 1) : '';
+      const rawAnchor = hashIdx >= 0 ? beforePipe.slice(hashIdx + 1) : '';
+      const anchor = rawAnchor ? rawAnchor.replace(/[\s\\]+$/, '').trim() : '';
       const cleanTarget = targetPart.replace(/[\s\\\/]+$/, '').trim().replace(/\.md$/, '');
       if (!cleanTarget) continue;
       if (isEmbed && isMediaEmbed(cleanTarget)) continue;
@@ -414,7 +450,8 @@ async function render(
         }
         if (node.type === 'wikiLink') {
           const rawValue = node.value || '';
-          const [targetPart, anchor] = rawValue.split('#');
+          const [targetPart, rawAnchor] = rawValue.split('#');
+          const anchor = rawAnchor ? rawAnchor.replace(/[\s\\]+$/, '').trim() : '';
           const cleanTarget = targetPart.replace(/[\s\\\/]+$/, '').trim().replace(/\.md$/, '');
           const firstChild = node.data.hChildren?.[0];
           if (options?.linkResolver) {
@@ -608,7 +645,9 @@ async function render(
     visit(preview, 'element', (node) => { delete node.properties.id; });
     file.data.previewHtml = htmlStringifier.stringify(preview);
   }).use(rehypeStringify, { allowDangerousHtml: true });
-  const file = await processor.process(stripObsidianComments(parseFrontmatter(raw).content));
+  const file = await processor.process(
+    escapePipesInTableWikilinks(stripObsidianComments(parseFrontmatter(raw).content))
+  );
   return {
     html: String(file),
     referencePreviews,

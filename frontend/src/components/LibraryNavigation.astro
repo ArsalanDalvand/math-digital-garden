@@ -1,5 +1,5 @@
 ---
-import {Plus,Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from "lucide-react";
+import {Plus,Folder,FileText,Search,X,ChevronsDown,ChevronsUp,ChevronLeft} from "lucide-react";
 ---
 <section data-library-navigation class="library-navigation" aria-label="کتابخانه">
   <div class="library-heading">
@@ -7,12 +7,13 @@ import {Plus,Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from "l
     <div class="library-toolbar-actions">
       <button type="button" data-library-expand aria-label="باز کردن همه پوشه‌ها" title="باز کردن همه پوشه‌ها"><ChevronsDown size={14} aria-hidden="true"/></button>
       <button type="button" data-library-collapse aria-label="بستن همه پوشه‌ها" title="بستن همه پوشه‌ها"><ChevronsUp size={14} aria-hidden="true"/></button>
-      <button type="button" data-library-add aria-label="ساخت یادداشت یا پوشه" title="ساخت یادداشت یا پوشه"><Plus size={15} aria-hidden="true"/></button>
+      <button type="button" data-library-add hidden aria-label="ساخت یادداشت یا پوشه" title="ساخت یادداشت یا پوشه"><Plus size={15} aria-hidden="true"/></button>
     </div>
   </div>
   <div class="library-filter-container">
     <Search size={13} aria-hidden="true" class="library-filter-icon" />
     <input type="search" data-library-filter placeholder="فیلتر سریع یادداشت‌ها…" aria-label="فیلتر سریع در یادداشت‌ها" autocomplete="off" />
+    <button type="button" data-library-filter-clear class="library-filter-clear" aria-label="پاک کردن فیلتر" title="پاک کردن فیلتر" hidden><X size={12} aria-hidden="true"/></button>
   </div>
   <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها">
     <div class="folder-tree" data-library-tree></div>
@@ -38,13 +39,19 @@ import {Plus,Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from "l
 .library-title{font-weight:600;font-size:0.85rem;color:var(--muted-foreground);letter-spacing:-0.01em}
 .library-toolbar-actions{display:flex;align-items:center;gap:3px}
 .library-toolbar-actions button{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;border:1px solid transparent;background:transparent;color:var(--muted-foreground);cursor:pointer;transition:background-color .15s ease, color .15s ease}
+.library-toolbar-actions button[hidden],.library-filter-clear[hidden]{display:none}
 .library-toolbar-actions button:hover{background:var(--surface-hover);color:var(--foreground)}
 .library-toolbar-actions button:focus-visible{outline:2px solid var(--ring);outline-offset:1px;box-shadow:none}
 .library-filter-container{position:relative;margin:4px 0 8px;display:flex;align-items:center;min-width:0}
-:global(.library-filter-icon){position:absolute;inset-inline-start:9px;color:var(--muted-foreground);pointer-events:none}
-.library-filter-container input{width:100%;height:32px;padding:4px 10px;padding-inline-start:28px;font-size:0.78rem;border:1px solid var(--border);border-radius:6px;background:var(--surface-subtle);color:inherit;outline:none;transition:border-color .15s ease,background-color .15s ease}
+:global(.library-filter-icon){position:absolute;inset-inline-start:9px;top:50%;transform:translateY(-50%);color:var(--muted-foreground);pointer-events:none}
+.library-filter-container input{width:100%;height:32px;padding:4px 28px;font-size:0.78rem;border:1px solid var(--border);border-radius:6px;background:var(--surface-subtle);color:inherit;outline:none;transition:border-color .15s ease,background-color .15s ease}
+.library-filter-container input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
 .library-filter-container input:focus{border-color:var(--primary);background:var(--background)}
 .library-filter-container input::placeholder{color:var(--muted-foreground);opacity:0.8}
+.library-filter-clear{position:absolute;inset-inline-end:5px;top:50%;transform:translateY(-50%);width:22px;height:22px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:4px;background:transparent;color:var(--muted-foreground);cursor:pointer}
+.library-filter-clear:hover{background:var(--surface-hover);color:var(--foreground)}
+:global([data-library-tree] .library-filter-mark){background:var(--selection);color:var(--foreground);border-radius:2px;padding-inline:1px}
+:global([data-library-tree] .library-empty-state){margin:10px 4px;padding:12px 10px;border:1px dashed var(--border);border-radius:8px;text-align:center;font-size:0.78rem;color:var(--muted-foreground)}
 :global([data-library-tree]){min-width:0;width:100%}
 :global([data-library-tree] details){width:100%;max-width:100%;min-width:0}
 :global([data-library-tree] summary){width:100%;max-width:100%;min-width:0;min-height:30px;padding:4px 6px;border-radius:6px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;list-style:none;transition:background-color .15s ease,color .15s ease}

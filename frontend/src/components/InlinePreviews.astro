@@ -1,183 +1,572 @@
 ---
-interface Props {
-  slugs?: string[];
-  garden?: unknown[];
-}
+import { UMKO_KINDS } from '../lib/umko.mjs';
+
+const kindMeta = Object.fromEntries(
+  Object.entries(UMKO_KINDS as Record<string, { label: string; color: string }>).map(
+    ([key, val]) => [key, { label: val.label, color: val.color }],
+  ),
+);
 ---
-<div id="inline-note-preview" class="inline-note-preview" popover="auto" role="dialog" aria-modal="false" aria-label="پیش‌نمایش یادداشت" dir="rtl"></div>
+
+<aside
+  id="inline-note-preview"
+  class="inline-note-preview"
+  popover="auto"
+  role="dialog"
+  aria-label="پیش‌نمایش مقصد"
+  tabindex="-1"
+>
+</aside>
+<script type="application/json" data-preview-kinds set:html={JSON.stringify(kindMeta)} />
+
 <script>
-  type PreviewPayload = { slug: string; title: string; href: string; html: string };
   const popup = document.querySelector<HTMLElement>('#inline-note-preview');
-  if (popup && typeof popup.showPopover === 'function') {
-    const templates = new Map(
-      [...document.querySelectorAll<HTMLTemplateElement>('template[data-preview-slug]')].map((template) => [
-        template.dataset.previewSlug,
-        template,
-      ])
-    );
-    const previewCache = new Map<string, PreviewPayload>();
-    const pending = new Map<string, Promise<PreviewPayload>>();
-    let activeLink: HTMLAnchorElement | undefined;
-    let activeButton: HTMLButtonElement | undefined;
-    let returnFocus: HTMLElement | undefined;
-    let closing = false;
-    let openSeq = 0;
-    let timer: ReturnType<typeof setTimeout>;
+  const mainEl = document.querySelector<HTMLElement>('#main');
+  const kindsRaw =
+    document.querySelector<HTMLScriptElement>('[data-preview-kinds]')?.textContent || '{}';
+  let kindMap: Record<string, { label: string; color: string }> = {};
+  try {
+    kindMap = JSON.parse(kindsRaw);
+  } catch {}
 
-    const position = () => {
-      if (!activeLink || !popup.matches(':popover-open')) return;
-      const anchor = activeLink.getBoundingClientRect();
-      const box = popup.getBoundingClientRect();
-      popup.style.left = `${Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8))}px`;
-      popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
+  if (popup && mainEl) {
+    type PreviewData = {
+      slug: string;
+      title: string;
+      href: string;
+      kind?: string;
+      slogan?: string;
+      html?: string;
     };
 
-    const close = (restore = false) => {
-      clearTimeout(timer);
-      openSeq++;
-      closing = true;
-      popup.hidePopover();
-      activeButton?.setAttribute('aria-expanded', 'false');
-      if (restore) returnFocus?.focus();
-      closing = false;
-    };
+    const isTouchPrimary = () =>
+      window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches;
 
-    const scheduleClose = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (
-          !popup.matches(':hover') &&
-          !popup.contains(document.activeElement) &&
-          document.activeElement !== activeLink &&
-          document.activeElement !== activeButton
-        ) {
-          close();
-        }
-      }, 180);
-    };
+    const cache = new Map<string, PreviewData>();
+    let activeAnchor: HTMLAnchorElement | null = null;
+    let activeSlug = '';
+    let isPinned = false;
+    let togglingPin = false;
+    let openTimer: ReturnType<typeof setTimeout> | undefined;
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    let fetchController: AbortController | undefined;
+    let hoverToken = 0;
 
-    const fetchPreview = async (slug: string): Promise<PreviewPayload> => {
-      const cached = previewCache.get(slug);
-      if (cached) return cached;
-      const existing = pending.get(slug);
-      if (existing) return existing;
-      const promise = (async () => {
-        const res = await fetch(`/api/note-preview/${encodeURIComponent(slug)}`, {
-          credentials: 'same-origin',
-        });
-        if (!res.ok) throw new Error('Preview unavailable');
-        const data = (await res.json()) as PreviewPayload;
-        previewCache.set(slug, data);
-        return data;
-      })();
-      pending.set(slug, promise);
+    const PIN_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+    const CLOSE_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+    function isOpen(): boolean {
       try {
-        return await promise;
-      } finally {
-        if (pending.get(slug) === promise) pending.delete(slug);
-      }
-    };
+        if (popup!.matches(':popover-open')) return true;
+      } catch {}
+      return popup!.classList.contains('is-open');
+    }
 
-    const renderFragment = (title: string, href: string, html: string) => {
-      const frag = document.createDocumentFragment();
+    function openPopover() {
+      popup!.classList.add('is-open');
+      if (typeof popup!.showPopover === 'function') {
+        try {
+          if (!popup!.matches(':popover-open')) popup!.showPopover();
+        } catch {}
+      }
+    }
+
+    function closePopover() {
+      popup!.classList.remove('is-open');
+      if (typeof popup!.hidePopover === 'function') {
+        try {
+          if (popup!.matches(':popover-open')) popup!.hidePopover();
+        } catch {}
+      }
+    }
+
+    function buildHeader(titleText: string, href: string, kind?: string) {
       const header = document.createElement('header');
-      const titleLink = document.createElement('a');
-      titleLink.href = href;
-      titleLink.textContent = title;
+      header.className = 'inline-preview-header';
+
+      const headingGroup = document.createElement('div');
+      headingGroup.className = 'inline-preview-title-wrap';
+
+      const meta = kind ? kindMap[kind] : undefined;
+      if (meta) {
+        const badge = document.createElement('span');
+        badge.className = 'inline-preview-kind';
+        badge.style.setProperty('--kind-color', meta.color);
+        const dot = document.createElement('span');
+        dot.className = 'inline-preview-kind-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        badge.append(dot, document.createTextNode(meta.label));
+        headingGroup.append(badge);
+      }
+
+      const link = document.createElement('a');
+      link.className = 'inline-preview-title';
+      link.href = href;
+      link.textContent = titleText;
+      headingGroup.append(link);
+
+      const controls = document.createElement('div');
+      controls.className = 'inline-preview-controls';
+
+      const pinBtn = document.createElement('button');
+      pinBtn.type = 'button';
+      pinBtn.className = 'inline-preview-btn';
+      pinBtn.dataset.previewPin = '';
+      pinBtn.setAttribute('aria-pressed', String(isPinned));
+      pinBtn.setAttribute('aria-label', isPinned ? 'رها کردن پیش‌نمایش' : 'سنجاق کردن پیش‌نمایش');
+      pinBtn.title = isPinned ? 'رها کردن' : 'سنجاق کردن';
+      pinBtn.innerHTML = PIN_SVG;
+      pinBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        isPinned = !isPinned;
+        pinBtn.setAttribute('aria-pressed', String(isPinned));
+        pinBtn.setAttribute('aria-label', isPinned ? 'رها کردن پیش‌نمایش' : 'سنجاق کردن پیش‌نمایش');
+        pinBtn.title = isPinned ? 'رها کردن' : 'سنجاق کردن';
+
+        togglingPin = true;
+        try {
+          const wasOpen = isOpen();
+          if (wasOpen) closePopover();
+          popup!.setAttribute('popover', isPinned ? 'manual' : 'auto');
+          if (wasOpen) {
+            openPopover();
+            if (activeAnchor) positionPopup(activeAnchor);
+          }
+        } finally {
+          togglingPin = false;
+        }
+      });
+
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button';
-      closeBtn.setAttribute('data-close-preview', '');
+      closeBtn.className = 'inline-preview-btn';
+      closeBtn.dataset.previewClose = '';
       closeBtn.setAttribute('aria-label', 'بستن پیش‌نمایش');
-      closeBtn.textContent = 'بستن';
-      header.append(titleLink, closeBtn);
-
-      const article = document.createElement('article');
-      article.className = 'note';
-      article.innerHTML = html;
-
-      const fullLink = document.createElement('a');
-      fullLink.href = href;
-      fullLink.textContent = 'مطالعهٔ کامل یادداشت';
-
-      frag.append(header, article, fullLink);
-      return frag;
-    };
-
-    const mountPopover = (link: HTMLAnchorElement, button: HTMLButtonElement, title: string, node: DocumentFragment, explicit: boolean) => {
-      activeButton?.setAttribute('aria-expanded', 'false');
-      activeLink = link;
-      activeButton = button;
-      returnFocus = explicit ? button : link;
-      popup.replaceChildren(node);
-      popup.querySelectorAll<HTMLElement>('pre[aria-label]').forEach((code) =>
-        code.setAttribute('aria-label', `پیش‌نمایش ${title}: ${code.getAttribute('aria-label')}`)
-      );
-      popup.setAttribute('aria-label', `پیش‌نمایش ${title}`);
-      popup.showPopover();
-      button.setAttribute('aria-expanded', 'true');
-      position();
-      popup.querySelector<HTMLButtonElement>('[data-close-preview]')?.addEventListener('click', () => close(true));
-      if (explicit) popup.querySelector<HTMLButtonElement>('[data-close-preview]')?.focus();
-    };
-
-    const open = (link: HTMLAnchorElement, button: HTMLButtonElement, explicit = false) => {
-      if (closing) return;
-      clearTimeout(timer);
-      const slug = link.dataset.notePreview;
-      if (!slug) return;
-      const seq = ++openSeq;
-
-      const template = templates.get(slug);
-      if (template) {
-        mountPopover(link, button, template.dataset.previewTitle || slug, template.content.cloneNode(true) as DocumentFragment, explicit);
-        return;
-      }
-
-      const cached = previewCache.get(slug);
-      if (cached) {
-        mountPopover(link, button, cached.title, renderFragment(cached.title, cached.href, cached.html), explicit);
-        return;
-      }
-
-      void fetchPreview(slug)
-        .then((data) => {
-          if (seq !== openSeq || closing || !link.isConnected) return;
-          if (!explicit && !link.matches(':hover') && document.activeElement !== link) return;
-          mountPopover(link, button, data.title, renderFragment(data.title, data.href, data.html), explicit);
-        })
-        .catch(() => {});
-    };
-
-    for (const link of document.querySelectorAll<HTMLAnchorElement>('article.note a[data-note-preview]')) {
-      const slug = link.dataset.notePreview;
-      if (!slug) continue;
-      const button = link as unknown as HTMLButtonElement;
-      link.addEventListener('pointerenter', (event) => {
-        if (event.pointerType === 'mouse') {
-          clearTimeout(timer);
-          timer = setTimeout(() => open(link, button), 650);
-        }
+      closeBtn.title = 'بستن';
+      closeBtn.innerHTML = CLOSE_SVG;
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        hidePreview(true);
       });
-      link.addEventListener('keydown', (event) => {
-        if (event.altKey && event.key === 'ArrowDown') {
-          event.preventDefault();
-          open(link, button, true);
-        }
-      });
-      link.addEventListener('pointerleave', scheduleClose);
-      link.addEventListener('blur', scheduleClose);
-      button.addEventListener('blur', scheduleClose);
+
+      controls.append(pinBtn, closeBtn);
+      header.append(headingGroup, controls);
+      return header;
     }
-    popup.addEventListener('pointerenter', () => clearTimeout(timer));
-    popup.addEventListener('pointerleave', scheduleClose);
-    popup.addEventListener('focusout', scheduleClose);
+
+    function positionPopup(anchor: HTMLElement) {
+      if (!isOpen() || !anchor.isConnected) return;
+      const rect = anchor.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const pad = 12;
+      const gap = 8;
+      const topSafe = 64;
+
+      const measuredW = Math.min(440, vw - pad * 2);
+      popup!.style.width = `${measuredW}px`;
+
+      let left = rect.left;
+      if (document.documentElement.dir === 'rtl') {
+        left = rect.right - measuredW;
+      }
+      left = Math.max(pad, Math.min(vw - measuredW - pad, left));
+      popup!.style.left = `${left}px`;
+      popup!.style.right = 'auto';
+
+      const spaceBelow = vh - rect.bottom - gap - pad;
+      const spaceAbove = rect.top - topSafe - gap;
+      const naturalHeight = Math.min(360, popup!.scrollHeight || 220);
+
+      let top: number;
+      let maxH: number;
+      if (spaceBelow >= Math.min(naturalHeight, 190) || spaceBelow >= spaceAbove) {
+        top = rect.bottom + gap;
+        maxH = Math.max(120, Math.min(360, spaceBelow));
+      } else {
+        maxH = Math.max(120, Math.min(360, spaceAbove));
+        const usedH = Math.min(naturalHeight, maxH);
+        top = Math.max(topSafe, rect.top - gap - usedH);
+      }
+      popup!.style.maxHeight = `${maxH}px`;
+      popup!.style.top = `${top}px`;
+    }
+
+    function renderSkeleton(anchor: HTMLAnchorElement) {
+      const skeleton = document.createElement('div');
+      skeleton.className = 'inline-preview-skeleton';
+      skeleton.innerHTML =
+        '<div class="sk-line sk-w60"></div><div class="sk-line sk-w95"></div><div class="sk-line sk-w80"></div>';
+      popup!.replaceChildren(
+        buildHeader(anchor.textContent?.trim() || 'در حال بارگذاری…', anchor.href),
+        skeleton,
+      );
+      openPopover();
+      positionPopup(anchor);
+    }
+
+    function renderContent(anchor: HTMLAnchorElement, data: PreviewData) {
+      const body = document.createElement('div');
+      body.className = 'inline-preview-body note';
+      if (data.slogan) {
+        const slogan = document.createElement('p');
+        slogan.className = 'inline-preview-slogan';
+        slogan.textContent = data.slogan;
+        body.append(slogan);
+      }
+      if (data.html) {
+        const content = document.createElement('div');
+        content.className = 'inline-preview-html';
+        content.innerHTML = data.html;
+        body.append(content);
+      } else if (!data.slogan) {
+        const empty = document.createElement('p');
+        empty.className = 'inline-preview-empty';
+        empty.textContent = 'پیش‌نمایشی برای این یادداشت ثبت نشده است.';
+        body.append(empty);
+      }
+      popup!.replaceChildren(
+        buildHeader(
+          data.title || anchor.textContent?.trim() || '',
+          data.href || anchor.href,
+          data.kind,
+        ),
+        body,
+      );
+      openPopover();
+      requestAnimationFrame(() => positionPopup(anchor));
+    }
+
+    function resetState() {
+      isPinned = false;
+      activeAnchor = null;
+      activeSlug = '';
+      if (popup!.getAttribute('popover') !== 'auto') {
+        popup!.setAttribute('popover', 'auto');
+      }
+      popup!.replaceChildren();
+    }
+
+    function hidePreview(force = false) {
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      if (!force && isPinned) return;
+      fetchController?.abort();
+      fetchController = undefined;
+      closePopover();
+      resetState();
+    }
+
+    function scheduleClose() {
+      if (isPinned) return;
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => hidePreview(false), 180);
+    }
+
+    async function showForAnchor(anchor: HTMLAnchorElement, slug: string) {
+      if (isPinned && activeSlug && activeSlug !== slug) return;
+      const myToken = ++hoverToken;
+      activeAnchor = anchor;
+      activeSlug = slug;
+
+      const cached = cache.get(slug);
+      if (cached) {
+        renderContent(anchor, cached);
+        return;
+      }
+
+      fetchController?.abort();
+      fetchController = new AbortController();
+      renderSkeleton(anchor);
+
+      try {
+        const res = await fetch(`/api/note-preview/${encodeURIComponent(slug)}`, {
+          credentials: 'same-origin',
+          signal: fetchController.signal,
+        });
+        if (!res.ok) throw new Error('Preview unavailable');
+        const data = (await res.json()) as PreviewData;
+        cache.set(slug, data);
+        if (myToken !== hoverToken || activeAnchor !== anchor) return;
+        renderContent(anchor, data);
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError' || myToken !== hoverToken) return;
+        const msg = document.createElement('p');
+        msg.className = 'inline-preview-empty';
+        msg.textContent = 'دریافت پیش‌نمایش ممکن نشد.';
+        popup!.replaceChildren(buildHeader(anchor.textContent?.trim() || '', anchor.href), msg);
+        openPopover();
+        requestAnimationFrame(() => positionPopup(anchor));
+      }
+    }
+
+    popup.addEventListener('toggle', (event) => {
+      if (togglingPin) return;
+      if ((event as ToggleEvent).newState === 'closed') {
+        clearTimeout(openTimer);
+        clearTimeout(closeTimer);
+        fetchController?.abort();
+        fetchController = undefined;
+        popup!.classList.remove('is-open');
+        resetState();
+      }
+    });
+
+    mainEl.addEventListener('mouseover', (event) => {
+      if (isTouchPrimary()) return;
+      const anchor = (event.target as Element)?.closest<HTMLAnchorElement>('a[data-note-preview]');
+      if (!anchor || anchor.closest('#inline-note-preview')) return;
+      const slug = anchor.dataset.notePreview;
+      if (!slug) return;
+      clearTimeout(closeTimer);
+      if (activeAnchor === anchor && isOpen()) return;
+      clearTimeout(openTimer);
+      const delay = cache.has(slug) ? 140 : 240;
+      openTimer = setTimeout(() => void showForAnchor(anchor, slug), delay);
+    });
+
+    mainEl.addEventListener('mouseout', (event) => {
+      const anchor = (event.target as Element)?.closest<HTMLAnchorElement>('a[data-note-preview]');
+      if (!anchor) return;
+      const to = event.relatedTarget as Node | null;
+      if (to && (anchor.contains(to) || popup.contains(to))) return;
+      scheduleClose();
+    });
+
+    mainEl.addEventListener('focusin', (event) => {
+      if (isTouchPrimary()) return;
+      const anchor = (event.target as Element)?.closest<HTMLAnchorElement>('a[data-note-preview]');
+      if (!anchor || anchor.closest('#inline-note-preview')) return;
+      const slug = anchor.dataset.notePreview;
+      if (!slug) return;
+      clearTimeout(closeTimer);
+      clearTimeout(openTimer);
+      openTimer = setTimeout(() => void showForAnchor(anchor, slug), 320);
+    });
+
+    mainEl.addEventListener('focusout', (event) => {
+      const anchor = (event.target as Element)?.closest<HTMLAnchorElement>('a[data-note-preview]');
+      if (!anchor) return;
+      const to = event.relatedTarget as Node | null;
+      if (to && popup.contains(to)) return;
+      scheduleClose();
+    });
+
+    popup.addEventListener('mouseenter', () => clearTimeout(closeTimer));
+    popup.addEventListener('mouseleave', (event) => {
+      const to = event.relatedTarget as Node | null;
+      if (to && activeAnchor?.contains(to)) return;
+      scheduleClose();
+    });
+
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (isOpen() && activeAnchor) positionPopup(activeAnchor);
+      },
+      { passive: true },
+    );
+
+    window.addEventListener(
+      'resize',
+      () => {
+        if (isOpen() && activeAnchor) positionPopup(activeAnchor);
+      },
+      { passive: true },
+    );
+
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && popup.matches(':popover-open')) close(popup.contains(document.activeElement));
+      if (event.key === 'Escape' && isOpen()) {
+        event.preventDefault();
+        const returnFocusTo = activeAnchor;
+        hidePreview(true);
+        returnFocusTo?.focus({ preventScroll: true });
+      }
     });
-    popup.addEventListener('toggle', () => {
-      if (!popup.matches(':popover-open')) activeButton?.setAttribute('aria-expanded', 'false');
+
+    document.addEventListener('pointerdown', (event) => {
+      if (!isOpen() || isPinned) return;
+      const target = event.target as Node;
+      if (!popup.contains(target) && !(activeAnchor && activeAnchor.contains(target))) {
+        hidePreview(true);
+      }
     });
-    window.addEventListener('resize', position);
-    window.addEventListener('scroll', position, true);
   }
 </script>
+
+<style is:global>
+  .inline-note-preview {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    z-index: 65;
+    width: min(440px, calc(100vw - 24px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--border-strong);
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 20px 44px -8px oklch(0 0 0 / 0.28);
+  }
+
+  .inline-note-preview:not(:popover-open):not(.is-open) {
+    display: none;
+  }
+
+  .inline-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-subtle);
+  }
+
+  .inline-preview-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .inline-preview-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: color-mix(in oklch, var(--kind-color) 14%, var(--surface));
+    border: 1px solid color-mix(in oklch, var(--kind-color) 32%, var(--border));
+    color: var(--foreground);
+  }
+
+  .inline-preview-kind-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--kind-color);
+  }
+
+  .inline-preview-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--foreground);
+    text-decoration: none;
+  }
+
+  .inline-preview-title:hover {
+    color: var(--primary-text);
+    text-decoration: underline;
+  }
+
+  .inline-preview-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .inline-preview-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .inline-preview-btn:hover {
+    background: var(--surface-hover);
+    color: var(--foreground);
+  }
+
+  .inline-preview-btn[aria-pressed='true'] {
+    background: var(--primary-soft);
+    color: var(--primary-text);
+  }
+
+  .inline-preview-body {
+    overflow-y: auto;
+    padding: 10px 14px 12px;
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+
+  .inline-preview-slogan {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    color: var(--muted-foreground);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+
+  .inline-preview-html > :first-child {
+    margin-block-start: 0;
+  }
+
+  .inline-preview-html > :last-child {
+    margin-block-end: 0;
+  }
+
+  .inline-preview-empty {
+    margin: 6px 0;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    color: var(--muted-foreground);
+  }
+
+  .inline-preview-skeleton {
+    padding: 14px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .inline-preview-skeleton .sk-line {
+    height: 11px;
+    border-radius: 6px;
+    background: var(--surface-hover);
+    animation: preview-pulse 1.2s ease-in-out infinite;
+  }
+
+  .inline-preview-skeleton .sk-w60 {
+    width: 60%;
+  }
+  .inline-preview-skeleton .sk-w95 {
+    width: 95%;
+  }
+  .inline-preview-skeleton .sk-w80 {
+    width: 80%;
+  }
+
+  @keyframes preview-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.9;
+    }
+  }
+</style>

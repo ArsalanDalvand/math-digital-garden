@@ -2,6 +2,7 @@ import { type Account, applyPreferences } from './account-preferences';
 import { ApiError, message, api as request } from './api';
 import { publicationHref, threadComments } from './library-utils.mjs';
 import { getSession } from './session';
+import { showToast } from './toast';
 
 type Item = {
   id: string;
@@ -465,22 +466,57 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
     link: async () => {
       await navigator.clipboard.writeText(location.href);
       status.textContent = 'پیوند کپی شد.';
+      showToast('پیوند یادداشت کپی شد.', { variant: 'success' });
     },
     markdown: async () => {
-      const saved = await flush();
-      await navigator.clipboard.writeText(saved.content);
+      let markdownText = '';
+      if (!user && canonicalSlug) {
+        const note = await api<{ current_content?: string }>(
+          '/notes/' + encodeURIComponent(canonicalSlug),
+        );
+        markdownText = note?.current_content ?? '';
+      } else {
+        const saved = await flush();
+        markdownText = saved.content;
+      }
+      if (!markdownText) throw new Error('متن Markdown این یادداشت در دسترس نیست.');
+      await navigator.clipboard.writeText(markdownText);
       status.textContent = 'Markdown کپی شد.';
+      showToast('متن Markdown کپی شد.', { variant: 'success' });
     },
     favorite: async () => {
       await api(base + '/favorite' + suffix, { favorite: !item?.favorite }, 'PUT');
       await refresh();
       document.dispatchEvent(new Event('garden:library'));
+      showToast(item?.favorite ? 'به علاقه‌مندی‌ها افزوده شد.' : 'از علاقه‌مندی‌ها حذف شد.', {
+        variant: 'success',
+      });
     },
     watch: async () => {
       await api(base + '/watch' + suffix, { watching: !watching }, 'PUT');
       await refresh();
+      showToast(watching ? 'پیگیری یادداشت فعال شد.' : 'پیگیری یادداشت متوقف شد.', {
+        variant: 'info',
+      });
     },
     width: async () => {
+      const widthSelect = document.querySelector<HTMLSelectElement>(
+        '[data-reading-setting="width"]',
+      );
+      if (!user) {
+        const currentWidth = Number(widthSelect?.value || '760');
+        const nextWidth = currentWidth === 960 ? 760 : 960;
+        if (widthSelect) {
+          widthSelect.value = String(nextWidth);
+          widthSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+          document.documentElement.style.setProperty('--reading-width', `${nextWidth}px`);
+        }
+        showToast(nextWidth === 960 ? 'عرض کامل صفحه فعال شد.' : 'عرض مطالعه به حالت عادی برگشت.', {
+          variant: 'info',
+        });
+        return;
+      }
       const account = await api<Account>('/account');
       const preferences = {
         ...account.preferences,
@@ -488,6 +524,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
       };
       const updated = await api<Account>('/account/preferences', preferences, 'PATCH');
       applyPreferences(updated.preferences);
+      showToast(
+        updated.preferences.width === 960
+          ? 'عرض کامل صفحه ذخیره شد.'
+          : 'عرض مطالعه به حالت عادی برگشت.',
+        { variant: 'success' },
+      );
     },
     rename: async () => {
       await flush();
@@ -657,6 +699,15 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
     const command = target?.dataset.libraryCommand;
     if (command && actions[command])
       void run(async () => {
+        const guestAllowed = ['link', 'markdown', 'width', 'comments'];
+        if (!user && !guestAllowed.includes(command)) {
+          showToast('برای انجام این کار ابتدا وارد حساب کاربری خود شوید.', {
+            variant: 'info',
+            actionLabel: 'ورود به حساب',
+            href: '/account',
+          });
+          return;
+        }
         if (
           !['link', 'markdown', 'width'].includes(command) &&
           !(canonicalSlug && command === 'comments')
@@ -671,6 +722,9 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
   void run(async () => {
     user = await getSession();
     if (identity === undefined) identity = user?.id ?? null;
+    document.querySelectorAll<HTMLElement>('[data-auth-only]').forEach((el) => {
+      el.hidden = !user;
+    });
     if (user?.role === 'admin') find('[data-library-command="verify"]')!.hidden = false;
     if (publicView)
       item = await api<Item>(

@@ -1,47 +1,149 @@
 ---
-import {List} from 'lucide-react';
+import { List } from 'lucide-react';
 ---
 <details class="note-outline">
-  <summary aria-label="فهرست سرفصل‌ها" title="فهرست سرفصل‌ها"><List size={18} aria-hidden="true"/></summary>
+  <summary aria-label="فهرست سرفصل‌ها" title="فهرست سرفصل‌ها">
+    <List size={18} aria-hidden="true" />
+  </summary>
   <nav class="note-outline-panel" aria-label="سرفصل‌های یادداشت"></nav>
 </details>
+
 <script>
-const outline=document.querySelector<HTMLDetailsElement>('.note-outline');
-if(outline){
- const panel=outline.querySelector<HTMLElement>('.note-outline-panel')!;
- const summary=outline.querySelector('summary')!;
- function visible(element:Element){
-  for(let node:Element|null=element;node;node=node.parentElement){
-   const style=getComputedStyle(node);
-   if(node.hasAttribute('hidden')||style.display==='none'||style.visibility==='hidden')return false;
-  }
-  return true;
- }
- outline.addEventListener('toggle',()=>{
-  if(!outline.open)return;
-  panel.replaceChildren();
-  const article=Array.from(document.querySelectorAll<HTMLElement>('#main article.note')).find(node=>!node.closest('[data-editor-panel]')&&visible(node));
-  const list=document.createElement('ul');
-  article?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6').forEach(heading=>{
-   if(!heading.id||!heading.textContent?.trim()||!visible(heading))return;
-   const item=document.createElement('li');const link=document.createElement('a');
-   link.href='#'+encodeURIComponent(heading.id);link.textContent=heading.textContent.trim();
-   link.addEventListener('click',()=>{
-    outline.open=false;
-    if(!heading.hasAttribute('tabindex')){
-     heading.setAttribute('tabindex','-1');
-     heading.addEventListener('blur',()=>heading.removeAttribute('tabindex'),{once:true});
+  const outline = document.querySelector<HTMLDetailsElement>('.note-outline');
+  if (outline) {
+    const panel = outline.querySelector<HTMLElement>('.note-outline-panel')!;
+    const summary = outline.querySelector('summary')!;
+    let activeId = '';
+    let spyObserver: IntersectionObserver | undefined;
+
+    function isVisible(element: Element) {
+      for (let node: Element | null = element; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (node.hasAttribute('hidden') || style.display === 'none' || style.visibility === 'hidden') {
+          return false;
+        }
+      }
+      return true;
     }
-    heading.focus({preventScroll:true});
-   });
-   item.append(link);list.append(item);
-  });
-  if(list.children.length)panel.append(list);
-  else {const empty=document.createElement('p');empty.textContent='سرفصلی برای نمایش وجود ندارد؛ در حالت خواندن دوباره بررسی کنید.';panel.append(empty);}
- });
- document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'&&outline.open){event.preventDefault();outline.open=false;summary.focus();}
- });
- document.addEventListener('pointerdown',event=>{if(outline.open&&!outline.contains(event.target as Node))outline.open=false;});
-}
+
+    function extractCleanHeadingText(heading: HTMLElement): string {
+      const clone = heading.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('.katex-mathml, .katex-copy-btn').forEach((n) => n.remove());
+      return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function getArticleHeadings(): HTMLElement[] {
+      const article = Array.from(document.querySelectorAll<HTMLElement>('#main article.note')).find(
+        (node) => !node.closest('[data-editor-panel]') && isVisible(node),
+      );
+      if (!article) return [];
+      return Array.from(article.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')).filter(
+        (h) => Boolean(h.id) && Boolean(h.textContent?.trim()) && isVisible(h),
+      );
+    }
+
+    function applyActiveLink() {
+      panel.querySelectorAll<HTMLAnchorElement>('a[data-heading-id]').forEach((a) => {
+        a.classList.toggle('is-active', Boolean(activeId) && a.dataset.headingId === activeId);
+      });
+    }
+
+    function setupScrollSpy() {
+      spyObserver?.disconnect();
+      const headings = getArticleHeadings();
+      if (!headings.length) {
+        activeId = '';
+        return;
+      }
+      if (!activeId) activeId = headings[0].id;
+      const visibleSet = new Set<string>();
+
+      spyObserver = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const id = (entry.target as HTMLElement).id;
+            if (!id) continue;
+            if (entry.isIntersecting) visibleSet.add(id);
+            else visibleSet.delete(id);
+          }
+          if (visibleSet.size > 0) {
+            const firstVisible = headings.find((h) => visibleSet.has(h.id));
+            if (firstVisible) activeId = firstVisible.id;
+          } else {
+            const passed = headings.filter((h) => h.getBoundingClientRect().top <= 180);
+            activeId = (passed[passed.length - 1] ?? headings[0]).id;
+          }
+          if (outline.open) applyActiveLink();
+        },
+        { rootMargin: '-120px 0px -65% 0px', threshold: 0 },
+      );
+
+      for (const h of headings) spyObserver.observe(h);
+    }
+
+    function buildOutlineList() {
+      panel.replaceChildren();
+      const headings = getArticleHeadings();
+      const list = document.createElement('ul');
+      for (const heading of headings) {
+        const text = extractCleanHeadingText(heading);
+        if (!text) continue;
+        const item = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '#' + encodeURIComponent(heading.id);
+        link.dataset.headingId = heading.id;
+        link.dataset.depth = heading.tagName.slice(1);
+        link.textContent = text;
+        if (heading.id === activeId) link.classList.add('is-active');
+        link.addEventListener('click', () => {
+          activeId = heading.id;
+          outline.open = false;
+          if (!heading.hasAttribute('tabindex')) {
+            heading.setAttribute('tabindex', '-1');
+            heading.addEventListener('blur', () => heading.removeAttribute('tabindex'), {
+              once: true,
+            });
+          }
+          heading.focus({ preventScroll: true });
+        });
+        item.append(link);
+        list.append(item);
+      }
+      if (list.children.length) {
+        panel.append(list);
+      } else {
+        const empty = document.createElement('p');
+        empty.textContent = 'سرفصلی برای نمایش وجود ندارد؛ در حالت خواندن دوباره بررسی کنید.';
+        panel.append(empty);
+      }
+    }
+
+    outline.addEventListener('toggle', () => {
+      if (!outline.open) return;
+      buildOutlineList();
+      requestAnimationFrame(() => {
+        panel.querySelector<HTMLElement>('a.is-active')?.scrollIntoView({ block: 'nearest' });
+      });
+    });
+
+    setupScrollSpy();
+    document.addEventListener('garden:context-change', () => {
+      setupScrollSpy();
+      if (outline.open) buildOutlineList();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && outline.open) {
+        event.preventDefault();
+        outline.open = false;
+        summary.focus();
+      }
+    });
+
+    document.addEventListener('pointerdown', (event) => {
+      if (outline.open && !outline.contains(event.target as Node)) {
+        outline.open = false;
+      }
+    });
+  }
 </script>

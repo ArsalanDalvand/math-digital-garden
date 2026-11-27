@@ -12,6 +12,7 @@ import { parse } from 'yaml';
 import { api, message } from './api';
 import { bindEditorToolbar } from './editor-toolbar';
 import { getSession } from './session';
+import { showToast } from './toast';
 import '@atomic-editor/editor/styles.css';
 import { Compartment, StateEffect } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
@@ -253,6 +254,13 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     editButton.disabled = true;
     editButton.setAttribute('aria-busy', 'true');
     try {
+      const currentUser = await getSession();
+      if (!currentUser) {
+        const msg = 'برای ویرایش یادداشت و ساخت نسخهٔ شخصی ابتدا وارد حساب کاربری شوید.';
+        say(msg);
+        showToast(msg, { variant: 'info', actionLabel: 'ورود به حساب', href: '/account' });
+        return;
+      }
       if (view) {
         activateEditor({ article, panel, indicator: document.querySelector('.note-status') });
         modeSwitch(false);
@@ -497,13 +505,22 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-workspace-note]
     bookmark.disabled = true;
     bookmark.setAttribute('aria-busy', 'true');
     try {
+      const currentUser = await getSession();
+      if (!currentUser) {
+        const msg = 'برای نشانه‌گذاری یادداشت‌ها ابتدا وارد حساب کاربری شوید.';
+        say(msg);
+        showToast(msg, { variant: 'info', actionLabel: 'ورود به حساب', href: '/account' });
+        return;
+      }
       await api(
         '/workspace/bookmarks/' + encodeURIComponent(slug),
         undefined,
         selected ? 'DELETE' : 'PUT',
       );
       mark(!selected);
-      say(selected ? 'نشانه برداشته شد' : 'نشانه‌گذاری شد');
+      const doneText = selected ? 'نشانه برداشته شد' : 'نشانه‌گذاری شد';
+      say(doneText);
+      showToast(doneText, { variant: 'success' });
     } catch (error) {
       handle(error);
     } finally {

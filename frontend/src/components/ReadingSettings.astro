@@ -1,13 +1,204 @@
 ---
-import {SlidersHorizontal} from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 ---
-<details class="reading-settings"><summary aria-label="تنظیمات مطالعه" title="تنظیمات مطالعه"><SlidersHorizontal size={18} aria-hidden="true"/><span>تنظیمات مطالعه</span></summary><div class="reading-settings-panel"><strong>تنظیمات مطالعه</strong><label>اندازهٔ متن <input data-reading-setting="size" type="range" min="16" max="26" value="19" /></label><label>فاصلهٔ خطوط <input data-reading-setting="leading" type="range" min="1.5" max="2.5" step="0.1" value="2" /></label><label>عرض متن <select data-reading-setting="width"><option value="760">معمولی</option><option value="620">باریک</option><option value="960">عریض</option></select></label><label><input data-reading-setting="focus" type="checkbox" /> مطالعهٔ بدون سایدبار</label><button type="button" data-reading-reset>بازنشانی تنظیمات مطالعه</button><p data-reading-save-status role="status"></p></div></details>
+<details class="reading-settings">
+  <summary aria-label="تنظیمات مطالعه" title="تنظیمات مطالعه">
+    <SlidersHorizontal size={18} aria-hidden="true" />
+    <span>تنظیمات مطالعه</span>
+  </summary>
+  <div class="reading-settings-panel">
+    <strong>تنظیمات مطالعه</strong>
+
+    <label>
+      <span class="reading-setting-row">
+        <span>اندازهٔ متن</span>
+        <output data-reading-output="size" dir="ltr">19px</output>
+      </span>
+      <input data-reading-setting="size" type="range" min="16" max="26" value="19" />
+    </label>
+
+    <label>
+      <span class="reading-setting-row">
+        <span>فاصلهٔ خطوط</span>
+        <output data-reading-output="leading" dir="ltr">2.0</output>
+      </span>
+      <input data-reading-setting="leading" type="range" min="1.5" max="2.5" step="0.1" value="2" />
+    </label>
+
+    <label>
+      <span class="reading-setting-row">
+        <span>بزرگنمایی فرمول‌ها</span>
+        <output data-reading-output="mathScale" dir="ltr">100%</output>
+      </span>
+      <input data-reading-setting="mathScale" type="range" min="0.85" max="1.3" step="0.05" value="1" />
+    </label>
+
+    <label>
+      <span>عرض متن</span>
+      <select data-reading-setting="width">
+        <option value="760">معمولی</option>
+        <option value="620">باریک</option>
+        <option value="960">عریض</option>
+      </select>
+    </label>
+
+    <label>
+      <input data-reading-setting="focus" type="checkbox" />
+      <span>مطالعهٔ بدون سایدبار</span>
+    </label>
+
+    <button type="button" data-reading-reset>بازنشانی تنظیمات مطالعه</button>
+    <p data-reading-save-status role="status"></p>
+  </div>
+</details>
+
 <script>
-const defaults={size:19,leading:2,width:760,focus:false};
-let settings={...defaults};try{settings={...defaults,...JSON.parse(localStorage.getItem('garden-reading')??'{}')}}catch{}
-function apply(save=false){const root=document.documentElement;root.style.setProperty('--reading-size',Math.max(16,Math.min(26,Number(settings.size)))+'px');root.style.setProperty('--reading-leading',Math.max(1.5,Math.min(2.5,Number(settings.leading))).toString());root.style.setProperty('--reading-width',Math.max(620,Math.min(960,Number(settings.width)))+'px');root.dataset.readingFocus=String(settings.focus);document.querySelectorAll<HTMLInputElement|HTMLSelectElement>('[data-reading-setting]').forEach(el=>{const k=el.dataset.readingSetting as keyof typeof defaults;if(el instanceof HTMLInputElement&&el.type==='checkbox')el.checked=Boolean(settings[k]);else el.value=String(settings[k])});try{localStorage.setItem('garden-reading',JSON.stringify(settings))}catch{}document.dispatchEvent(new Event('garden:reading-focus-change'));if(save)document.dispatchEvent(new CustomEvent('garden:reading-settings',{detail:{...settings}}))}
-document.querySelectorAll<HTMLInputElement|HTMLSelectElement>('[data-reading-setting]').forEach(el=>el.addEventListener(el instanceof HTMLSelectElement?'change':'input',()=>{const k=el.dataset.readingSetting as keyof typeof defaults;(settings as any)[k]=el instanceof HTMLInputElement&&el.type==='checkbox'?el.checked:Number(el.value);apply(true)}));document.querySelector('[data-reading-reset]')?.addEventListener('click',()=>{settings={...defaults};apply(true)});apply();
-document.addEventListener('garden:show-navigation',()=>{if(settings.focus){settings.focus=false;apply(true)}});
-document.addEventListener('garden:preferences',event=>{const preferences=(event as CustomEvent<typeof defaults>).detail;settings={size:preferences.size,leading:preferences.leading,width:preferences.width,focus:preferences.focus};apply()});
-document.addEventListener('garden:preference-save',event=>{const state=(event as CustomEvent<{state:string}>).detail.state;const status=document.querySelector<HTMLElement>('[data-reading-save-status]');if(status){status.textContent=state==='saving'?'در حال ذخیره در حساب…':state==='saved'?'در حساب ذخیره شد.':'ذخیره در حساب انجام نشد؛ تنظیمات فعلاً فقط روی این دستگاه است.';status.setAttribute('role',state==='error'?'alert':'status');}});
+  const syncedDefaults = { size: 19, leading: 2, width: 760, focus: false };
+  const allDefaults = { ...syncedDefaults, mathScale: 1 };
+  type AllSettings = typeof allDefaults;
+
+  let settings: AllSettings = { ...allDefaults };
+  try {
+    const raw = JSON.parse(localStorage.getItem('garden-reading') ?? '{}');
+    if (raw && typeof raw === 'object') settings = { ...allDefaults, ...raw };
+  } catch {}
+
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function emitSyncedPreferences() {
+    clearTimeout(saveTimer);
+    document.dispatchEvent(
+      new CustomEvent('garden:reading-settings', {
+        detail: {
+          size: Number(settings.size),
+          leading: Number(settings.leading),
+          width: Number(settings.width),
+          focus: Boolean(settings.focus),
+        },
+      }),
+    );
+  }
+
+  function formatOutput(key: keyof AllSettings, value: number): string {
+    if (key === 'size') return `${Math.round(value).toLocaleString('fa-IR')}px`;
+    if (key === 'leading') return value.toFixed(1);
+    if (key === 'mathScale') return `${Math.round(value * 100).toLocaleString('fa-IR')}٪`;
+    return String(value);
+  }
+
+  function apply(saveMode: 'none' | 'immediate' | 'debounced' = 'none') {
+    const root = document.documentElement;
+    const clampedSize = Math.max(16, Math.min(26, Number(settings.size) || 19));
+    const clampedLeading = Math.max(1.5, Math.min(2.5, Number(settings.leading) || 2));
+    const clampedWidth = Math.max(620, Math.min(960, Number(settings.width) || 760));
+    const clampedMathScale = Math.max(0.85, Math.min(1.3, Number(settings.mathScale) || 1));
+
+    settings.size = clampedSize;
+    settings.leading = clampedLeading;
+    settings.width = clampedWidth;
+    settings.mathScale = clampedMathScale;
+
+    root.style.setProperty('--reading-size', `${clampedSize}px`);
+    root.style.setProperty('--reading-leading', clampedLeading.toString());
+    root.style.setProperty('--reading-width', `${clampedWidth}px`);
+    root.style.setProperty('--math-scale', clampedMathScale.toFixed(2));
+    root.dataset.readingFocus = String(Boolean(settings.focus));
+
+    document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-reading-setting]').forEach((el) => {
+      const k = el.dataset.readingSetting as keyof AllSettings;
+      if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = Boolean(settings[k]);
+      else el.value = String(settings[k]);
+    });
+
+    document.querySelectorAll<HTMLOutputElement>('[data-reading-output]').forEach((out) => {
+      const k = out.dataset.readingOutput as keyof AllSettings;
+      if (k in settings && typeof settings[k] === 'number') {
+        out.textContent = formatOutput(k, settings[k] as number);
+      }
+    });
+
+    try {
+      localStorage.setItem('garden-reading', JSON.stringify(settings));
+    } catch {}
+    document.dispatchEvent(new Event('garden:reading-focus-change'));
+
+    if (saveMode === 'immediate') {
+      emitSyncedPreferences();
+    } else if (saveMode === 'debounced') {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(emitSyncedPreferences, 350);
+    }
+  }
+
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-reading-setting]').forEach((el) => {
+    const k = el.dataset.readingSetting as keyof AllSettings;
+    const eventType = el instanceof HTMLSelectElement ? 'change' : 'input';
+    el.addEventListener(eventType, () => {
+      (settings as Record<string, unknown>)[k] =
+        el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : Number(el.value);
+      if (k === 'mathScale') {
+        apply('none');
+      } else if (el instanceof HTMLInputElement && el.type === 'range') {
+        apply('debounced');
+      } else {
+        apply('immediate');
+      }
+    });
+  });
+
+  document.querySelector('[data-reading-reset]')?.addEventListener('click', () => {
+    settings = { ...allDefaults };
+    apply('immediate');
+  });
+
+  apply('none');
+
+  document.addEventListener('garden:show-navigation', () => {
+    if (settings.focus) {
+      settings.focus = false;
+      apply('immediate');
+    }
+  });
+
+  document.addEventListener('garden:preferences', (event) => {
+    const preferences = (event as CustomEvent<typeof syncedDefaults>).detail;
+    settings = {
+      ...settings,
+      size: preferences.size,
+      leading: preferences.leading,
+      width: preferences.width,
+      focus: preferences.focus,
+    };
+    apply('none');
+  });
+
+  document.addEventListener('garden:preference-save', (event) => {
+    const state = (event as CustomEvent<{ state: string }>).detail.state;
+    const status = document.querySelector<HTMLElement>('[data-reading-save-status]');
+    if (status) {
+      status.textContent =
+        state === 'saving'
+          ? 'در حال ذخیره در حساب…'
+          : state === 'saved'
+            ? 'در حساب ذخیره شد.'
+            : 'ذخیره در حساب انجام نشد؛ تنظیمات فعلاً فقط روی این دستگاه است.';
+      status.setAttribute('role', state === 'error' ? 'alert' : 'status');
+    }
+  });
 </script>
+
+<style>
+  .reading-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .reading-setting-row output {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--primary-text);
+    font-variant-numeric: tabular-nums;
+  }
+</style>

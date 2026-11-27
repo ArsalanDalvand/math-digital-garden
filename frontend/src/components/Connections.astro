@@ -1,101 +1,230 @@
 ---
+import type { IndexedNote } from '../lib/markdown.mjs';
 import { noteHref } from '../lib/markdown.mjs';
-type Note = {
-  slug: string;
-  title: string;
-  previewHtml?: string;
-  referencePreviews?: Record<string, string>;
-};
+
 interface Props {
-  garden?: Note[];
-  bySlug?: Map<string, Note>;
-  slugs: string[];
   title: string;
   direction: 'outgoing' | 'incoming';
   currentSlug: string;
+  slugs: string[];
+  bySlug: Map<string, IndexedNote>;
 }
-const { garden = [], bySlug, slugs, title, direction, currentSlug } = Astro.props;
-const resolveNote = (slug: string) => bySlug?.get(slug) ?? garden.find((note) => note.slug === slug);
-const notes = slugs.map(resolveNote).filter((note): note is Note => !!note);
-const incoming = direction === 'incoming';
-const groups = [notes.slice(0, 5), notes.slice(5)];
+
+const { title, direction, currentSlug, slugs, bySlug } = Astro.props;
+const items = [...new Set(slugs)]
+  .map((slug) => bySlug.get(slug))
+  .filter((note): note is IndexedNote => Boolean(note));
 ---
-<section class="connection-section" aria-label={title}>
-  <h2>{title} <span class="connection-count">{notes.length.toLocaleString('fa-IR')}</span></h2>
-  <p class="connection-hint">{incoming ? 'یادداشت‌هایی که به این صفحه پیوند داده‌اند.' : 'یادداشت‌هایی که از این صفحه به آن‌ها پیوند داده شده است.'}</p>
-  {notes.length ? groups.map((group, index) => {
-    const Tag = index ? 'details' : 'div';
-    return group.length > 0 && <Tag class={index ? 'connections-more' : undefined}>
-      {index > 0 && <summary><span class="more-closed">نمایش {group.length.toLocaleString('fa-IR')} مورد دیگر</span><span class="more-open">نمایش کمتر</span></summary>}
-      <ul class="connection-list">{group.map((note) => {
-        const preloaded = incoming ? note.referencePreviews?.[currentSlug] || note.previewHtml : note.previewHtml;
-        return <li>
-          <a class="connection-link" href={noteHref(note.slug)}>{note.title}</a>
-          {preloaded ? (
-            <details class="connection-preview"><summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
-              <article class="connection-excerpt" set:html={preloaded} />
+
+{items.length > 0 && (
+  <section class="connection-section" aria-label={title} data-connection-direction={direction}>
+    <h2 class="connection-title">
+      <span>{title}</span>
+      <span class="connection-count">{items.length.toLocaleString('fa-IR')}</span>
+    </h2>
+    <ul class="connection-list">
+      {items.map((item) => (
+        <li class="connection-item">
+          <div class="connection-row">
+            <a class="connection-link" href={noteHref(item.slug)} data-note-preview={item.slug}>
+              {item.title}
+            </a>
+            <details
+              class="connection-preview-details"
+              data-connection-preview={item.slug}
+              data-current-slug={currentSlug}
+            >
+              <summary class="connection-preview-btn">پیش‌نمایش</summary>
+              <div class="connection-preview-box note" data-connection-preview-body>
+                <p class="connection-loading">در حال بارگذاری…</p>
+              </div>
             </details>
-          ) : (
-            <details class="connection-preview" data-preview-slug={note.slug} data-preview-ref={incoming ? currentSlug : ''}>
-              <summary aria-label={`پیش‌نمایش ${note.title}`}>پیش‌نمایش</summary>
-              <article class="connection-excerpt" data-preview-body>در حال آماده‌سازی پیش‌نمایش…</article>
-            </details>
-          )}
-        </li>;
-      })}</ul>
-    </Tag>;
-  }) : <p class="connection-empty">{incoming ? 'هنوز یادداشت دیگری به این صفحه پیوند نداده است.' : 'در متن این یادداشت هنوز پیوندی به یادداشت دیگری وجود ندارد.'}</p>}
-</section>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+)}
+
 <script>
-  const connPreviewCache = new Map<string, string>();
-  for (const details of document.querySelectorAll<HTMLDetailsElement>('details.connection-preview[data-preview-slug]')) {
-    if (details.dataset.previewBound === 'true') continue;
-    details.dataset.previewBound = 'true';
+  const previewCache = new Map<string, { html?: string; slogan?: string }>();
+  document.querySelectorAll<HTMLDetailsElement>('[data-connection-preview]').forEach((details) => {
     details.addEventListener('toggle', async () => {
-      if (!details.open || details.dataset.previewLoaded === 'true') return;
-      const slug = details.dataset.previewSlug;
-      const ref = details.dataset.previewRef || '';
-      const body = details.querySelector<HTMLElement>('[data-preview-body]');
-      if (!slug || !body) return;
-      const key = `${slug}|${ref}`;
-      if (connPreviewCache.has(key)) {
-        body.innerHTML = connPreviewCache.get(key) || '';
-        details.dataset.previewLoaded = 'true';
+      if (!details.open) return;
+      const slug = details.dataset.connectionPreview;
+      const box = details.querySelector<HTMLElement>('[data-connection-preview-body]');
+      if (!slug || !box) return;
+
+      const renderIntoBox = (data: { html?: string; slogan?: string }) => {
+        box.replaceChildren();
+        if (data.slogan) {
+          const p = document.createElement('p');
+          p.className = 'connection-preview-slogan';
+          p.textContent = data.slogan;
+          box.append(p);
+        }
+        if (data.html) {
+          const inner = document.createElement('div');
+          inner.innerHTML = data.html;
+          box.append(inner);
+        } else if (!data.slogan) {
+          const empty = document.createElement('p');
+          empty.textContent = 'پیش‌نمایشی برای این یادداشت ثبت نشده است.';
+          box.append(empty);
+        }
+        requestAnimationFrame(() => details.scrollIntoView({ block: 'nearest' }));
+      };
+
+      const cached = previewCache.get(slug);
+      if (cached) {
+        renderIntoBox(cached);
         return;
       }
-      body.textContent = 'در حال بارگذاری…';
+
       try {
-        const url = `/api/note-preview/${encodeURIComponent(slug)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
-        const res = await fetch(url, { credentials: 'same-origin' });
-        if (!res.ok) throw new Error('unavailable');
-        const data = (await res.json()) as { html?: string };
-        const html = data.html || '';
-        connPreviewCache.set(key, html);
-        body.innerHTML = html;
-        details.dataset.previewLoaded = 'true';
+        const res = await fetch(`/api/note-preview/${encodeURIComponent(slug)}`, {
+          credentials: 'same-origin',
+        });
+        if (!res.ok) throw new Error('Failed');
+        const data = (await res.json()) as { html?: string; slogan?: string };
+        previewCache.set(slug, data);
+        if (details.open) renderIntoBox(data);
       } catch {
-        body.textContent = 'پیش‌نمایش موقتاً در دسترس نیست.';
+        box.replaceChildren();
+        const err = document.createElement('p');
+        err.textContent = 'دریافت پیش‌نمایش ممکن نشد.';
+        box.append(err);
       }
     });
-  }
+  });
 </script>
+
 <style>
-  .connection-section{font-size:.875rem;line-height:1.7;min-width:0}
-  .connection-section + .connection-section{margin-block-start:var(--space-6)}
-  .connection-section h2{display:flex;align-items:center;gap:var(--space-2);font-size:1rem;line-height:1.7;font-weight:600;margin:0}
-  .connection-count{font-size:.875rem;font-weight:400;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
-  .connection-hint,.connection-empty{font-size:.875rem;color:var(--muted-foreground);margin:var(--space-2) 0}
-  .connection-list{list-style:none;padding:0;margin:var(--space-2) 0 0}
-  .connection-list>li{position:relative;border-block-end:1px solid var(--border);margin:0;padding:0}
-  .connection-link{display:flex;align-items:center;min-height:44px;padding-inline-end:7rem;overflow-wrap:anywhere}
-  .connection-preview{margin:0}
-  .connection-preview>summary{position:absolute;inset-block-start:0;inset-inline-end:0;min-height:44px;display:list-item;align-content:center;cursor:pointer;color:var(--muted-foreground);padding-inline:var(--space-2);margin-inline-start:var(--space-4)}
-  .connection-excerpt{font-size:.875rem;line-height:1.8;padding:var(--space-3);margin-block:0 var(--space-3);border-inline-start:2px solid var(--border);max-height:18rem;overflow:auto;overflow-wrap:anywhere}
-  .connection-excerpt :global(p){margin-block:0 var(--space-2)}
-  .connection-excerpt :global(h1),.connection-excerpt :global(h2),.connection-excerpt :global(h3){font-size:1rem;margin-block:var(--space-2)}
-  .connection-excerpt :global(.katex-display){overflow-x:auto;overflow-y:hidden}
-  .connections-more>summary{min-height:44px;align-content:center;cursor:pointer;color:var(--muted-foreground)}
-  .more-open,.connections-more[open]>summary .more-closed{display:none}
-  .connections-more[open]>summary .more-open{display:inline}
-  a:focus-visible,summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:var(--radius-control)}
+  .connection-section {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+    background: var(--surface-subtle);
+    min-width: 0;
+  }
+
+  .connection-title {
+    margin: 0 0 0.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--foreground);
+  }
+
+  .connection-count {
+    font-size: 0.72rem;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    background: var(--surface-hover);
+    color: var(--muted-foreground);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .connection-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .connection-item {
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .connection-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem 0.75rem;
+  }
+
+  .connection-link {
+    flex: 1 1 12rem;
+    min-width: 0;
+    color: var(--primary-text);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+
+  .connection-link:hover {
+    text-decoration: underline;
+  }
+
+  .connection-preview-details {
+    flex: 0 0 auto;
+    max-width: 100%;
+  }
+
+  .connection-preview-details[open] {
+    flex-basis: 100%;
+  }
+
+  .connection-preview-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 2px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    color: var(--muted-foreground);
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .connection-preview-btn::-webkit-details-marker {
+    display: none;
+  }
+
+  .connection-preview-btn:hover,
+  .connection-preview-details[open] > .connection-preview-btn {
+    background: var(--surface-hover);
+    color: var(--foreground);
+  }
+
+  .connection-preview-box {
+    margin-top: 0.65rem;
+    padding: 0.75rem 0.85rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    font-size: 0.85rem;
+    line-height: 1.75;
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+
+  .connection-preview-slogan {
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+  }
+
+  .connection-loading {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+  }
 </style>

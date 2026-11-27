@@ -1,0 +1,133 @@
+---
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { noteHref } from '../lib/markdown.mjs';
+
+interface NeighborLink {
+  slug: string;
+  title: string;
+  link: string;
+}
+
+interface Props {
+  prev: NeighborLink | null;
+  next: NeighborLink | null;
+  bookLabel?: string;
+  index?: number;
+  total?: number;
+}
+
+const { prev, next, bookLabel = '', index = 0, total = 0 } = Astro.props;
+---
+
+{(prev || next) && (
+  <nav class="note-pager" aria-label="پیمایش میان درس‌ها">
+    {bookLabel && total > 0 && (
+      <div class="note-pager-context">
+        <span>{bookLabel}</span>
+        <span>درس {(index + 1).toLocaleString('fa-IR')} از {total.toLocaleString('fa-IR')}</span>
+      </div>
+    )}
+    <div class="note-pager-links">
+      {prev ? (
+        <a class="note-pager-card note-pager-prev" href={noteHref(prev.slug)} rel="prev">
+          <span class="note-pager-dir">
+            <ArrowRight size={14} aria-hidden="true" />
+            <span>درس قبلی</span>
+          </span>
+          <span class="note-pager-title">{prev.title}</span>
+        </a>
+      ) : (
+        <div class="note-pager-spacer" aria-hidden="true"></div>
+      )}
+      {next ? (
+        <a class="note-pager-card note-pager-next" href={noteHref(next.slug)} rel="next">
+          <span class="note-pager-dir">
+            <span>درس بعدی</span>
+            <ArrowLeft size={14} aria-hidden="true" />
+          </span>
+          <span class="note-pager-title">{next.title}</span>
+        </a>
+      ) : (
+        <div class="note-pager-spacer" aria-hidden="true"></div>
+      )}
+    </div>
+  </nav>
+)}
+
+<style>
+  .note-pager {
+    margin-block-start: 2.25rem;
+    padding-block-start: 1.25rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .note-pager-context {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--muted-foreground);
+  }
+
+  .note-pager-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .note-pager-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius-panel);
+    border: 1px solid var(--border);
+    background: var(--surface-subtle);
+    color: var(--foreground);
+    text-decoration: none;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+
+  .note-pager-card:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+  }
+
+  .note-pager-next {
+    text-align: end;
+    align-items: flex-end;
+  }
+
+  .note-pager-dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary-text);
+  }
+
+  .note-pager-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 600px) {
+    .note-pager-links {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .note-pager-spacer {
+      display: none;
+    }
+    .note-pager-next {
+      text-align: start;
+      align-items: flex-start;
+    }
+  }
+</style>

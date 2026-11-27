@@ -10,9 +10,13 @@ import NoteGraph from '../../components/NoteGraph.astro';
 import InlinePreviews from '../../components/InlinePreviews.astro';
 import NoteProperties from '../../components/NoteProperties.astro';
 import SemanticConnections from '../../components/SemanticConnections.astro';
+import NotePager from '../../components/NotePager.astro';
+import { folderTree } from '../../lib/folder-tree.mjs';
+import { findNoteNeighbors } from '../../lib/note-pager.mjs';
 
 let bySlug: Awaited<ReturnType<typeof getKnowledgeIndex>>['bySlug'] = new Map();
 let current: RenderedNote | undefined;
+let neighbors: ReturnType<typeof findNoteNeighbors> | null = null;
 const slug = Astro.params.slug ?? '';
 let title = 'یادداشت در دسترس نیست';
 let html = '';
@@ -44,6 +48,7 @@ if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
       bySlug = index.bySlug;
       const indexedCurrent = index.bySlug.get(slug);
       current = indexedCurrent ? await renderSingleNote(indexedCurrent, index) : undefined;
+      if (current) neighbors = findNoteNeighbors(folderTree(index.notes), current.slug);
       html = current?.html ?? '';
     }
   } catch {
@@ -53,11 +58,11 @@ if (!/^[\p{L}\p{N}_-]{1,255}$/u.test(slug)) {
 }
 ---
 <Reader title={title} headings={current?.headings}>
-  {message ? <p role="status">{message}</p> : <><div class="note-meta"><span class="note-status">نسخهٔ رسمی</span></div>{current && <NoteProperties note={current} />}
+  {message ? <p role="status">{message}</p> : <>{current && <NoteProperties note={current} statusText="نسخهٔ رسمی" />}
     <WorkspaceNote slug={slug} /><article class="note" data-ai-scope="canonical" data-ai-hash={aiHash} set:html={html} /><GeoGebra />
 
     <CanonicalActions slug={slug} title={title}/>
-    {current && <><InlinePreviews /><SemanticConnections note={current} bySlug={bySlug} /><div class="note-connections"><Connections title="پیوندهای این یادداشت" direction="outgoing" currentSlug={current.slug} slugs={current.outgoing} bySlug={bySlug} /><Connections title="ارجاعات به این یادداشت" direction="incoming" currentSlug={current.slug} slugs={current.backlinks} bySlug={bySlug} /></div></>}</>}
+    {current && <><InlinePreviews /><SemanticConnections note={current} bySlug={bySlug} /><div class="note-connections"><Connections title="پیوندهای این یادداشت" direction="outgoing" currentSlug={current.slug} slugs={current.outgoing} bySlug={bySlug} /><Connections title="ارجاعات به این یادداشت" direction="incoming" currentSlug={current.slug} slugs={current.backlinks} bySlug={bySlug} /></div>{neighbors && (neighbors.prev || neighbors.next) && <NotePager {...neighbors} />}</>}</>}
   <div slot="tools">{!message && current && <NoteGraph slug={slug} />}</div>
 </Reader>
 <style>
