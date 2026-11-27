@@ -1,7 +1,9 @@
 /** @type {Record<string, string>} */
 const BOOK_TITLES = {
   'axler-linear-algebra-done-right': 'جبر خطی آکسلر',
-  'axler': 'جبر خطی آکسلر'
+  'axler': 'جبر خطی آکسلر',
+  'abstract-algebra-and-matrices': 'جبر مجرد و ماتریس‌ها',
+  'abstract-algebra': 'جبر مجرد و ماتریس‌ها',
 };
 
 /** @param {{title:string,slug:string,relative_path?:string,book_slug?:string,chapter_slug?:string}[]} notes */
@@ -28,9 +30,16 @@ export function folderTree(notes){
      if (isFolderA !== isFolderB) return isFolderA ? -1 : 1;
      return a.label.localeCompare(b.label, 'fa', { numeric: true, sensitivity: 'base' });
    });
+   let totalCount = 0;
    for (const item of items) {
-     if (item.items) sortBranch(item.items);
+     if (item.items) {
+       item.count = sortBranch(item.items);
+       totalCount += item.count;
+     } else {
+       totalCount += 1;
+     }
    }
+   return totalCount;
  };
  sortBranch(root);
  return root;
