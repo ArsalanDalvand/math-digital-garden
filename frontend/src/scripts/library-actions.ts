@@ -272,6 +272,12 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
   });
 
   const open = (title: string, mode: 'modal' | 'sheet' = 'modal') => {
+    const morePanel = document.getElementById('workspace-more-panel');
+    if (morePanel && !morePanel.hidden) {
+      morePanel.hidden = true;
+      document.querySelector('[data-more-toggle]')?.setAttribute('aria-expanded', 'false');
+      morePanel.closest('.workspace-more')?.classList.remove('is-open');
+    }
     cleanupHistoryMerge();
     body.replaceChildren();
     dialog.dataset.dialogMode = mode;
@@ -1344,11 +1350,6 @@ for (const root of document.querySelectorAll<HTMLElement>('[data-library-actions
     const target = (event.target as Element).closest<HTMLElement>('[data-library-command]');
     const command = target?.dataset.libraryCommand;
     if (command && actions[command]) {
-      const morePanel = document.getElementById('workspace-more-panel');
-      if (morePanel && !morePanel.hidden) {
-        morePanel.hidden = true;
-        document.querySelector('[data-more-toggle]')?.setAttribute('aria-expanded', 'false');
-      }
       void run(async () => {
         const guestAllowed = ['link', 'markdown', 'width', 'comments'];
         if (!user && !guestAllowed.includes(command)) {
