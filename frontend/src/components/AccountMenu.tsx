@@ -1,6 +1,7 @@
 import { DirectionProvider } from '@base-ui/react/direction-provider';
 import {
   ChevronDown,
+  FolderKanban,
   GitPullRequest,
   LogOut,
   NotebookPen,
@@ -164,6 +165,8 @@ export default function AccountMenu() {
     };
   }, []);
   const name = user?.full_name || user?.email || 'حساب کاربری';
+  const roleDisplay =
+    user?.role === 'admin' ? 'مدیر' : user?.role === 'author' ? 'نویسنده' : 'دانشجو';
   const initial = Array.from(name)[0] || '؟';
   const avatar = user?.avatar_url ? (
     <img src={user.avatar_url} alt="" className="account-avatar" width={28} height={28} />
@@ -230,9 +233,12 @@ export default function AccountMenu() {
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <strong className="block truncate text-xs font-semibold text-foreground">
-                    {name}
-                  </strong>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <strong className="truncate text-xs font-semibold text-foreground">
+                      {name}
+                    </strong>
+                    <span className="account-role-pill shrink-0">{roleDisplay}</span>
+                  </div>
                   <span
                     className="block truncate text-[11px] text-muted-foreground font-mono tracking-tight"
                     dir="ltr"
@@ -262,6 +268,13 @@ export default function AccountMenu() {
               >
                 <NotebookPen size={15} className="opacity-70" />
                 کتابخانه
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => location.assign('/workspace')}
+                className="flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-lg cursor-pointer"
+              >
+                <FolderKanban size={15} className="opacity-70" />
+                فضای کار
               </DropdownMenuItem>
               {['author', 'admin'].includes(user.role) && (
                 <DropdownMenuItem

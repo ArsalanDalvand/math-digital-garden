@@ -1,42 +1,64 @@
 ---
+import {
+  BadgeCheck,
+  ChevronLeft,
+  ChevronsDown,
+  ChevronsUp,
+  FileText,
+  FileX2,
+  Folder,
+  Link2,
+  Search,
+  X,
+} from 'lucide-react';
 import Reader from '../layouts/Reader.astro';
+import { buildNoteLinkResolver } from '../lib/library-links.mjs';
+import { renderMarkdown } from '../lib/markdown.mjs';
 import LibraryActions from './LibraryActions.astro';
-import {renderMarkdown} from '../lib/markdown.mjs';
-import {buildNoteLinkResolver} from '../lib/library-links.mjs';
-import {Folder,FileText,Search,ChevronsDown,ChevronsUp,ChevronLeft} from 'lucide-react';
 
-interface Props {id?:string;token?:string}
-const {id,token}=Astro.props;
-const origin=process.env.API_BASE_URL||import.meta.env.API_BASE_URL||'http://127.0.0.1:8000';
+interface Props {
+  id?: string;
+  token?: string;
+}
+const { id, token } = Astro.props;
+const origin = process.env.API_BASE_URL || import.meta.env.API_BASE_URL || 'http://127.0.0.1:8000';
 const noteParam = Astro.url.searchParams.get('note');
 
-let item:any=null;
-try{
-  const targetUrl = `${origin}/api/library/${token?'shared/'+encodeURIComponent(token):'public/'+encodeURIComponent(id!)}${noteParam ? '?note='+encodeURIComponent(noteParam) : ''}`;
-  const response=await fetch(targetUrl,{signal:AbortSignal.timeout(5000)});
-  if(response.ok) item=await response.json();
-  else Astro.response.status=response.status;
-}catch{
-  Astro.response.status=503;
+let item: any = null;
+try {
+  const targetUrl = `${origin}/api/library/${token ? 'shared/' + encodeURIComponent(token) : 'public/' + encodeURIComponent(id!)}${noteParam ? '?note=' + encodeURIComponent(noteParam) : ''}`;
+  const response = await fetch(targetUrl, { signal: AbortSignal.timeout(5000) });
+  if (response.ok) item = await response.json();
+  else Astro.response.status = response.status;
+} catch {
+  Astro.response.status = 503;
 }
 
-Astro.response.headers.set('Cache-Control','no-store');
-Astro.response.headers.set('X-Robots-Tag','noindex, nofollow');
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
 
 const baseUrl = token
   ? `/shared/${encodeURIComponent(token)}?note=`
   : `/published/${encodeURIComponent(id || '')}?note=`;
 
-const linkResolver = item?.notes && item.notes.length
-  ? buildNoteLinkResolver(item.notes, baseUrl, item.active_note_path || '')
-  : null;
+const linkResolver =
+  item?.notes && item.notes.length
+    ? buildNoteLinkResolver(item.notes, baseUrl, item.active_note_path || '')
+    : null;
 
 let html = item?.content ? await renderMarkdown(item.content, { linkResolver }) : '';
 
 // Extra fallback for any relative links that might have escaped the Markdown parser
 if (html && linkResolver) {
   html = html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*?)>/gi, (match, prefix, href, suffix) => {
-    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:') && !href.startsWith('#') && !href.startsWith('/shared/') && !href.startsWith('/library/')) {
+    if (
+      !href.startsWith('http://') &&
+      !href.startsWith('https://') &&
+      !href.startsWith('mailto:') &&
+      !href.startsWith('#') &&
+      !href.startsWith('/shared/') &&
+      !href.startsWith('/library/')
+    ) {
       const resolved = linkResolver(href);
       if (resolved) {
         return `<a ${prefix}href="${resolved}"${suffix}>`;
@@ -73,130 +95,221 @@ const activeNoteId = item?.active_note_id || (item?.kind === 'note' ? item?.id :
 const activeTitle = item?.active_note_title || item?.title || 'مستندات';
 const collectionTitle = item?.folder_title || item?.title || 'مجموعه مستندات';
 const hasSidebarTree = item?.kind === 'folder' || sortedTree.length > 0;
+const visMode = token ? 'unlisted' : 'public';
+const visText = token ? 'پیوند اختصاصی' : 'نسخهٔ منتشرشده';
 ---
-<Reader documentPage title={activeTitle}>
-  {hasSidebarTree && (
-    <section slot="nav" data-shared-navigation class="library-navigation" aria-label={collectionTitle}>
-      <div class="library-heading">
-        <span class="library-title" title={collectionTitle}>{collectionTitle}</span>
-        <div class="library-toolbar-actions">
-          <button type="button" data-shared-expand aria-label="باز کردن همه پوشه‌ها" title="باز کردن همه پوشه‌ها"><ChevronsDown size={14} aria-hidden="true"/></button>
-          <button type="button" data-shared-collapse aria-label="بستن همه پوشه‌ها" title="بستن همه پوشه‌ها"><ChevronsUp size={14} aria-hidden="true"/></button>
-        </div>
-      </div>
-      <div class="library-filter-container">
-        <Search size={13} aria-hidden="true" class="library-filter-icon" />
-        <input type="search" data-shared-filter placeholder="فیلتر سریع یادداشت‌ها…" aria-label="فیلتر سریع در یادداشت‌ها" autocomplete="off" />
-      </div>
-      <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها">
-        <div class="folder-tree" data-shared-tree>
-          {function renderNodes(nodes: any[]) {
-            return nodes.map((node: any) => {
-              const isCurrent = activeNoteId === node.id;
-              if (node.kind === 'folder') {
-                const isOpen = containsActive(node, activeNoteId);
-                return (
-                  <details open={isOpen} data-tree-item>
-                    <summary>
-                      <ChevronLeft size={13} aria-hidden="true" class="tree-caret"/>
-                      <Folder size={14} aria-hidden="true" class="tree-folder-icon"/>
-                      <span>{node.title}</span>
-                    </summary>
-                    <div class="folder-tree">
-                      {node.children && renderNodes(node.children)}
-                    </div>
-                  </details>
-                );
-              }
-              return (
-                <a
-                  href={`${baseUrl}${node.id}`}
-                  data-tree-item
-                  aria-current={isCurrent ? 'page' : undefined}
-                  class={isCurrent ? 'active' : ''}
-                  title={node.title}
-                >
-                  <FileText size={14} aria-hidden="true" class="tree-note-icon"/>
-                  <span>{node.title}</span>
-                </a>
-              );
-            });
-          }(sortedTree)}
-        </div>
-      </nav>
-    </section>
-  )}
 
-  {item ? (
-    <>
-      <div class="note-meta">
-        <span class="note-status">
-          {item.kind === 'folder' ? `مستندات اشتراکی · ${collectionTitle}` : 'نسخهٔ منتشرشده'}
+<Reader documentPage title={activeTitle}>
+  {
+    hasSidebarTree && (
+      <section
+        slot="nav"
+        data-shared-navigation
+        class="library-navigation"
+        aria-label={collectionTitle}
+      >
+        <div class="library-heading">
+          <span class="library-title" title={collectionTitle}>
+            {collectionTitle}
+          </span>
+          <div class="library-toolbar-actions">
+            <button
+              type="button"
+              data-shared-expand
+              aria-label="باز کردن همه پوشه‌ها"
+              title="باز کردن همه پوشه‌ها"
+            >
+              <ChevronsDown size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-shared-collapse
+              aria-label="بستن همه پوشه‌ها"
+              title="بستن همه پوشه‌ها"
+            >
+              <ChevronsUp size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div class="library-filter-container">
+          <Search size={13} aria-hidden="true" class="library-filter-icon" />
+          <input
+            type="search"
+            data-shared-filter
+            placeholder="فیلتر سریع یادداشت‌ها…"
+            aria-label="فیلتر سریع در یادداشت‌ها"
+            autocomplete="off"
+          />
+          <button
+            type="button"
+            data-shared-filter-clear
+            class="library-filter-clear"
+            aria-label="پاک کردن فیلتر"
+            hidden
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        </div>
+        <nav class="workspace-library" aria-label="فایل‌ها و پوشه‌ها">
+          <div class="folder-tree" data-shared-tree>
+            {(function renderNodes(nodes: any[]) {
+              return nodes.map((node: any) => {
+                const isCurrent = activeNoteId === node.id;
+                if (node.kind === 'folder') {
+                  const isOpen = containsActive(node, activeNoteId);
+                  return (
+                    <details open={isOpen} data-tree-item>
+                      <summary>
+                        <ChevronLeft size={13} aria-hidden="true" class="tree-caret" />
+                        <Folder size={14} aria-hidden="true" class="tree-folder-icon" />
+                        <span>{node.title}</span>
+                      </summary>
+                      <div class="folder-tree">{node.children && renderNodes(node.children)}</div>
+                    </details>
+                  );
+                }
+                return (
+                  <a
+                    href={`${baseUrl}${node.id}`}
+                    data-tree-item
+                    aria-current={isCurrent ? 'page' : undefined}
+                    class={isCurrent ? 'active' : ''}
+                    title={node.title}
+                  >
+                    <FileText size={14} aria-hidden="true" class="tree-note-icon" />
+                    <span>{node.title}</span>
+                  </a>
+                );
+              });
+            })(sortedTree)}
+          </div>
+          <p data-shared-filter-empty class="library-filter-empty" hidden>
+            یادداشتی با این عنوان پیدا نشد.
+          </p>
+        </nav>
+      </section>
+    )
+  }
+
+  {
+    item ? (
+      <>
+        <div class="published-meta-bar">
+          <div class="published-meta-pills">
+            <span class="share-vis-pill" data-visibility={visMode}>
+              {visText}
+            </span>
+            {item.kind === 'folder' && (
+              <span class="published-collection-pill">{collectionTitle}</span>
+            )}
+            {item.verified && (
+              <span class="share-verified-pill">
+                <BadgeCheck size={13} aria-hidden="true" />
+                <span>تأییدشده توسط مدیر</span>
+              </span>
+            )}
+          </div>
+          <button type="button" data-copy-shared-link class="published-copy-btn">
+            <Link2 size={14} aria-hidden="true" />
+            <span>کپی پیوند صفحه</span>
+          </button>
+        </div>
+        <LibraryActions id={item.active_note_id || item.id} publicView token={token} />
+        <article class="note" set:html={html || '<p>محتوایی برای این یادداشت وجود ندارد.</p>'} />
+      </>
+    ) : (
+      <div class="shared-empty-state">
+        <span class="shared-empty-icon" aria-hidden="true">
+          <FileX2 size={32} />
         </span>
-        {item.verified && <span class="note-status">· تأییدشده توسط مدیر</span>}
+        <h2>یادداشت یا مستندات در دسترس نیست</h2>
+        <p>این یادداشت ممکن است حذف شده باشد یا اشتراک‌گذاری آن توسط صاحب اثر لغو شده باشد.</p>
+        <div class="shared-empty-actions">
+          <a href="/" class="garden-button-primary">
+            بازگشت به خانه
+          </a>
+          <a href="/search" class="garden-button-secondary">
+            جستجو در باغ دانش
+          </a>
+        </div>
       </div>
-      <LibraryActions id={item.active_note_id || item.id} publicView token={token} />
-      <article class="note" set:html={html || '<p>محتوایی برای این یادداشت وجود ندارد.</p>'} />
-    </>
-  ) : (
-    <div class="shared-empty-state">
-      <h2>یادداشت یا مستندات در دسترس نیست</h2>
-      <p>این یادداشت ممکن است حذف شده باشد یا اشتراک‌گذاری آن توسط صاحب اثر لغو شده باشد.</p>
-    </div>
-  )}
+    )
+  }
 </Reader>
 
 <script>
+  import { normalizeLibraryText } from '../lib/library-browser-model.mjs';
+  import { showToast } from '../scripts/toast';
+
+  const copyBtn = document.querySelector<HTMLButtonElement>('[data-copy-shared-link]');
+  copyBtn?.addEventListener('click', () => {
+    void navigator.clipboard.writeText(window.location.href).then(() => {
+      showToast('پیوند صفحه کپی شد.', { variant: 'success' });
+    });
+  });
+
   const nav = document.querySelector('[data-shared-navigation]');
   if (nav) {
     const filterInput = nav.querySelector<HTMLInputElement>('[data-shared-filter]');
+    const clearBtn = nav.querySelector<HTMLButtonElement>('[data-shared-filter-clear]');
+    const emptyMsg = nav.querySelector<HTMLElement>('[data-shared-filter-empty]');
     const expandBtn = nav.querySelector<HTMLButtonElement>('[data-shared-expand]');
     const collapseBtn = nav.querySelector<HTMLButtonElement>('[data-shared-collapse]');
     const tree = nav.querySelector<HTMLElement>('[data-shared-tree]');
 
     expandBtn?.addEventListener('click', () => {
-      tree?.querySelectorAll('details').forEach(d => (d.open = true));
+      tree?.querySelectorAll('details').forEach((d) => (d.open = true));
     });
 
     collapseBtn?.addEventListener('click', () => {
-      tree?.querySelectorAll('details').forEach(d => (d.open = false));
+      tree?.querySelectorAll('details').forEach((d) => (d.open = false));
     });
 
-    filterInput?.addEventListener('input', () => {
-      const q = filterInput.value.trim().toLowerCase();
+    const applyFilter = () => {
       if (!tree) return;
+      const q = normalizeLibraryText(filterInput?.value || '');
+      if (clearBtn) clearBtn.hidden = !q;
+
       if (!q) {
-        tree.querySelectorAll<HTMLElement>('[data-tree-item]').forEach(el => (el.hidden = false));
+        tree.querySelectorAll<HTMLElement>('[data-tree-item]').forEach((el) => (el.hidden = false));
+        if (emptyMsg) emptyMsg.hidden = true;
         return;
       }
-      tree.querySelectorAll<HTMLElement>('a[data-tree-item]').forEach(link => {
-        const text = link.textContent?.toLowerCase() || '';
+
+      let matchCount = 0;
+      tree.querySelectorAll<HTMLElement>('a[data-tree-item]').forEach((link) => {
+        const text = normalizeLibraryText(link.textContent || '');
         const match = text.includes(q);
         link.hidden = !match;
+        if (match) matchCount += 1;
       });
-      tree.querySelectorAll<HTMLDetailsElement>('details[data-tree-item]').forEach(details => {
-        const hasVisibleChild = Array.from(details.querySelectorAll<HTMLElement>('a[data-tree-item]')).some(a => !a.hidden);
-        const folderMatch = details.querySelector('summary')?.textContent?.toLowerCase().includes(q);
+
+      tree.querySelectorAll<HTMLDetailsElement>('details[data-tree-item]').forEach((details) => {
+        const hasVisibleChild = Array.from(
+          details.querySelectorAll<HTMLElement>('a[data-tree-item]'),
+        ).some((a) => !a.hidden);
+        const folderMatch = normalizeLibraryText(
+          details.querySelector('summary')?.textContent || '',
+        ).includes(q);
         if (hasVisibleChild || folderMatch) {
           details.hidden = false;
           details.open = true;
+          if (folderMatch) matchCount += 1;
         } else {
           details.hidden = true;
         }
       });
+
+      if (emptyMsg) emptyMsg.hidden = matchCount > 0;
+    };
+
+    filterInput?.addEventListener('input', applyFilter);
+    clearBtn?.addEventListener('click', () => {
+      if (filterInput) {
+        filterInput.value = '';
+        filterInput.focus();
+      }
+      applyFilter();
     });
   }
 </script>
-
-<style>
-.shared-empty-state {
-  padding: 3rem 1.5rem;
-  text-align: center;
-  color: var(--muted-foreground);
-}
-.shared-empty-state h2 {
-  font-size: 1.25rem;
-  color: var(--foreground);
-  margin-block-end: 0.75rem;
-}
-</style>
