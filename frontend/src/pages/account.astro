@@ -176,7 +176,7 @@ import Reader from '../layouts/Reader.astro';
 </Reader>
 
 <script>
-  import { evaluatePasswordPolicy, roleLabel } from '../lib/account-helpers.mjs';
+  import { evaluatePasswordPolicy, roleLabel, sanitizeNextPath } from '../lib/account-helpers.mjs';
   import { ApiError, api, message } from '../scripts/api';
   import { clearLocalUserPreferences, getSession, invalidateSessionCache } from '../scripts/session';
   import { showToast } from '../scripts/toast';
@@ -380,6 +380,11 @@ import Reader from '../layouts/Reader.astro';
     status.textContent = '';
     try {
       const user = await api(`/auth/${action}`, body);
+      const nextTarget = sanitizeNextPath(new URLSearchParams(location.search).get('next'));
+      if (nextTarget) {
+        location.assign(nextTarget);
+        return;
+      }
       show(user);
       form.reset();
       showToast(action === 'register' ? 'حساب کاربری با موفقیت ساخته شد.' : 'خوش آمدید!', {

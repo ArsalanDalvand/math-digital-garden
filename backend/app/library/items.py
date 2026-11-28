@@ -6,10 +6,12 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import Field, field_validator
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
+from starlette.concurrency import run_in_threadpool
 
+from backend.app.config import settings
 from backend.app.library.common import (
     accessible,
     collect_folder_tree_and_notes,
@@ -22,7 +24,9 @@ from backend.app.library.common import (
     validate_safe_name,
 )
 from backend.app.library_models import (
+    LibraryAttachment,
     LibraryCanonical,
+    LibraryComment,
     LibraryFavorite,
     LibraryGitSource,
     LibraryItem,
@@ -30,6 +34,7 @@ from backend.app.library_models import (
     LibraryWatch,
 )
 from backend.app.models import CanonicalNote, User
+from backend.app.storage import delete_attachment_file
 from backend.app.workspace import DB, Contract, Me, Writes, digest
 
 router = APIRouter()
@@ -309,6 +314,97 @@ async def restore_item(item_id: UUID, db: DB, user: Me, _: Writes):
     item.trashed_at = None
     await db.commit()
     return dto(item)
+
+
+async def _purge_items(db, user_id: UUID, root_ids: list[UUID]) -> int:
+    """Permanently delete trashed items, their descendants, and disk attachments."""
+    if not root_ids:
+        return 0
+    seen: set[UUID] = set(root_ids)
+    frontier: list[UUID] = list(root_ids)
+    while frontier:
+        children = (
+            await db.scalars(
+                select(LibraryItem.id).where(
+                    LibraryItem.user_id == user_id,
+                    LibraryItem.parent_id.in_(frontier),
+                )
+            )
+        ).all()
+        next_frontier = [cid for cid in children if cid not in seen]
+        seen.update(next_frontier)
+        frontier = next_frontier
+
+    target_ids = list(seen)
+    storage_keys = [
+        key
+        for key in (
+            await db.scalars(
+                select(LibraryAttachment.storage_key).where(
+                    LibraryAttachment.user_id == user_id,
+                    LibraryAttachment.item_id.in_(target_ids),
+                    LibraryAttachment.storage_key.is_not(None),
+                )
+            )
+        ).all()
+        if key
+    ]
+
+    await db.execute(
+        update(LibraryComment)
+        .where(LibraryComment.item_id.in_(target_ids))
+        .values(parent_id=None)
+    )
+    await db.execute(delete(LibraryComment).where(LibraryComment.item_id.in_(target_ids)))
+    await db.execute(
+        delete(LibraryAttachment).where(
+            LibraryAttachment.user_id == user_id,
+            LibraryAttachment.item_id.in_(target_ids),
+        )
+    )
+    await db.execute(
+        update(LibraryItem)
+        .where(LibraryItem.user_id == user_id, LibraryItem.id.in_(target_ids))
+        .values(parent_id=None)
+    )
+    await db.execute(
+        delete(LibraryItem).where(LibraryItem.user_id == user_id, LibraryItem.id.in_(target_ids))
+    )
+    await db.commit()
+
+    if settings.attachments_dir:
+        for key in storage_keys:
+            try:
+                await run_in_threadpool(delete_attachment_file, settings.attachments_dir, key)
+            except (OSError, ValueError):
+                pass
+
+    return len(target_ids)
+
+
+@router.delete("/items/{item_id}", status_code=204)
+async def delete_item_permanently(item_id: UUID, db: DB, user: Me, _: Writes):
+    item = await owned(db, user.id, item_id, active=False, lock=True)
+    if item.trashed_at is None:
+        raise HTTPException(409, "ابتدا مورد را به زباله‌دان منتقل کنید.")
+    await _purge_items(db, user.id, [item.id])
+    return Response(status_code=204)
+
+
+@router.delete("/trash")
+async def empty_trash(db: DB, user: Me, _: Writes):
+    trashed_ids = (
+        await db.scalars(
+            select(LibraryItem.id).where(
+                LibraryItem.user_id == user.id,
+                LibraryItem.trashed_at.is_not(None),
+            )
+        )
+    ).all()
+    if not trashed_ids:
+        return {"deleted": 0}
+    deleted = await _purge_items(db, user.id, list(trashed_ids))
+    return {"deleted": deleted}
 
 
 @router.get("/items/{item_id}/history")

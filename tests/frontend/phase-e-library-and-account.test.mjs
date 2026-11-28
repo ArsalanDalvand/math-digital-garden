@@ -4,6 +4,7 @@ import {
   evaluatePasswordPolicy,
   mergeReadingStorage,
   roleLabel,
+  sanitizeNextPath,
 } from '../../frontend/src/lib/account-helpers.mjs';
 import {
   describeVisibility,
@@ -161,4 +162,26 @@ test('mergeReadingStorage preserves local mathScale while syncing server reading
     focus: false,
   });
   assert.equal(fallback.mathScale, 1);
+});
+
+test('libraryEmptyCopy renders community empty state for guests without login gate', () => {
+  const publicGuest = libraryEmptyCopy('public', {
+    authenticated: false,
+    hasQuery: false,
+    inFolder: false,
+  });
+  assert.equal(publicGuest.ctaHref, undefined);
+  assert.match(publicGuest.title, /منتشرشده|عمومی/);
+});
+
+test('sanitizeNextPath permits safe same-origin relative paths and rejects open redirects', () => {
+  assert.equal(sanitizeNextPath('/notes/alg-123?edit=1#proof'), '/notes/alg-123?edit=1#proof');
+  assert.equal(sanitizeNextPath('/library'), '/library');
+  assert.equal(sanitizeNextPath('https://evil.example/phish'), null);
+  assert.equal(sanitizeNextPath('//evil.example/phish'), null);
+  assert.equal(sanitizeNextPath('/\\evil.example'), null);
+  assert.equal(sanitizeNextPath('/account'), null);
+  assert.equal(sanitizeNextPath('/account?next=/library'), null);
+  assert.equal(sanitizeNextPath('javascript:alert(1)'), null);
+  assert.equal(sanitizeNextPath(''), null);
 });

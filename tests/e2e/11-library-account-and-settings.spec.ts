@@ -56,6 +56,42 @@ test.describe('Phase E: Personal Library, Account & Settings Hub', () => {
     }
 
     await page.locator('[data-library-view="items"]').click();
+
+    const searchMetrics = await page.evaluate(() => {
+      const box = document.querySelector('.library-search-box input')?.getBoundingClientRect();
+      const icon = document.querySelector('.library-search-box .library-search-icon')?.getBoundingClientRect();
+      const sideBox = document.querySelector('.library-filter-container input')?.getBoundingClientRect();
+      const sideIcon = document.querySelector('.library-filter-container .library-filter-icon')?.getBoundingClientRect();
+      return { box, icon, sideBox, sideIcon };
+    });
+    expect(searchMetrics.icon).toBeTruthy();
+    expect(searchMetrics.icon!.x).toBeGreaterThanOrEqual(searchMetrics.box!.x);
+    expect(searchMetrics.icon!.right).toBeLessThanOrEqual(searchMetrics.box!.right);
+    expect(searchMetrics.sideIcon).toBeTruthy();
+    expect(searchMetrics.sideIcon!.x).toBeGreaterThanOrEqual(searchMetrics.sideBox!.x);
+    expect(searchMetrics.sideIcon!.right).toBeLessThanOrEqual(searchMetrics.sideBox!.right);
+
+    await page.route('**/api/library/public*', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: '44444444-4444-4444-8444-444444444444',
+            kind: 'note',
+            title: 'قضیهٔ منتشرشدهٔ عمومی',
+            verified: true,
+          },
+        ],
+      }),
+    );
+    await page.locator('[data-library-view="public"]').click();
+    await expect(
+      page.locator('[data-browser-list] a[href="/published/44444444-4444-4444-8444-444444444444"]'),
+    ).toBeVisible();
+    await expect(page.locator('[data-library-guest-banner]')).toBeHidden();
+    expect(unauthorizedUrls).toEqual([]);
+    await page.unroute('**/api/library/public*');
+
+    await page.locator('[data-library-view="items"]').click();
     const filter = page.locator('[data-browser-filter]');
     await filter.fill('جبر');
     await expect(page.locator('[data-browser-filter-clear]')).toBeVisible();
@@ -168,6 +204,34 @@ test.describe('Phase E: Personal Library, Account & Settings Hub', () => {
     const trashDialog = page.locator('dialog.library-modal', { hasText: 'انتقال به زباله‌دان' });
     await expect(trashDialog).toBeVisible();
     await trashDialog.locator('.library-modal-close').click();
+
+    await page.route('**/api/library/items?trashed=true*', (route) =>
+      route.fulfill({
+        json: [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            parent_id: null,
+            kind: 'note',
+            title: 'یادداشت درون زباله‌دان',
+            visibility: 'private',
+          },
+        ],
+      }),
+    );
+    await page.locator('[data-library-view="trash"]').click();
+    const trashedRow = page.locator('[data-browser-list] li', { hasText: 'یادداشت درون زباله‌دان' });
+    await expect(trashedRow).toBeVisible();
+    await expect(page.locator('[data-empty-trash]')).toBeVisible();
+
+    await trashedRow.getByRole('button', { name: 'حذف دائمی' }).click();
+    const permDialog = page.locator('dialog[data-permanent-delete-dialog]');
+    await expect(permDialog).toBeVisible();
+    await permDialog.locator('.library-modal-close').click();
+
+    await page.locator('[data-empty-trash]').click();
+    const emptyTrashDialog = page.locator('dialog[data-empty-trash-dialog]');
+    await expect(emptyTrashDialog).toBeVisible();
+    await emptyTrashDialog.locator('.library-modal-close').click();
   });
 
   test('/account handles guest register policy meter, password toggle, and authenticated author hub', async ({
@@ -191,15 +255,31 @@ test.describe('Phase E: Personal Library, Account & Settings Hub', () => {
 
     const toggleBtn = page.locator('[data-auth-form] [data-toggle-password]');
     await expect(passInput).toHaveAttribute('type', 'password');
+    const passPaddingLeft = await passInput.evaluate((el) =>
+      Number.parseFloat(getComputedStyle(el).paddingLeft || '0'),
+    );
+    expect(passPaddingLeft).toBeGreaterThanOrEqual(40);
     await toggleBtn.click();
     await expect(passInput).toHaveAttribute('type', 'text');
     await assertNoHorizontalOverflow(page);
     expect(unauthorizedUrls).toEqual([]);
 
+    await page.route('**/api/auth/login', (route) =>
+      route.fulfill({ json: AUTHOR_ACCOUNT }),
+    );
+    await page.goto('/account?next=%2Flibrary');
+    await page.fill('#auth-email', 'author@example.org');
+    await page.fill('#auth-password', 'StrongPassphrase#2026');
+    await Promise.all([
+      page.waitForURL((url) => url.pathname === '/library'),
+      page.locator('[data-auth-form] button[type="submit"]').click(),
+    ]);
+    await page.unroute('**/api/auth/login');
+
     await page.route('**/api/auth/session', (route) =>
       route.fulfill({ json: { authenticated: true, account: AUTHOR_ACCOUNT } }),
     );
-    await page.reload();
+    await page.goto('/account');
     await expect(page.locator('[data-logged-in-view]')).toBeVisible();
     await expect(page.locator('[data-logged-in-role]')).toHaveText('نویسنده');
     await expect(page.locator('[data-profile-link] a[href="/settings/account/profile"]')).toBeVisible();

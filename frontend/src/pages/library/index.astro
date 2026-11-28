@@ -1,5 +1,5 @@
 ---
-import { Download, FolderKanban, LockKeyhole, Search, X } from 'lucide-react';
+import { Download, FolderKanban, LockKeyhole, Search, Trash2, X } from 'lucide-react';
 import Reader from '../../layouts/Reader.astro';
 ---
 
@@ -51,6 +51,9 @@ import Reader from '../../layouts/Reader.astro';
           <button type="button" data-library-view="watching" aria-pressed="false">
             پیگیری‌ها
           </button>
+          <button type="button" data-library-view="public" aria-pressed="false">
+            منتشرشده‌های جامعه
+          </button>
           <button type="button" data-library-view="trash" aria-pressed="false">
             زباله‌دان
           </button>
@@ -58,7 +61,7 @@ import Reader from '../../layouts/Reader.astro';
 
         <div class="library-toolbar-end">
           <div class="library-search-box">
-            <Search size={14} aria-hidden="true" class="library-search-icon" />
+            <Search size={14} aria-hidden="true" className="library-search-icon" />
             <input
               type="search"
               data-browser-filter
@@ -76,6 +79,11 @@ import Reader from '../../layouts/Reader.astro';
               <X size={13} aria-hidden="true" />
             </button>
           </div>
+
+          <button type="button" data-empty-trash class="library-empty-trash-btn" hidden>
+            <Trash2 size={14} aria-hidden="true" />
+            <span>تخلیه زباله‌دان</span>
+          </button>
 
           <button type="button" data-import-docs class="import-docs-btn">
             <Download size={15} aria-hidden="true" />

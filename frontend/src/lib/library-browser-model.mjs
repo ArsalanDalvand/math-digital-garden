@@ -142,7 +142,7 @@ export function libraryEmptyCopy(view, state) {
     };
   }
 
-  if (!authenticated && view !== 'items') {
+  if (!authenticated && view !== 'items' && view !== 'public') {
     const viewName =
       view === 'favorites' ? 'علاقه‌مندی‌ها' : view === 'watching' ? 'پیگیری‌ها' : 'زباله‌دان';
     return {
@@ -150,6 +150,14 @@ export function libraryEmptyCopy(view, state) {
       description: 'نشانه‌گذاری‌ها، پیگیری تغییرات و جزوه‌های شخصی فقط در حساب کاربری شما نگهداری می‌شوند.',
       ctaLabel: 'ورود یا ثبت‌نام',
       ctaHref: '/account',
+    };
+  }
+
+  if (view === 'public') {
+    return {
+      title: 'هنوز یادداشت عمومی منتشرنشده است',
+      description:
+        'یادداشت‌ها و جزوه‌هایی که کاربران به‌صورت عمومی منتشر کنند، برای مطالعهٔ همگان اینجا نمایش داده می‌شوند.',
     };
   }
 

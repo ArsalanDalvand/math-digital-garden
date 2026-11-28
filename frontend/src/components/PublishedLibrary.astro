@@ -132,7 +132,7 @@ const visText = token ? 'پیوند اختصاصی' : 'نسخهٔ منتشرشد
           </div>
         </div>
         <div class="library-filter-container">
-          <Search size={13} aria-hidden="true" class="library-filter-icon" />
+          <Search size={13} aria-hidden="true" className="library-filter-icon" />
           <input
             type="search"
             data-shared-filter
@@ -160,8 +160,8 @@ const visText = token ? 'پیوند اختصاصی' : 'نسخهٔ منتشرشد
                   return (
                     <details open={isOpen} data-tree-item>
                       <summary>
-                        <ChevronLeft size={13} aria-hidden="true" class="tree-caret" />
-                        <Folder size={14} aria-hidden="true" class="tree-folder-icon" />
+                        <ChevronLeft size={13} aria-hidden="true" className="tree-caret" />
+                        <Folder size={14} aria-hidden="true" className="tree-folder-icon" />
                         <span>{node.title}</span>
                       </summary>
                       <div class="folder-tree">{node.children && renderNodes(node.children)}</div>
@@ -176,7 +176,7 @@ const visText = token ? 'پیوند اختصاصی' : 'نسخهٔ منتشرشد
                     class={isCurrent ? 'active' : ''}
                     title={node.title}
                   >
-                    <FileText size={14} aria-hidden="true" class="tree-note-icon" />
+                    <FileText size={14} aria-hidden="true" className="tree-note-icon" />
                     <span>{node.title}</span>
                   </a>
                 );

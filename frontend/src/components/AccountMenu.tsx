@@ -23,7 +23,17 @@ import {
 export default function AccountMenu() {
   const [user, setUser] = useState<Account | null>(null);
   const [error, setError] = useState('');
+  const [loginHref, setLoginHref] = useState('/account');
   useEffect(() => {
+    const nextPath = `${location.pathname || ''}${location.search || ''}`;
+    if (
+      nextPath.startsWith('/') &&
+      !nextPath.startsWith('//') &&
+      nextPath !== '/account' &&
+      !nextPath.startsWith('/account?')
+    ) {
+      setLoginHref(`/account?next=${encodeURIComponent(nextPath)}`);
+    }
     let active = true,
       generation = 0,
       current: Account | null = null;
@@ -53,7 +63,7 @@ export default function AccountMenu() {
         current = value;
         setUser({
           ...value,
-          avatar_url: value.avatar_url ? value.avatar_url + '?v=' + Date.now() : null,
+          avatar_url: value.avatar_url ? `${value.avatar_url}?v=${Date.now()}` : null,
         });
         applyPreferences(value.preferences);
         syncThemeFromDom();
@@ -194,7 +204,7 @@ export default function AccountMenu() {
     return (
       <div className="inline-flex items-center gap-2">
         <a
-          href="/account"
+          href={loginHref}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           aria-label="ورود یا ثبت‌نام در حساب کاربری"
         >
@@ -212,7 +222,7 @@ export default function AccountMenu() {
   return (
     <DirectionProvider direction="rtl">
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" aria-label={'منوی حساب: ' + name} />}>
+        <DropdownMenuTrigger render={<Button variant="ghost" aria-label={`منوی حساب: ${name}`} />}>
           {avatar}
           <span className="max-w-32 truncate hidden sm:inline">{name}</span>
           <ChevronDown size={14} />

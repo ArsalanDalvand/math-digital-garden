@@ -18,7 +18,7 @@ type BrowserRow = {
   id: string;
   title: string;
   kind: 'folder' | 'note';
-  source: 'public' | 'personal';
+  source: 'public' | 'personal' | 'community';
   link?: string;
   href?: string;
   canonical_slug?: string | null;
@@ -27,6 +27,7 @@ type BrowserRow = {
   has_git?: boolean;
   git_repo_url?: string | null;
   updated?: boolean;
+  verified?: boolean;
   publicNode?: PublicNode;
   raw?: any;
 };
@@ -114,6 +115,7 @@ if (root) {
   const filterClear = root.querySelector<HTMLButtonElement>('[data-browser-filter-clear]');
   const moreBtn = root.querySelector<HTMLButtonElement>('[data-browser-more]')!;
   const importBtn = root.querySelector<HTMLButtonElement>('[data-import-docs]');
+  const emptyTrashBtn = root.querySelector<HTMLButtonElement>('[data-empty-trash]');
   const pathHost = root.querySelector<HTMLElement>('[data-browser-path]')!;
 
   let currentUser: Account | null = null;
@@ -569,6 +571,90 @@ if (root) {
     dialog.showModal();
   };
 
+  const openPermanentDeleteDialog = (item: any) => {
+    const isFolder = item.kind === 'folder';
+    const { dialog, modalBody, feedback } = createModal(
+      `حذف دائمی: ${item.title}`,
+      'data-permanent-delete-dialog',
+    );
+    modalBody.append(
+      el(
+        'p',
+        isFolder
+          ? 'این پوشه و تمام زیرپوشه‌ها، یادداشت‌ها، دیدگاه‌ها و پیوست‌های آن برای همیشه حذف می‌شوند و قابل بازیابی نخواهند بود.'
+          : 'این یادداشت همراه با تاریخچه، دیدگاه‌ها و پیوست‌های آن برای همیشه حذف می‌شود و قابل بازیابی نخواهد بود.',
+        'library-modal-desc',
+      ),
+    );
+
+    const actionsRow = el('div', undefined, 'library-actions-inline');
+    const confirmBtn = actionBtn(
+      'حذف دائمی',
+      'trash',
+      async () => {
+        confirmBtn.disabled = true;
+        try {
+          await api(`/library/items/${item.id}`, undefined, 'DELETE');
+          dialog.close();
+          showToast(`«${item.title}» برای همیشه حذف شد.`, { variant: 'info' });
+          await load();
+          document.dispatchEvent(new Event('garden:library'));
+        } catch (error) {
+          confirmBtn.disabled = false;
+          feedback.textContent = message(error);
+          feedback.dataset.error = 'true';
+        }
+      },
+      'garden-button-danger',
+    );
+    const cancelBtn = actionBtn('انصراف', null, () => dialog.close(), 'garden-button-secondary');
+    actionsRow.append(confirmBtn, cancelBtn);
+    modalBody.append(actionsRow);
+    dialog.showModal();
+  };
+
+  const openEmptyTrashDialog = () => {
+    const { dialog, modalBody, feedback } = createModal(
+      'تخلیهٔ کامل زباله‌دان',
+      'data-empty-trash-dialog',
+    );
+    modalBody.append(
+      el(
+        'p',
+        'تمام پوشه‌ها و یادداشت‌های داخل زباله‌دان برای همیشه پاک می‌شوند و امکان بازیابی آن‌ها وجود ندارد.',
+        'library-modal-desc',
+      ),
+    );
+
+    const actionsRow = el('div', undefined, 'library-actions-inline');
+    const confirmBtn = actionBtn(
+      'تخلیهٔ زباله‌دان',
+      'trash',
+      async () => {
+        confirmBtn.disabled = true;
+        try {
+          const res = await api<{ deleted?: number }>('/library/trash', undefined, 'DELETE');
+          dialog.close();
+          showToast(
+            res?.deleted ? `${res.deleted} مورد برای همیشه حذف شد.` : 'زباله‌دان تخلیه شد.',
+            { variant: 'info' },
+          );
+          await load();
+          document.dispatchEvent(new Event('garden:library'));
+        } catch (error) {
+          confirmBtn.disabled = false;
+          feedback.textContent = message(error);
+          feedback.dataset.error = 'true';
+        }
+      },
+      'garden-button-danger',
+    );
+    const cancelBtn = actionBtn('انصراف', null, () => dialog.close(), 'garden-button-secondary');
+    actionsRow.append(confirmBtn, cancelBtn);
+    modalBody.append(actionsRow);
+    dialog.showModal();
+  };
+
   const openImportDialog = () => {
     const { dialog, modalBody, feedback } = createModal(
       'درون‌ریزی مستندات به کتابخانه',
@@ -922,7 +1008,7 @@ if (root) {
     const mainCol = el('div', undefined, 'library-row-main');
     const icon = svgIcon(row.kind === 'folder' ? 'folder' : 'file', 16);
 
-    if (row.kind === 'folder') {
+    if (row.kind === 'folder' && row.source !== 'community') {
       const openBtn = document.createElement('button');
       openBtn.type = 'button';
       openBtn.className = 'library-row-title-btn';
@@ -951,6 +1037,11 @@ if (root) {
     const metaRow = el('div', undefined, 'library-row-meta');
     if (row.source === 'public') {
       metaRow.append(el('span', 'منبع رسمی', 'library-badge library-badge-official'));
+    } else if (row.source === 'community') {
+      metaRow.append(el('span', 'عمومی', 'library-badge library-badge-success'));
+      if (row.verified) {
+        metaRow.append(el('span', 'تأییدشده', 'library-badge library-badge-official'));
+      }
     } else {
       const vis = describeVisibility(row.visibility);
       const visBadge = el('span', vis.label, `library-badge library-badge-${vis.tone}`);
@@ -979,6 +1070,12 @@ if (root) {
             await load();
             document.dispatchEvent(new Event('garden:library'));
           }),
+          actionBtn(
+            'حذف دائمی',
+            'trash',
+            () => openPermanentDeleteDialog(item),
+            'library-row-btn is-danger',
+          ),
         );
       } else if (item.kind === 'folder') {
         if (item.has_git) {
@@ -1052,11 +1149,14 @@ if (root) {
 
   const syncAuthChrome = () => {
     const loggedIn = Boolean(currentUser);
-    if (guestBanner) guestBanner.hidden = loggedIn;
+    if (guestBanner) guestBanner.hidden = loggedIn || view === 'public';
     const canCreate = loggedIn && view === 'items' && publicPath.length === 0;
     form.hidden = !canCreate;
     if (importBtn) {
       importBtn.hidden = view !== 'items' || publicPath.length > 0;
+    }
+    if (emptyTrashBtn) {
+      emptyTrashBtn.hidden = !(loggedIn && view === 'trash' && loadedRows.length > 0);
     }
     const submitBtn = form.querySelector<HTMLButtonElement>('button[type=submit]');
     if (submitBtn) submitBtn.disabled = creating || !loggedIn;
@@ -1108,7 +1208,28 @@ if (root) {
     }
 
     let fetchedCount = 0;
-    if (currentUser && !publicPath.length) {
+    if (view === 'public') {
+      try {
+        const rows = await api<any[]>(`/library/public?offset=${offset}&limit=100`);
+        if (version !== generation || epoch !== identityEpoch) return;
+        fetchedCount = rows.length;
+        for (const item of rows) {
+          nextRows.push({
+            id: item.id,
+            title: item.title,
+            kind: item.kind === 'folder' ? 'folder' : 'note',
+            source: 'community',
+            href: `/published/${encodeURIComponent(item.id)}`,
+            verified: Boolean(item.verified),
+            raw: item,
+          });
+        }
+      } catch (error) {
+        if (version !== generation || epoch !== identityEpoch) return;
+        statusEl.textContent = message(error);
+        statusEl.dataset.error = 'true';
+      }
+    } else if (currentUser && !publicPath.length) {
       const endpoint =
         view === 'watching' || view === 'favorites'
           ? `/library/${view}`
@@ -1164,6 +1285,11 @@ if (root) {
       openImportDialog();
     });
   }
+
+  emptyTrashBtn?.addEventListener('click', () => {
+    if (!currentUser || !loadedRows.length) return;
+    openEmptyTrashDialog();
+  });
 
   root.querySelectorAll<HTMLElement>('[data-library-view]').forEach((tabBtn) => {
     tabBtn.addEventListener('click', () =>

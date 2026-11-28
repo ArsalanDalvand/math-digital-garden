@@ -75,3 +75,19 @@ export function mergeReadingStorage(existingRaw, reading) {
     mathScale,
   };
 }
+
+/**
+ * Validate a `?next=` redirect target as a safe same-origin relative path (preventing open redirects).
+ * @param {string | null | undefined} raw
+ * @returns {string | null}
+ */
+export function sanitizeNextPath(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return null;
+  if (/[\r\n\0]/.test(value)) return null;
+  if (value === '/account' || value.startsWith('/account?') || value.startsWith('/account#')) {
+    return null;
+  }
+  return value;
+}
